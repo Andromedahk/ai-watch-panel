@@ -103,6 +103,7 @@ legend { margin-bottom: 10px; color: #b7c3ce; font-size: 12px; }
 .quit-button { display: block; margin: 12px auto 0; color: #8998a7; background: transparent; border: 0; font-size: 10px; }
 .toast { position: absolute; z-index: 10; bottom: 14px; left: 10px; right: 10px; padding: 11px; background: #303d48f5; border: 1px solid #506174; color: #dee7ef; border-radius: 7px; font-size: 10px; text-align: center; box-shadow: 0 4px 20px #0004; }
 .collapsed .toast { display: none; }
+.settings-dialog .toast { bottom: 94px; }
 .hidden-input { display: none; }
 @media (max-height: 760px) {
   .control-region { gap: 5px; padding-block: 6px; }

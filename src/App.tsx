@@ -115,7 +115,7 @@ export default function App() {
         const value = await window.panel.chooseImage(provider);
         if (value) storeImage(provider, value);
       } else { targetImage.current = provider; fileInput.current?.click(); }
-    } catch (error) { setNotice(error instanceof Error ? error.message : '图片读取失败'); }
+    } catch { setNotice('无法读取图片，请选择 8 MB 以内的 PNG、JPG 或 WebP'); }
   }
   async function readFile(file?: File) {
     if (!file) return;
@@ -174,8 +174,9 @@ export default function App() {
         <div className="settings-note"><span className="note-title">界面预览 · v0.1</span><p>额度与任务均为演示数据，尚未连接 AI 工具。DeepSeek 额度为自定义示例。</p><p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>
       <div className="settings-footer"><button className="save-button" onClick={saveSettings}><Check size={15} />保存配置</button>{state.desktop && <button className="quit-button" onClick={() => window.panel?.quit()}>退出面板</button>}</div>
+      {notice && settingsOpen && <div className="toast" role="status">{notice}</div>}
     </dialog>
     <input ref={fileInput} className="hidden-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void readFile(event.target.files?.[0]); event.target.value = ''; }} />
-    {notice && <div className="toast" role="status">{notice}</div>}
+    {notice && !settingsOpen && <div className="toast" role="status">{notice}</div>}
   </main>;
 }
