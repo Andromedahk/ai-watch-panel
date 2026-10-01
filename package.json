@@ -1,6 +1,6 @@
 {
   "name": "ai-watch-panel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A cross-platform vertical AI activity and quota panel",
   "private": true,
   "type": "module",
@@ -36,11 +36,32 @@
   "build": {
     "appId": "app.aiwatch.panel",
     "productName": "AI Watch",
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "electron/**/*", "package.json"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
     "asar": true,
-    "mac": { "category": "public.app-category.developer-tools", "target": ["zip"], "identity": null },
-    "win": { "target": ["nsis"] },
-    "linux": { "target": ["AppImage"], "category": "Utility" }
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "zip"
+      ],
+      "identity": null
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    }
   }
 }

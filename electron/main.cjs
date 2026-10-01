@@ -2,6 +2,18 @@ const { app, BrowserWindow, ipcMain, screen, dialog, Menu, nativeTheme } = requi
 const fs = require('node:fs');
 const path = require('node:path');
 const { panelBounds, clampBounds, validPreferences } = require('./window-policy.cjs');
+const { LocalStatusReader } = require('./local-status.cjs');
+const statusReader = new LocalStatusReader();
+let statusTimer;
+let statusSnapshot = statusReader.current;
+const fixtureMode = Boolean(process.env.AI_WATCH_TEST_PROFILE && process.env.AI_WATCH_TEST_STATUS === 'fixture');
+async function refreshLocalStatus(force = false) {
+  statusSnapshot = fixtureMode
+    ? JSON.parse(await fs.promises.readFile(path.join(__dirname, '../tests/fixtures/local-status.json'), 'utf8'))
+    : await statusReader.poll(force);
+  if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
+  return statusSnapshot;
+}
 
 let window;
 let preferences;
@@ -125,6 +137,8 @@ else {
     });
     for (const event of ['display-metrics-changed', 'display-removed']) screen.on(event, dock);
     handle('panel:state', currentState);
+    handle('panel:status', () => statusSnapshot);
+    handle('panel:refresh', () => refreshLocalStatus(true));
     handle('panel:lock', (value) => {
       if (typeof value !== 'boolean') throw new Error('Invalid lock state');
       preferences.locked = value; lock(); savePreferences(); emitState(); return currentState();
@@ -155,7 +169,10 @@ else {
       return image.resize({ width: 256 }).toDataURL();
     });
     handle('panel:quit', () => app.quit());
+    void refreshLocalStatus().catch(() => {});
+    statusTimer = setInterval(() => { void refreshLocalStatus().catch(() => {}); }, 5000);
     app.on('activate', () => window.show());
   });
   app.on('window-all-closed', () => app.quit());
+  app.on('before-quit', () => clearInterval(statusTimer));
 }

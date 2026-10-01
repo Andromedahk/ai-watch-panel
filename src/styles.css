@@ -17,7 +17,8 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .drag-hint { color: #616a76; }
 .overview { color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 4px; font-size: clamp(8px, 3.7vw, 10px); }
 .overview > span { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-.tiny-dot { width: 4px; height: 4px; background: var(--green); border-radius: 50%; }
+.tiny-dot { width: 4px; height: 4px; background: #606c76; border-radius: 50%; }
+.tiny-dot.active { background: var(--green); }
 .demo-tag { color: #adb7c2; font-size: 8px; padding: 1px 4px; border: 1px solid #38424d; border-radius: 3px; }
 .overview time { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .toolbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
@@ -37,21 +38,33 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .identity h2 { font-size: clamp(10px, 5.9vw, 18px); line-height: 1.3; margin: 1px 0 0; font-weight: 600; letter-spacing: -.35px; }
 .provider-card:last-child .identity h2 { font-size: clamp(9px, 5.1vw, 16px); }
 .card-index { position: absolute; right: 0; top: 0; font: 8px ui-monospace, monospace; color: #616b76; }
-.quota-list { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: clamp(8px, 1.4vh, 18px); min-height: 0; }
+.quota-area { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 7px; }
+.quota-tools { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 16px; font-size: 9px; color: #8795a3; }
+.source-tag { font-size: 8px; border: 1px solid #38424d; border-radius: 3px; padding: 1px 4px; white-space: nowrap; }
+.source-tag.local { color: #a7bcb4; border-color: #3e514a; }
+.quota-time { font-size: 8px; }
+.quota-pagination { display: flex; align-items: center; gap: 3px; font: 8px ui-monospace, monospace; }
+.quota-pagination button { width: 19px; height: 16px; display: grid; place-items: center; padding: 0; background: #252e37; border: 1px solid #394550; border-radius: 3px; color: #c6d2dd; }
+.quota-pagination button:disabled { opacity: .3; cursor: default; }
+.quota-list { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: clamp(6px, 1.1vh, 14px); min-height: 0; }
 .quota-label { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; margin-bottom: 6px; font-size: clamp(8px, 4.1vw, 13px); color: #bec6ce; }
-.quota-label > span { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
-.quota-label small { font-size: clamp(6px, 3.4vw, 10px); color: #87929e; }
-.quota-label strong { color: var(--accent); font-family: ui-monospace, 'SF Mono', monospace; font-size: clamp(10px, 5.2vw, 17px); font-weight: 500; font-variant-numeric: tabular-nums; }
+.quota-label > span { display: flex; flex: 1; min-width: 0; align-items: baseline; gap: 5px; white-space: nowrap; }
+.model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.quota-label small { font-size: clamp(6px, 3.4vw, 10px); color: #87929e; flex-shrink: 0; }
+.quota-label strong { flex-shrink: 0; color: var(--accent); font-family: ui-monospace, 'SF Mono', monospace; font-size: clamp(10px, 5.2vw, 17px); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .quota-label em { font-style: normal; font-size: .7em; opacity: .7; margin-left: 2px; }
 .remaining-label { font: 8px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin-right: 5px; color: #8b98a5; }
 .quota-track { height: clamp(3px, .48vh, 6px); border-radius: 2px; background: #2a3037; overflow: hidden; }
 .quota-fill { height: 100%; background: var(--accent); opacity: .83; border-radius: inherit; }
 .quota-fill.is-low { background: #d1a16d; }
+.quota-unknown .quota-track { background: repeating-linear-gradient(110deg, #2a3037, #2a3037 5px, #22282f 5px, #22282f 10px); }
+.quota-unknown strong { color: #8795a3; }
 .task-line { display: flex; align-items: center; gap: 6px; font-size: clamp(7px, 3.55vw, 11px); color: #a8b2be; padding-top: clamp(7px, 1vh, 12px); border-top: 1px solid #252d35; white-space: nowrap; }
 .task-line > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .task-status { font-size: .85em; color: #798591; }
 .status-dot { width: 5px; height: 5px; flex-shrink: 0; background: #606c76; border-radius: 50%; }
 .status-dot.active { background: var(--green); box-shadow: 0 0 5px #81cba34a; animation: pulse 2.6s ease-in-out infinite; }
+.status-dot.unknown { background: #bb9b72; }
 .is-running .task-status { color: #8ac2a2; }
 @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 #80c29e00; opacity: 1; } 50% { box-shadow: 0 0 0 3px #80c29e15; opacity: .6; } }
 .spinning { animation: rotate .8s linear infinite; }
@@ -112,6 +125,10 @@ legend { margin-bottom: 10px; color: #b7c3ce; font-size: 12px; }
   .identity h2 { font-size: clamp(10px, 4.5vw, 13px); }
   .provider-card:last-child .identity h2 { font-size: clamp(9px, 4.3vw, 12px); }
   .quota-list { gap: 4px; }
+  .quota-area { gap: 3px; }
+  .quota-tools { min-height: 12px; }
+  .source-tag { font-size: 7px; padding-block: 0; }
+  .quota-pagination button { height: 12px; width: 17px; }
   .quota-label { margin-bottom: 3px; font-size: clamp(8px, 3.8vw, 11px); }
   .quota-label strong { font-size: clamp(10px, 4.5vw, 12px); }
   .task-line { padding-top: 4px; gap: 4px; font-size: clamp(7px, 3.3vw, 9px); line-height: 1.3; }

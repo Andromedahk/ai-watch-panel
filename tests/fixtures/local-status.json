@@ -1,0 +1,142 @@
+{
+  "sampledAt": "2026-10-02T00:00:00Z",
+  "isTestData": true,
+  "codex": {
+    "id": "codex",
+    "source": "cache",
+    "connection": "ready",
+    "activity": "running",
+    "activeTasks": 1,
+    "task": "1 项任务有近期活动",
+    "quotas": [
+      {
+        "model": "短时额度",
+        "remaining": null,
+        "period": "5 小时",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Codex",
+        "remaining": 75,
+        "period": "1 周",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      }
+    ],
+    "observedAt": "2026-10-02T00:00:00Z",
+    "sampledAt": "2026-10-02T00:00:00Z",
+    "detail": "用于界面检查的合成记录，不是账户数据。"
+  },
+  "antigravity": {
+    "id": "antigravity",
+    "source": "local-api",
+    "connection": "ready",
+    "activity": "idle",
+    "activeTasks": 0,
+    "task": "本地服务中暂无运行任务",
+    "quotas": [
+      {
+        "model": "Gemini 演示模型（高）",
+        "remaining": 100,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Claude 演示模型（思考）",
+        "remaining": 99.7,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Gemini 演示模型（中）",
+        "remaining": 100,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Gemini 演示模型（高） 4",
+        "remaining": 99.7,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Claude 演示模型（思考） 5",
+        "remaining": 100,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Gemini 演示模型（中） 6",
+        "remaining": 99.7,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Gemini 演示模型（高） 7",
+        "remaining": 100,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Claude 演示模型（思考） 8",
+        "remaining": 99.7,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Gemini 演示模型（中） 9",
+        "remaining": 100,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Gemini 演示模型（高） 10",
+        "remaining": 99.7,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Claude 演示模型（思考） 11",
+        "remaining": 100,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Gemini 演示模型（中） 12",
+        "remaining": 99.7,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Gemini 演示模型（高） 13",
+        "remaining": 100,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      },
+      {
+        "model": "Claude 演示模型（思考） 14",
+        "remaining": 99.7,
+        "period": "模型额度",
+        "reset": "2026-10-03T00:00:00Z",
+        "stale": false
+      }
+    ],
+    "observedAt": "2026-10-02T00:00:00Z",
+    "sampledAt": "2026-10-02T00:00:00Z",
+    "detail": "用于分页检查的合成记录，不是账户数据。"
+  }
+}

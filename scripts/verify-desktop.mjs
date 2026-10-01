@@ -5,10 +5,21 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-qa-'));
-const app = await electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH_TEST_PROFILE: profile } });
+const live = process.env.AI_WATCH_LIVE_QA === '1';
+const app = await electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: live ? '' : 'fixture' } });
 try {
   const page = await app.firstWindow();
   await page.getByRole('heading', { name: 'AI WATCH', exact: true }).waitFor();
+  await page.waitForFunction(async () => {
+    const snapshot = await window.panel.getStatus();
+    if (!snapshot.sampledAt) return false;
+    const cards = document.querySelectorAll('.provider-card');
+    return ['codex', 'antigravity'].every((id, index) => {
+      const card = cards[index + 1];
+      return card?.querySelector('.task-line > span:nth-child(2)')?.textContent === snapshot[id].task
+        && card.querySelectorAll('.quota').length === Math.max(1, Math.min(3, snapshot[id].quotas.length));
+    });
+  });
   const native = await app.evaluate(({ BrowserWindow, screen }) => {
     const win = BrowserWindow.getAllWindows()[0];
     const display = screen.getDisplayMatching(win.getBounds());
@@ -47,10 +58,24 @@ try {
   for (const region of layout.regions.slice(2)) assert.ok(Math.abs(region.height - layout.regions[1].height) < 1);
   assert.equal(layout.images, true);
   assert.ok(layout.overlaps.every((value) => value === false));
-  assert.equal(layout.quotaCount, 10);
-  await mkdir('docs/screenshots', { recursive: true });
-  await page.screenshot({ path: 'docs/screenshots/panel.png', animations: 'disabled' });
-  console.log(JSON.stringify({ result: 'passed', logicalSize: `${native.bounds.width}×${native.bounds.height}`, scaleFactor: native.scaleFactor, regions: 5, quotaRows: layout.quotaCount, images: '4 loaded', overflow: 'none', isolation: 'enabled' }, null, 2));
+  assert.ok(layout.quotaCount >= 7);
+  if (!live) {
+    assert.equal(layout.quotaCount, 10);
+    assert.equal(await page.locator('.quota-unknown').count(), 1);
+    assert.equal(await page.locator('.quota-pagination').innerText(), '1/5');
+  }
+  const output = live ? '.local/qa/live-panel.png' : 'docs/screenshots/panel.png';
+  await mkdir(path.dirname(output), { recursive: true });
+  await page.screenshot({ path: output, animations: 'disabled' });
+  const status = await page.evaluate(async () => {
+    const snapshot = await window.panel.getStatus();
+    return ['codex', 'antigravity'].map(id => ({ provider: id, source: snapshot[id].source,
+      connection: snapshot[id].connection, activity: snapshot[id].activity, quotaRows: snapshot[id].quotas.length }));
+  });
+  assert.equal(layout.quotaCount, 5 + status.reduce((total, provider) => total + Math.max(1, Math.min(3, provider.quotaRows)), 0));
+  console.log(JSON.stringify({ result: 'passed', data: live ? 'local adapters' : 'synthetic fixture',
+    logicalSize: `${native.bounds.width}×${native.bounds.height}`, scaleFactor: native.scaleFactor,
+    regions: 5, quotaRows: layout.quotaCount, images: '4 loaded', overflow: 'none', isolation: 'enabled', status }, null, 2));
 } finally {
   await app.close();
   await rm(profile, { recursive: true, force: true });

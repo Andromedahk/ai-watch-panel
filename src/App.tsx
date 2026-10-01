@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
 import { providers } from './data';
-import type { PanelState, Preferences, Provider, ProviderId } from './types';
+import type { LocalStatus, PanelState, Preferences, Provider, ProviderId, Quota } from './types';
 
 const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
@@ -19,44 +19,86 @@ function Avatar({ provider, image }: { provider: Provider; image?: string }) {
   </div>;
 }
 function ProviderCard({ provider, index, image }: { provider: Provider; index: number; image?: string }) {
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil(provider.quotas.length / 3));
+  const currentPage = Math.min(page, pages - 1);
+  useEffect(() => setPage((old) => Math.min(old, pages - 1)), [pages]);
+  const quotas = provider.quotas.length ? provider.quotas.slice(currentPage * 3, currentPage * 3 + 3)
+    : [{ model: '模型额度', period: '尚未读取', remaining: null, reset: '' }];
+  const local = provider.local;
+  const source = !local ? '演示' : local.connection === 'offline' ? '未运行'
+    : local.source === 'local-api' ? '本地服务' : local.source === 'cache' ? '本地记录' : '未连接';
+  const phase = !local ? provider.running ? '演示运行' : '演示待机'
+    : { running: '运行中', idle: '待机', unknown: '未知', offline: '离线' }[local.activity];
+  const time = local?.observedAt ? new Date(local.observedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
+  function quotaTitle(quota: Quota) {
+    const reset = quota.reset && local ? `重置时间 ${new Date(quota.reset).toLocaleString('zh-CN')}` : quota.reset;
+    return `${quota.model} · ${quota.period}${reset ? ` · ${reset}` : ''}${quota.stale ? ` · 已过时，历史剩余 ${quota.remaining ?? '未知'}%` : ''}`;
+  }
   return <section className={`provider-card ${provider.running ? 'is-running' : ''}`} style={{ '--accent': provider.color } as CSSProperties} aria-label={`${provider.name} 面板`}>
     <div className="card-heading">
       <Avatar provider={provider} image={image} />
       <div className="identity"><span className="eyebrow">{provider.subtitle}</span><h2>{provider.name}</h2></div>
       <span className="card-index">0{index + 1}</span>
     </div>
-    <div className="quota-list" aria-label="演示剩余额度">
-      {provider.quotas.map((quota) => <div className="quota" key={quota.model} title={quota.reset}>
-        <div className="quota-label"><span>{quota.model}<small>{quota.period}</small></span><strong><span className="remaining-label">剩余</span>{quota.remaining}<em>%</em></strong></div>
-        <div className="quota-track" role="progressbar" aria-label={`${quota.model} ${quota.period} 剩余额度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={quota.remaining}>
-          <div className={`quota-fill ${quota.remaining < 30 ? 'is-low' : ''}`} style={{ width: `${quota.remaining}%` }} />
-        </div>
-      </div>)}
+    <div className="quota-area">
+      <div className="quota-tools">
+        <span className={`source-tag ${local ? 'local' : ''}`} title={local ? `${local.detail}${local.observedAt ? ` 额度记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}` : '仅用于布局的演示数据'}>{source}</span>
+        {pages > 1 ? <div className="quota-pagination" aria-label={`${provider.name} 额度分页`}>
+          <button aria-label={`${provider.name} 上一页额度`} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={11} /></button>
+          <span title={`共 ${provider.quotas.length} 个模型额度`}>{currentPage + 1}/{pages}</span>
+          <button aria-label={`${provider.name} 下一页额度`} disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight size={11} /></button>
+        </div> : <span className="quota-time" title={local?.observedAt ? `额度记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}>{local ? time ? `记录 ${time}` : '额度未知' : '示例额度'}</span>}
+      </div>
+      <div className="quota-list" aria-label={`${local ? '本地' : '演示'}剩余额度`}>
+        {quotas.map((quota, row) => {
+          const known = quota.remaining !== null && !quota.stale;
+          return <div className={`quota ${known ? '' : 'quota-unknown'}`} key={`${quota.model}:${quota.period}:${row}`} title={quotaTitle(quota)}>
+            <div className="quota-label"><span><span className="model-name">{local?.id === 'antigravity' ? quota.model.replace(/^Claude /, '').replace(/\(High\)/gi, '· 高').replace(/\(Medium\)/gi, '· 中').replace(/\(Low\)/gi, '· 低').replace(/\(Thinking\)/gi, '· 思考') : quota.model}</span>{local?.id !== 'antigravity' && <small>{quota.period}</small>}</span><strong><span className="remaining-label">{quota.stale ? '过时' : known ? '剩余' : '未知'}</span>{known ? quota.remaining : '—'}{known && <em>%</em>}</strong></div>
+            <div className="quota-track" role="progressbar" aria-label={`${quota.model} ${quota.period} 剩余额度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={known ? quota.remaining! : undefined} aria-valuetext={known ? `${quota.remaining}%` : quota.stale ? '记录已过时' : '未知'}>
+              {known && <div className={`quota-fill ${quota.remaining! < 30 ? 'is-low' : ''}`} style={{ width: `${quota.remaining}%` }} />}
+            </div>
+          </div>;
+        })}
+      </div>
     </div>
-    <div className="task-line"><span className={`status-dot ${provider.running ? 'active' : ''}`} /><span>{provider.task}</span><span className="task-status">{provider.running ? '运行中' : '待机'}</span></div>
+    <div className="task-line" title={local?.detail}><span className={`status-dot ${provider.running ? 'active' : ''} ${local?.activity === 'unknown' ? 'unknown' : ''}`} /><span>{provider.task}</span><span className="task-status">{phase}</span></div>
   </section>;
 }
 
 export default function App() {
   const [state, setState] = useState(previewState);
+  const [localStatus, setLocalStatus] = useState<LocalStatus | null>(null);
   const [images, setImages] = useState(readImages);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState('演示数据');
   const [notice, setNotice] = useState('');
   const [draft, setDraft] = useState<Preferences>(previewState);
   const modal = useRef<HTMLDialogElement>(null);
-  const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
   const targetImage = useRef<ProviderId>('claude');
+  const visibleProviders = providers.map((provider) => {
+    if (!state.desktop || (provider.id !== 'codex' && provider.id !== 'antigravity')) return provider;
+    const local = localStatus?.[provider.id];
+    return { ...provider, running: local?.activity === 'running', task: local?.task || '正在读取本地状态',
+      quotas: local?.quotas || [], local: local || { id: provider.id, source: 'unavailable' as const,
+        connection: 'unavailable' as const, activity: 'unknown' as const, activeTasks: 0,
+        task: '正在读取本地状态', quotas: [], observedAt: null, sampledAt: null, detail: '等待首次读取' } };
+  });
+  const activeTasks = (localStatus?.codex.activeTasks || 0) + (localStatus?.antigravity.activeTasks || 0);
+  const refreshTime = localStatus?.sampledAt ? new Date(localStatus.sampledAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '读取中';
 
   useEffect(() => {
     const bridge = window.panel;
     if (!bridge) return;
+    const acceptStatus = (next: LocalStatus) => setLocalStatus((current) =>
+      current?.sampledAt && (!next.sampledAt || Date.parse(next.sampledAt) < Date.parse(current.sampledAt)) ? current : next);
     bridge.getState().then(setState).catch(() => setNotice('无法读取窗口状态'));
-    return bridge.onState(setState);
+    bridge.getStatus().then(acceptStatus).catch(() => setNotice('无法读取本地工具状态'));
+    const stateListener = bridge.onState(setState);
+    const statusListener = bridge.onStatus(acceptStatus);
+    return () => { stateListener(); statusListener(); };
   }, []);
-  useEffect(() => () => clearTimeout(refreshTimer.current), []);
   useEffect(() => {
     if (!notice) return;
     const timeout = setTimeout(() => setNotice(''), 3500);
@@ -88,14 +130,18 @@ export default function App() {
       else setState({ ...state, collapsed: value });
     } catch { setNotice('窗口收起失败，请重试'); }
   }
-  function refresh() {
+  async function refresh() {
     if (refreshing) return;
     setRefreshing(true);
-    refreshTimer.current = setTimeout(() => {
+    try {
+      if (window.panel) {
+        setLocalStatus(await window.panel.refreshStatus());
+        setNotice('本地状态已重新读取');
+      } else setNotice('浏览器预览使用演示数据；本地接入请打开桌面版');
+    } catch { setNotice('本地状态读取失败，稍后自动重试'); }
+    finally {
       setRefreshing(false);
-      setLastRefresh(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
-      setNotice('界面已刷新 · 当前为演示数据');
-    }, 650);
+    }
   }
   async function saveSettings() {
     try {
@@ -140,23 +186,23 @@ export default function App() {
       <div className="rail-grip"><GripVertical size={15} /></div>
       <button className="rail-expand" title="展开面板" aria-label="展开面板" onClick={() => collapse(false)}>{state.side === 'right' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}</button>
       <span className="rail-brand">AI</span>
-      <div className="rail-providers">{providers.map((provider) => <div key={provider.id} title={`${provider.name} · ${provider.running ? '演示运行中' : '演示待机'}`} style={{ '--accent': provider.color } as CSSProperties}>
+      <div className="rail-providers">{visibleProviders.map((provider) => <div key={provider.id} title={`${provider.name} · ${provider.local?.task || (provider.running ? '演示运行中' : '演示待机')}`} style={{ '--accent': provider.color } as CSSProperties}>
         <Avatar provider={provider} image={images[provider.id]} /><span className={`status-dot ${provider.running ? 'active' : ''}`} />
       </div>)}</div>
       <button className={`rail-lock ${state.locked ? 'selected' : ''}`} title="锁定窗口" aria-label="锁定窗口" aria-pressed={state.locked} onClick={toggleLock}>{state.locked ? <LockKeyhole size={15} /> : <UnlockKeyhole size={15} />}</button>
-      <span className="rail-demo">演示</span>
+      <span className="rail-demo">{state.desktop ? '本地' : '演示'}</span>
     </aside> : <div className="panel-regions">
       <header className="control-region">
         <div className="brand-line"><div className="brand"><Activity size={15} strokeWidth={1.7} /><h1>AI WATCH</h1></div><GripVertical size={13} className="drag-hint" /></div>
-        <div className="overview"><span><span className="tiny-dot" />2 项运行 <span className="demo-tag">演示</span></span><time>{lastRefresh}</time></div>
+        <div className="overview" title="运行数只统计本地接入且有运行证据的任务；未知状态和演示卡片不计入。"><span><span className={`tiny-dot ${activeTasks ? 'active' : ''}`} />{state.desktop ? `${activeTasks} 项运行` : '界面预览'} <span className="demo-tag">{localStatus?.isTestData ? '测试' : state.desktop ? '本地' : '演示'}</span></span><time>{state.desktop ? refreshTime : '演示数据'}</time></div>
         <nav className="toolbar" aria-label="面板控制">
           <button className={state.locked ? 'selected' : ''} aria-label="锁定窗口" aria-pressed={state.locked} title={state.locked ? '解除跨桌面锁定' : '锁定：置顶并显示在所有桌面'} onClick={toggleLock}>{state.locked ? <LockKeyhole /> : <UnlockKeyhole />}</button>
           <button aria-label="收起面板" title="收起为状态窄条" onClick={() => collapse(true)}>{state.side === 'right' ? <ArrowRightToLine /> : <ArrowLeftToLine />}</button>
-          <button aria-label="刷新面板" title="刷新演示界面" disabled={refreshing} onClick={refresh}><RefreshCw className={refreshing ? 'spinning' : ''} /></button>
+          <button aria-label="刷新面板" title="重新读取本地额度与任务状态" disabled={refreshing} onClick={refresh}><RefreshCw className={refreshing ? 'spinning' : ''} /></button>
           <button aria-label="打开配置" title="配置面板" onClick={() => { setDraft(state); setSettingsOpen(true); }}><Settings2 /></button>
         </nav>
       </header>
-      {providers.map((provider, index) => <ProviderCard key={provider.id} provider={provider} index={index} image={images[provider.id]} />)}
+      {visibleProviders.map((provider, index) => <ProviderCard key={provider.id} provider={provider} index={index} image={images[provider.id]} />)}
     </div>}
     <dialog ref={modal} className="settings-dialog" aria-labelledby="settings-title" onCancel={() => setSettingsOpen(false)}>
       <div className="settings-heading"><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">面板配置</h2></div><button className="icon-button" aria-label="关闭配置" onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
@@ -171,7 +217,9 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">界面预览 · v0.1</span><p>额度与任务均为演示数据，尚未连接 AI 工具。DeepSeek 额度为自定义示例。</p><p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
+        <div className="settings-note"><span className="note-title">本地状态 · v0.2</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。</p><p>Claude Code 与 DeepSeek 仍为演示数据。顶部运行数只统计本地接入的任务。浏览器预览全部使用示例。</p>
+          {localStatus && <>{(['codex', 'antigravity'] as const).map((id) => <p key={id}><b>{id === 'codex' ? 'Codex' : 'Antigravity'}</b><br />{localStatus[id].detail}<br />{localStatus[id].observedAt ? `额度记录：${new Date(localStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用额度记录'}</p>)}</>}
+          <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>
       <div className="settings-footer"><button className="save-button" onClick={saveSettings}><Check size={15} />保存配置</button>{state.desktop && <button className="quit-button" onClick={() => window.panel?.quit()}>退出面板</button>}</div>
       {notice && settingsOpen && <div className="toast" role="status">{notice}</div>}
