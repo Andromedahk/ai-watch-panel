@@ -1,0 +1,10 @@
+:root {
+  color-scheme: dark;
+  --canvas: #111519;
+  --surface: #14191f;
+  --text: #e1e7ee;
+  --muted: #8b98a5;
+  --line: #2c343d;
+  --green: #8bc5a4;
+  --gutter: clamp(9px, 5.9vw, 23px);
+}
