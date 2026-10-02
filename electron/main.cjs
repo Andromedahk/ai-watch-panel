@@ -6,11 +6,16 @@ const { LocalStatusReader } = require('./local-status.cjs');
 const statusReader = new LocalStatusReader();
 let statusTimer;
 let statusSnapshot = statusReader.current;
-const fixtureMode = Boolean(process.env.AI_WATCH_TEST_PROFILE && process.env.AI_WATCH_TEST_STATUS === 'fixture');
+const fixtureVariant = process.env.AI_WATCH_TEST_STATUS;
+const fixtureMode = Boolean(process.env.AI_WATCH_TEST_PROFILE && ['fixture', 'glow-running', 'glow-attention'].includes(fixtureVariant));
 async function refreshLocalStatus(force = false) {
   statusSnapshot = fixtureMode
     ? JSON.parse(await fs.promises.readFile(path.join(__dirname, '../tests/fixtures/local-status.json'), 'utf8'))
     : await statusReader.poll(force);
+  if (fixtureMode && fixtureVariant?.startsWith('glow-')) {
+    for (const id of ['claude', 'codex', 'antigravity', 'deepseek']) Object.assign(statusSnapshot[id], { activity: 'running', activeTasks: 1, task: '合成测试 · 任务运行中' });
+    if (fixtureVariant === 'glow-attention') Object.assign(statusSnapshot.codex, { activity: 'waiting', activeTasks: 1, waitingTasks: 1, waitingReason: 'both', task: '合成测试 · 待回答 / 待授权' });
+  }
   if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
   return statusSnapshot;
 }
@@ -174,5 +179,5 @@ else {
     app.on('activate', () => window.show());
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => clearInterval(statusTimer));
+  app.on('before-quit', () => { clearInterval(statusTimer); statusReader.codexAttention.close(); });
 }

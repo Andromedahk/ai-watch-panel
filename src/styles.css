@@ -30,7 +30,26 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .provider-card:last-child { border-bottom: none; }
 .provider-card::before { position: absolute; top: 20%; left: 0; height: 24px; width: 2px; background: var(--accent); opacity: .55; content: ''; }
 .card-heading { display: flex; align-items: center; gap: clamp(6px, 2.8vw, 10px); position: relative; }
-.avatar { width: clamp(28px, 16.3vw, 52px); height: clamp(28px, 16.3vw, 52px); flex-shrink: 0; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent); border-radius: 10px; overflow: hidden; background: color-mix(in srgb, var(--accent) 8%, #15191d); }
+.avatar { width: clamp(28px, 16.3vw, 52px); height: clamp(28px, 16.3vw, 52px); flex-shrink: 0; position: relative; isolation: isolate; border-radius: 10px; --halo-color: #d97757; }
+.avatar-face { position: relative; z-index: 1; width: 100%; height: 100%; display: grid; place-items: center; overflow: hidden; border-radius: inherit; border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent); background: color-mix(in srgb, var(--accent) 8%, #15191d); }
+.avatar[data-provider="codex"] { --halo-color: #c5d494; }
+.avatar[data-provider="deepseek"] { --halo-color: #4d6bfe; }
+.avatar[data-glow="attention"] { --halo-color: #ff555f; }
+.avatar[data-glow="running"]::before, .avatar[data-glow="attention"]::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: .8;
+  box-shadow: 0 0 2px 1px var(--halo-color), 0 0 6px 2px color-mix(in srgb, var(--halo-color) 70%, transparent), 0 0 13px 4px color-mix(in srgb, var(--halo-color) 22%, transparent);
+  animation: logo-breathe 5s ease-in-out infinite;
+}
+@property --halo-angle { syntax: '<angle>'; inherits: true; initial-value: 0deg; }
+.avatar[data-provider="antigravity"][data-glow="running"] { animation: halo-spectrum 10s linear infinite; }
+.avatar[data-provider="antigravity"][data-glow="running"]::before {
+  inset: -2px; box-shadow: none; filter: blur(5px);
+  background: conic-gradient(from var(--halo-angle), #4285f4, #a142f4, #ea4335, #fbbc05, #34a853, #4285f4);
+}
+@keyframes logo-breathe { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+@keyframes halo-spectrum { to { --halo-angle: 360deg; } }
+.provider-card[data-attention="true"] .status-dot { background: #ff555f; box-shadow: 0 0 5px #ff555f55; }
+.provider-card[data-attention="true"] .task-status { color: #ff848b; }
 .avatar img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
 .avatar span { color: var(--accent); font-size: 20px; }
 .identity { min-width: 0; }

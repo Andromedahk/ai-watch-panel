@@ -11,6 +11,7 @@ export type LocalProviderStatus = {
   connection: 'ready' | 'offline' | 'unavailable' | 'error' | 'auth-required';
   activity: 'running' | 'waiting' | 'idle' | 'unknown' | 'offline'; activeTasks: number;
   task: string; quotas: Quota[]; observedAt: string | null; sampledAt: string | null; detail: string;
+  waitingTasks?: number; waitingReason?: 'input' | 'approval' | 'both'; attentionAvailable?: boolean;
   activityDetail?: string; activityObservedAt?: string | null;
   surfaces?: { desktop: string; terminal: string };
   balance?: { wallets: Wallet[]; stale: boolean };

@@ -2,7 +2,7 @@
 
 macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vite**，预留 Windows、Linux 的构建入口。
 
-> v0.4 已接入 **Claude 桌面用量记录与桌面/终端 Code 会话发现**、**Codex 本地额度与任务记录**、**Antigravity 本地服务**及 **DeepSeek Harness 账户余额与任务活动**。Claude Free 不包含 Code 权限，缺少数据时显示不可用。浏览器预览全部使用示例数据。
+> v0.5 新增 **LOGO 外沿呼吸光晕与 Codex 待回答 / 待授权红灯**。已接入 **Claude 桌面用量记录与桌面/终端 Code 会话发现**、**Codex 本地额度与任务记录**、**Antigravity 本地服务**及 **DeepSeek Harness 账户余额与任务活动**。Claude Free 不包含 Code 权限，缺少数据时显示不可用。浏览器预览全部使用示例数据。
 
 <img src="docs/screenshots/panel.png" width="220" alt="AI Watch 五区面板预览" />
 
@@ -21,6 +21,23 @@ macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vi
 | Codex | 助手图片、本地额度快照、近期任务活动指示灯 |
 | Antigravity | 助手图片、本地模型额度分页、当前任务指示灯 |
 | DeepSeek Harness | 助手图片、账户可用余额、现金与赠送金额、任务活动及等待确认状态 |
+
+## LOGO 呼吸灯
+
+运行任务时，LOGO 框外沿显示向外逐渐变暗的光晕，**每 5 秒完成一次亮灭**。展开面板与收起窄栏均显示，配置中的图片列表不闪烁。
+
+| 工具 | 运行光晕 |
+| --- | --- |
+| Claude | 对应 LOGO 的橙色 |
+| Codex | 浅橄榄绿色 |
+| Antigravity / Google | 彩虹渐变循环流动；亮度仍按 5 秒呼吸 |
+| DeepSeek Harness | 蓝色 |
+
+**Codex 待回答或待授权时优先显示红色光晕**，底部提示“待回答”“待授权”或“待处理”。同一客户端还有其他运行任务时仍优先亮红灯，顶部运行数保留那些正在工作的任务。处理请求后，下一轮状态更新恢复运行配色或熄灭。其余三种工具本版仅按运行状态点亮 LOGO；原有等待状态小圆点保持原有含义。
+
+空闲、离线、未知不显示运行光晕。关闭“状态灯动画”或系统启用减少动态效果时，保留静态光晕以传达状态。
+
+效果预览使用合成数据：[四种运行配色](docs/screenshots/glow-running.png) · [Codex 红色提醒](docs/screenshots/glow-attention.png)。
 
 ## 运行
 
@@ -72,10 +89,20 @@ npm start
 - Antigravity 模型按名称稳定排序，每页最多三项，使用左右箭头查看全部模型；名称中的高、中、低与思考模式会紧凑显示，悬停可查看完整名称和重置时间。服务未返回额度周期时不推断五小时或一周。
 - 额度保留一位小数，例如 99.7% 不会被显示为 100%。记录超过三十分钟或已到重置时间时显示“过时”，保留历史值供悬停查看，不推断重置后的新余额。
 - Codex 与 Antigravity 进程未运行时显示离线，文件缺失、接口失败或不认识的任务状态显示未知，并自动重试。Antigravity 缓存里的历史运行标记不会点亮当前运行灯。
-- 面板只连接本机回环地址上的 Antigravity 服务，并校验端口属于对应进程；运行时防伪令牌只在内存中使用。不会保存认证材料、发送消息或启动 AI 任务。服务本身可能正常向服务商刷新状态。
+- Antigravity 接入只连接本机回环地址上的服务，并校验端口属于对应进程；运行时防伪令牌只在内存中使用。不会保存认证材料、发送消息或启动 AI 任务。服务本身可能正常向服务商刷新状态。
 - 传到界面的字段限于模型名称、额度、币种与余额、重置时间、采样时间和任务状态；账户身份、会话内容、项目路径与运行时令牌不进入界面或仓库。
 
 当前在 macOS 上验证了 Codex 桌面记录格式和 Antigravity 2.19.1 的本地接口。不同客户端版本、缺失桌面数据库、自定义数据目录和远程任务可能导致部分数据不可用。Codex 支持继承已有的 `CODEX_HOME` 环境设置；面板不会修改工具配置。Windows 与 Linux 的 Codex、Antigravity 状态发现仍需后续平台适配和验收。
+
+### Codex 等待提醒
+
+在 macOS 上自动连接 Codex 当前用户的本地 IPC 状态通道，只订阅线程状态，不接管线程、回复问题、批准操作或启动任务。识别结构化提问 / 选项请求，以及命令执行、文件修改、权限申请的授权请求。普通对话中的问句不会仅凭文字触发红灯。
+
+- 关注本地未结束任务及近期未归档任务，最多 32 个线程；只对客户端仍持有状态的线程生效，独立 CLI、远程任务或很早的未加载线程可能不在范围内。
+- 保留的状态仅为请求类型、修订号与连接归属；原始问题、命令、对话内容和路径不会传给面板界面，也不会写入面板缓存或仓库。协议快照在主进程内解析后立即丢弃无关字段。
+- 请求删除后清除红灯；修订不连续时先清除旧请求并重新取得快照，连接断开后清除缓存。通道不可用时继续读取原有任务记录，悬停任务状态可查看提醒通道是否可用。
+- 仅连接已存在且归当前用户所有的本地 socket，限制消息大小和初始化时间；不会创建 Codex 服务或修改其配置。
+- 适配当前 Codex 客户端内部协议的状态消息版本 11；客户端升级可能需要适配。macOS 实际连接与状态增量接收已验证，待回答 / 各类授权及清除转换用合成通道验证。Windows 管道接入尚未实现，Linux 未做实机验收。
 
 ## Claude 桌面版与终端版
 
@@ -129,6 +156,8 @@ Windows、Linux 尚未完成平台验收。Windows 原生置顶可用，但 Elec
 npm test
 npm run build
 npm run test:desktop
+AI_WATCH_TEST_STATUS=glow-running npm run test:desktop
+AI_WATCH_TEST_STATUS=glow-attention npm run test:desktop
 AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存在忽略目录
 ```
 
@@ -136,11 +165,20 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 
 ## 实现与后续接入
 
-`electron/local-status.cjs` 实现只读本地适配器，`electron/status-normalizers.cjs` 筛选与换算公开状态字段，通过有限的 preload 接口传给沙盒界面。`electron/deepseek-status.cjs` 负责 Harness 登录发现及官方账户余额读取。`electron/claude-status.cjs` 负责 Claude 桌面用量与两种 Code 入口，`electron/deepseek-activity.cjs` 与 `electron/session-files.cjs` 负责 Harness 活动和有界会话读取。`src/data.ts` 仅向浏览器预览提供示例；桌面版四个卡片均使用本地适配器。
+`electron/local-status.cjs` 实现只读本地适配器，`electron/status-normalizers.cjs` 筛选与换算公开状态字段，`electron/codex-attention.cjs` 只订阅 Codex 本地等待请求，通过有限的 preload 接口传给沙盒界面。`electron/deepseek-status.cjs` 负责 Harness 登录发现及官方账户余额读取。`electron/claude-status.cjs` 负责 Claude 桌面用量与两种 Code 入口，`electron/deepseek-activity.cjs` 与 `electron/session-files.cjs` 负责 Harness 活动和有界会话读取。`src/data.ts` 仅向浏览器预览提供示例；桌面版四个卡片均使用本地适配器。
 
 额度窗口字段参考 OpenAI 官方 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。此版本读取既有本地记录，不另外启动 App Server；Antigravity 桌面接口按当前安装版本验证，其 CLI 的 [状态栏文档](https://antigravity.google/docs/cli/statusline) 作为后续适配参考。
 
 ## 更新记录
+
+### 0.5.0 · 2026-10-02
+
+- 新增 LOGO 框外沿向外衰减的 5 秒呼吸光晕：Claude 橙、Codex 浅橄榄绿、Google 彩虹循环、Harness 蓝。
+- 展开与收起状态共用光晕，关闭动画及减少动态效果时保留静态指示。
+- 通过 Codex 本地客户端状态通道识别待回答与待授权请求，红灯优先于运行色；处理完成或断开连接后清除旧等待状态。
+- 等待任务不再计入运行数，同时保留同一客户端其他正在运行的任务数量。
+- 增加请求类型、连续修订、请求移除、分片帧、断线清理及运行数检查；38 项单元检查通过。
+- 更新合成配色 / 红灯截图、README 与验收记录，重新打包 macOS 应用；跨平台提醒通道仍待适配。
 
 ### 0.4.0 · 2026-10-02
 

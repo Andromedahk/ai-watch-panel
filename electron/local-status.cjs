@@ -7,6 +7,7 @@ const { promisify } = require('node:util');
 const { DeepSeekBalanceReader } = require('./deepseek-status.cjs');
 const { DeepSeekActivityReader } = require('./deepseek-activity.cjs');
 const { ClaudeStatusReader } = require('./claude-status.cjs');
+const { CodexAttentionReader } = require('./codex-attention.cjs');
 const execute = promisify(execFile);
 const { normalizeCodexRates, unknownCodexQuotas, normalizeAntigravityQuotas,
   normalizeCodexActivity, normalizeAntigravityActivity } = require('./status-normalizers.cjs');
@@ -77,6 +78,7 @@ class LocalStatusReader {
     deepseekActivityReader = new DeepSeekActivityReader({ home }), claudeReader = new ClaudeStatusReader({ home }) } = {}) {
     this.home = home;
     this.codexHome = codexHome;
+    this.codexAttention = new CodexAttentionReader({ codexHome });
     this.antigravityHome = path.join(home, '.gemini', 'antigravity');
     this.codexRateCache = null;
     this.antigravityRateCache = null;
@@ -118,9 +120,9 @@ class LocalStatusReader {
     let rows = null; let latest = null;
     try {
       ({ rows, latest } = withDatabase(path.join(this.codexHome, 'thread_history_1.sqlite'), (db) => ({
-        rows: db.prepare(`SELECT status, started_at,
+        rows: db.prepare(`SELECT thread_id, status, started_at,
           (SELECT MAX(created_at_ms) FROM thread_items i WHERE i.thread_id=t.thread_id AND i.turn_id=t.turn_id) AS last_item_at
-          FROM thread_turns t WHERE status=? LIMIT 100`).all('inProgress'),
+          FROM thread_turns t WHERE status=? ORDER BY started_at DESC LIMIT 100`).all('inProgress'),
         latest: db.prepare('SELECT status, started_at, completed_at FROM thread_turns ORDER BY started_at DESC LIMIT 1').get(),
       })));
     } catch { /* CLI-only installs can still supply quota snapshots without desktop history. */ }
@@ -157,10 +159,26 @@ class LocalStatusReader {
     const cached = this.codexRateCache?.snapshot;
     const quotas = cached?.quotas.map((quota) => ({ ...quota,
       stale: quota.stale || now - cached.at > 1800000 || Boolean(quota.reset && Date.parse(quota.reset) <= now) })) || unknownCodexQuotas();
-    const activity = normalizeCodexActivity(rows, latest, detected, now);
+    let attentionThreads = rows?.map(row => row.thread_id).filter(Boolean) || [];
+    try {
+      const recent = withDatabase(path.join(this.codexHome, 'state_5.sqlite'), db => db.prepare('SELECT id FROM threads WHERE archived=0 ORDER BY updated_at DESC LIMIT 24').all().map(row => row.id));
+      attentionThreads = [...new Set([...attentionThreads, ...recent])];
+    } catch { /* Older schemas can still monitor current desktop turns. */ }
+    const attention = await this.codexAttention.poll(attentionThreads, detected && list !== null, now);
+    const activity = normalizeCodexActivity(rows?.filter(row => !attention.waitingThreads.has(row.thread_id)), latest, detected, now);
+    if (attention.waitingThreads.size) {
+      const parts = [];
+      if (attention.inputThreads.size) parts.push(`${attention.inputThreads.size} 项待回答`);
+      if (attention.approvalThreads.size) parts.push(`${attention.approvalThreads.size} 项待授权`);
+      if (activity.activeTasks) parts.push(`${activity.activeTasks} 项运行`);
+      Object.assign(activity, { activity: 'waiting', task: parts.join(' · '), waitingTasks: attention.waitingThreads.size,
+        waitingReason: attention.inputThreads.size && attention.approvalThreads.size ? 'both' : attention.inputThreads.size ? 'input' : 'approval' });
+    }
     if (list === null) Object.assign(activity, { activity: 'unknown', task: '进程状态暂不可读' });
     return { id: 'codex', source: cached ? 'cache' : 'unavailable', connection: list === null ? 'error' : detected ? 'ready' : 'offline',
       ...activity, quotas, observedAt: cached ? new Date(cached.at).toISOString() : null,
+      attentionAvailable: attention.connected && attention.observedThreads > 0,
+      activityDetail: attention.connected && attention.observedThreads > 0 ? '通过 Codex 本地客户端状态通道监看待回答与待授权请求；红灯优先，处理后自动恢复。' : '任务活动来自本地记录；等待提醒通道暂不可用，不能确认是否有待回答或待授权请求。',
       detail: '只读本地额度快照与任务记录；十分钟无活动的未结束任务不显示为运行中。缺少的额度窗口显示未知。' };
   }
   async antigravity(list, force) {

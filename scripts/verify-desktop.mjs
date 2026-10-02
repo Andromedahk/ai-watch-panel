@@ -6,7 +6,9 @@ import path from 'node:path';
 
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-qa-'));
 const live = process.env.AI_WATCH_LIVE_QA === '1';
-const app = await electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: live ? '' : 'fixture' } });
+const variant = process.env.AI_WATCH_TEST_STATUS || 'fixture';
+const glow = !live && variant.startsWith('glow-');
+const app = await electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: live ? '' : variant } });
 try {
   const page = await app.firstWindow();
   await page.getByRole('heading', { name: 'AI WATCH', exact: true }).waitFor();
@@ -70,15 +72,26 @@ try {
   if (!live) {
     assert.equal(layout.quotaCount, 5);
     assert.equal(await page.locator('.claude-empty strong').innerText(), 'Code 额度暂不可用');
-    assert.equal(await page.locator('.task-line .status-dot.waiting').count(), 1);
+    assert.equal(await page.locator('.task-line .status-dot.waiting').count(), variant === 'glow-running' ? 0 : 1);
     assert.equal(await page.locator('.quota-unknown').count(), 1);
     assert.equal(await page.locator('.quota-pagination').innerText(), '1/5');
     assert.equal(await page.locator('.balance-total strong').innerText(), '13.57');
     assert.equal(await page.locator('.currency-switch').innerText(), 'CNY ↔');
   }
-  const output = live ? '.local/qa/live-panel.png' : 'docs/screenshots/panel.png';
+  if (glow) {
+    const lights = await page.locator('.panel-regions .avatar').evaluateAll(elements => elements.map(el => ({
+      state: el.getAttribute('data-glow'), color: el.getAttribute('data-provider') === 'antigravity' ? 'rainbow' : getComputedStyle(el).getPropertyValue('--halo-color').trim(),
+      duration: getComputedStyle(el, '::before').animationDuration,
+    })));
+    assert.deepEqual(lights.map(l => l.state), ['running', variant === 'glow-attention' ? 'attention' : 'running', 'running', 'running']);
+    assert.ok(lights.every(l => l.duration === '5s'));
+    assert.equal(lights[1].color, variant === 'glow-attention' ? '#ff555f' : '#c5d494');
+    await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.card-heading .avatar'), '::before').opacity) > .98);
+    console.log(JSON.stringify({ glow: variant, colors: lights.map(l => l.color), cycle: '5 seconds' }));
+  }
+  const output = live ? '.local/qa/live-panel.png' : glow ? `docs/screenshots/${variant}.png` : 'docs/screenshots/panel.png';
   await mkdir(path.dirname(output), { recursive: true });
-  await page.screenshot({ path: output, animations: 'disabled' });
+  await page.screenshot({ path: output, animations: glow ? 'allow' : 'disabled' });
   const status = await page.evaluate(async () => {
     const snapshot = await window.panel.getStatus();
     return ['claude', 'codex', 'antigravity', 'deepseek'].map(id => ({ provider: id, source: snapshot[id].source,

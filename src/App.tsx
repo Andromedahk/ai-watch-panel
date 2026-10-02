@@ -12,11 +12,15 @@ function readImages(): Partial<Record<ProviderId, string>> {
   try { return JSON.parse(localStorage.getItem('ai-watch:images') ?? '{}'); }
   catch { return {}; }
 }
-function Avatar({ provider, image }: { provider: Provider; image?: string }) {
+function Avatar({ provider, image, monitor = false }: { provider: Provider; image?: string; monitor?: boolean }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [image]);
-  return <div className="avatar">
+  const attention = provider.id === 'codex' && (provider.local?.activity === 'waiting' || (provider.local?.waitingTasks || 0) > 0);
+  const glow = monitor ? attention ? 'attention' : provider.running ? 'running' : 'off' : 'off';
+  return <div className="avatar" data-provider={provider.id} data-glow={glow}>
+    <div className="avatar-face">
     {failed ? <span>{provider.name.slice(0, 1)}</span> : <img src={image || `./${provider.image}`} alt={`${provider.name} 助手图片`} onError={() => setFailed(true)} />}
+    </div>
   </div>;
 }
 function money(value: string) {
@@ -54,15 +58,15 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
     : local.connection === 'auth-required' ? '待登录' : local.source === 'account' ? '账号余额'
     : local.source === 'local-api' ? '本地服务' : local.source === 'cache' ? isBalance ? '历史记录' : '本地记录' : '未连接';
   const phase = !local ? provider.running ? '演示运行' : '演示待机'
-    : { running: '运行中', idle: '待机', waiting: '待确认', unknown: '未知', offline: '离线' }[local.activity];
+    : { running: '运行中', idle: '待机', waiting: local.id === 'codex' ? local.waitingReason === 'input' ? '待回答' : local.waitingReason === 'approval' ? '待授权' : '待处理' : '待确认', unknown: '未知', offline: '离线' }[local.activity];
   const time = local?.observedAt ? new Date(local.observedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
   function quotaTitle(quota: Quota) {
     const reset = quota.reset && local ? `重置时间 ${new Date(quota.reset).toLocaleString('zh-CN')}` : quota.reset;
     return `${quota.model} · ${quota.period}${reset ? ` · ${reset}` : ''}${quota.stale ? ` · 已过时，历史剩余 ${quota.remaining ?? '未知'}%` : ''}`;
   }
-  return <section className={`provider-card ${provider.running ? 'is-running' : ''}`} style={{ '--accent': provider.color } as CSSProperties} aria-label={`${provider.name} 面板`}>
+  return <section className={`provider-card ${provider.running ? 'is-running' : ''}`} style={{ '--accent': provider.color } as CSSProperties} aria-label={`${provider.name} 面板`} data-attention={local?.id === 'codex' && local.activity === 'waiting'}>
     <div className="card-heading">
-      <Avatar provider={provider} image={image} />
+      <Avatar provider={provider} image={image} monitor />
       <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? '桌面版 · 终端版' : provider.subtitle}</span><h2>{provider.name}</h2></div>
       <span className="card-index">0{index + 1}</span>
     </div>
@@ -212,7 +216,7 @@ export default function App() {
       <button className="rail-expand" title="展开面板" aria-label="展开面板" onClick={() => collapse(false)}>{state.side === 'right' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}</button>
       <span className="rail-brand">AI</span>
       <div className="rail-providers">{visibleProviders.map((provider) => <div key={provider.id} title={`${provider.name} · ${provider.local?.task || (provider.running ? '演示运行中' : '演示待机')}`} style={{ '--accent': provider.color } as CSSProperties}>
-        <Avatar provider={provider} image={images[provider.id]} /><span className={`status-dot ${provider.running ? 'active' : provider.local?.activity === 'waiting' ? 'waiting' : provider.local?.activity === 'unknown' ? 'unknown' : ''}`} />
+        <Avatar provider={provider} image={images[provider.id]} monitor /><span className={`status-dot ${provider.running ? 'active' : provider.local?.activity === 'waiting' ? 'waiting' : provider.local?.activity === 'unknown' ? 'unknown' : ''}`} />
       </div>)}</div>
       <button className={`rail-lock ${state.locked ? 'selected' : ''}`} title="锁定窗口" aria-label="锁定窗口" aria-pressed={state.locked} onClick={toggleLock}>{state.locked ? <LockKeyhole size={15} /> : <UnlockKeyhole size={15} />}</button>
       <span className="rail-demo">{state.desktop ? '本地' : '演示'}</span>
@@ -234,7 +238,7 @@ export default function App() {
       <div className="settings-content">
         <fieldset><legend>默认停靠位置</legend><div className="segmented"><button className={draft.side === 'left' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'left' })}>左侧</button><button className={draft.side === 'right' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'right' })}>右侧</button></div></fieldset>
         <label className="switch-row"><span>跨桌面锁定<small>置顶并跟随桌面切换</small></span><input type="checkbox" checked={draft.locked} onChange={(event) => setDraft({ ...draft, locked: event.target.checked })} /></label>
-        <label className="switch-row"><span>状态灯动画<small>运行中轻微呼吸效果</small></span><input type="checkbox" checked={draft.animate} onChange={(event) => setDraft({ ...draft, animate: event.target.checked })} /></label>
+        <label className="switch-row"><span>状态灯动画<small>LOGO 外沿每 5 秒呼吸一次</small></span><input type="checkbox" checked={draft.animate} onChange={(event) => setDraft({ ...draft, animate: event.target.checked })} /></label>
         <button className="dock-button" onClick={async () => {
           try { if (window.panel) setState(await window.panel.dock()); setNotice('已重新贴边'); }
           catch { setNotice('重新贴边失败'); }
@@ -242,7 +246,7 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.4</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+        <div className="settings-note"><span className="note-title">本地状态 · v0.5</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
           {localStatus && <>{(['claude', 'codex', 'antigravity', 'deepseek'] as const).map((id) => <p key={id}><b>{id === 'claude' ? 'Claude Code' : id === 'codex' ? 'Codex' : id === 'deepseek' ? 'DeepSeek Harness' : 'Antigravity'}</b><br />{localStatus[id].detail}<br />{localStatus[id].activityDetail && <>{localStatus[id].activityDetail}<br /></>}{localStatus[id].observedAt ? `记录时间：${new Date(localStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>
