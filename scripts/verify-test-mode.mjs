@@ -16,7 +16,12 @@ try {
   const view = () => page.getByRole('button', { name: '查看测试面板', exact: true }).click();
   const select = (name, value) => page.getByRole('combobox', { name, exact: true }).selectOption(value);
   await expect(main).toHaveAttribute('data-test-mode', 'false');
+  assert.equal(await page.locator('.control-region').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'drag');
   await configure();
+  // DOM clicks bypass native window hit testing; also guard the modal's drag-region policy.
+  for (const target of [page.locator('.control-region'), page.getByRole('dialog'), page.getByRole('checkbox', { name: '测试模式', exact: true })]) {
+    assert.equal(await target.evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag');
+  }
   await page.getByRole('checkbox', { name: '测试模式', exact: true }).check();
   await expect(page.getByRole('combobox')).toHaveCount(8);
   await expect(page.getByRole('status')).toBeHidden();
@@ -24,6 +29,7 @@ try {
   await mkdir('docs/screenshots', { recursive: true });
   await page.screenshot({ path: 'docs/screenshots/test-settings.png' });
   await view();
+  assert.equal(await page.locator('.control-region').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'drag');
   await expect(page.locator('.panel-regions .avatar[data-glow="running"]')).toHaveCount(4);
   await expect(page.locator('.source-tag')).toHaveText(['测试数据', '测试数据', '测试数据', '测试数据']);
 
@@ -101,7 +107,7 @@ try {
   await page.reload();
   await expect(main).toHaveAttribute('data-test-mode', 'false');
   await expect(card('Codex').locator('.task-line > span:nth-child(2)')).toHaveText(original.codex.task);
-  console.log('Manual test mode passed: scenarios, quota bounds, balance states, pagination, refresh isolation, collapse, disabled animation, live restore, reload reset.');
+  console.log('Manual test mode passed: modal drag policy, scenarios, quota bounds, balance states, pagination, refresh isolation, collapse, disabled animation, live restore, reload reset.');
 } finally {
   await app.close(); await rm(profile, { recursive: true, force: true });
 }

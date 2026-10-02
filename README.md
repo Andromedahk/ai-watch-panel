@@ -2,7 +2,7 @@
 
 macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vite**，预留 Windows、Linux 的构建入口。
 
-> v0.6 新增设置中的 **测试模式与手动 UI 场景选择**，可检查运行光晕、Codex 红灯、额度、余额和窗口控件。已接入 **Claude 桌面用量记录与桌面/终端 Code 会话发现**、**Codex 本地额度与任务记录**、**Antigravity 本地服务**及 **DeepSeek Harness 账户余额与任务活动**。Claude Free 不包含 Code 权限，缺少数据时显示不可用。浏览器预览全部使用示例数据。
+> v0.6.1 修复设置顶部测试开关被窗口拖动区拦截的问题。v0.6 新增设置中的 **测试模式与手动 UI 场景选择**，可检查运行光晕、Codex 红灯、额度、余额和窗口控件。已接入 **Claude 桌面用量记录与桌面/终端 Code 会话发现**、**Codex 本地额度与任务记录**、**Antigravity 本地服务**及 **DeepSeek Harness 账户余额与任务活动**。Claude Free 不包含 Code 权限，缺少数据时显示不可用。浏览器预览全部使用示例数据。
 
 <img src="docs/screenshots/panel.png" width="220" alt="AI Watch 五区面板预览" />
 
@@ -185,6 +185,12 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 额度窗口字段参考 OpenAI 官方 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。此版本读取既有本地记录，不另外启动 App Server；Antigravity 桌面接口按当前安装版本验证，其 CLI 的 [状态栏文档](https://antigravity.google/docs/cli/statusline) 作为后续适配参考。
 
 ## 更新记录
+
+### 0.6.1 · 2026-10-02
+
+- 修复测试模式开关无法响应普通鼠标点击：打开设置时停用底层标题栏和窄栏的窗口拖动区域，整个设置页及表单控件明确排除拖动命中。
+- 关闭设置后恢复标题栏拖动；测试选项与数据逻辑保持不变。
+- 补充设置开关前后的拖动区域检查，普通鼠标点击与程序化 UI 操作分别验收。
 
 ### 0.6.0 · 2026-10-02
 
