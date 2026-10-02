@@ -2,7 +2,7 @@
 
 macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vite**，预留 Windows、Linux 的构建入口。
 
-> v0.5 新增 **LOGO 外沿呼吸光晕与 Codex 待回答 / 待授权红灯**。已接入 **Claude 桌面用量记录与桌面/终端 Code 会话发现**、**Codex 本地额度与任务记录**、**Antigravity 本地服务**及 **DeepSeek Harness 账户余额与任务活动**。Claude Free 不包含 Code 权限，缺少数据时显示不可用。浏览器预览全部使用示例数据。
+> v0.6 新增设置中的 **测试模式与手动 UI 场景选择**，可检查运行光晕、Codex 红灯、额度、余额和窗口控件。已接入 **Claude 桌面用量记录与桌面/终端 Code 会话发现**、**Codex 本地额度与任务记录**、**Antigravity 本地服务**及 **DeepSeek Harness 账户余额与任务活动**。Claude Free 不包含 Code 权限，缺少数据时显示不可用。浏览器预览全部使用示例数据。
 
 <img src="docs/screenshots/panel.png" width="220" alt="AI Watch 五区面板预览" />
 
@@ -38,6 +38,20 @@ macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vi
 空闲、离线、未知不显示运行光晕。关闭“状态灯动画”或系统启用减少动态效果时，保留静态光晕以传达状态。
 
 效果预览使用合成数据：[四种运行配色](docs/screenshots/glow-running.png) · [Codex 红色提醒](docs/screenshots/glow-attention.png)。
+
+## 手动测试模式
+
+打开 **配置 → 测试模式**，选择场景后点击“查看测试面板”。开关与场景即时生效，不需要保存；关闭设置不会退出测试模式。顶部“测试模式”标记可直接返回配置，收起窄栏中的“测试”按钮会展开窗口并打开配置。
+
+- **快捷场景**：全部运行、全部待机、Codex 待回答、Codex 待授权。
+- **各工具任务状态**：独立选择运行、待机、等待确认、未知、离线。Codex 另有待回答、待授权、等待与其他任务同时运行，用于检查红灯优先级与运行计数。
+- **额度显示**：正常、低额度 12.5%、耗尽 0%、满额 100%、未知、过时；Claude 另有 Free 无 Code 额度。Antigravity 提供三页测试额度，可点击分页检查末页与长名称。
+- **Harness 余额**：正常 CNY / USD 双币种、零余额、小于 0.01 的金额、历史余额、未登录、未知和读取失败；点击币种按钮检查切换。
+- **窗口与控件**：沿用面板上的锁定、收起、展开、刷新、悬停详情，以及配置中的左右停靠、动画开关与图片替换。窗口和图片设置会正常生效；测试模式下手动刷新只更新测试画面的时间和提示，保留当前场景、分页与币种。
+
+所有卡片及顶部均标明测试数据；模拟状态不会启动 AI 任务、回答问题、批准授权或改变真实账户。后台继续正常监看，关闭测试模式后立即显示已收到的本地状态，额度分页和余额币种回到第一页。测试开关和选择仅保留在当前界面会话中，重载或重启后自动关闭，不写入本机偏好或账户文件。浏览器预览也支持测试模式，窗口能力仍以桌面版为准。
+
+设置预览：[手动测试选项](docs/screenshots/test-settings.png)。
 
 ## 运行
 
@@ -156,6 +170,7 @@ Windows、Linux 尚未完成平台验收。Windows 原生置顶可用，但 Elec
 npm test
 npm run build
 npm run test:desktop
+npm run test:ui  # 手动测试选项与恢复本地状态的自动检查
 AI_WATCH_TEST_STATUS=glow-running npm run test:desktop
 AI_WATCH_TEST_STATUS=glow-attention npm run test:desktop
 AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存在忽略目录
@@ -170,6 +185,14 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 额度窗口字段参考 OpenAI 官方 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。此版本读取既有本地记录，不另外启动 App Server；Antigravity 桌面接口按当前安装版本验证，其 CLI 的 [状态栏文档](https://antigravity.google/docs/cli/statusline) 作为后续适配参考。
 
 ## 更新记录
+
+### 0.6.0 · 2026-10-02
+
+- 配置顶部新增测试模式开关、四个快捷场景及四种工具的独立任务 / 数据选项。
+- 覆盖运行光晕、Codex 待回答 / 待授权与并行任务、额度边界和分页、Harness 币种与余额异常状态。
+- 测试数据与本地监看分开显示；手动刷新测试画面不触发服务查询，关闭模式立即恢复本地状态，重启默认关闭。
+- 展开与收起界面均提供测试标记和返回设置入口，窗口操作及图片配置保持可用。
+- 新增 UI 交互与恢复检查，更新 README、设置截图与验收记录，打包 macOS v0.6 应用。
 
 ### 0.5.0 · 2026-10-02
 

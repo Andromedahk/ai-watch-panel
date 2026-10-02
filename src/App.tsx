@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
 import { providers } from './data';
+import { TestControls } from './TestControls';
+import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
 import Big from 'big.js';
 import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provider, ProviderId, Quota } from './types';
 
@@ -45,7 +47,7 @@ function BalanceCard({ local }: { local: LocalProviderStatus }) {
     </> : <div className="balance-empty"><strong>{local.connection === 'auth-required' ? '等待 Harness 登录' : local.connection === 'ready' ? '暂无钱包记录' : '余额暂不可用'}</strong><p>{local.detail}</p></div>}
   </div>;
 }
-function ProviderCard({ provider, index, image }: { provider: Provider; index: number; image?: string }) {
+function ProviderCard({ provider, index, image, testing = false }: { provider: Provider; index: number; image?: string; testing?: boolean }) {
   const [page, setPage] = useState(0);
   const pages = Math.max(1, Math.ceil(provider.quotas.length / 3));
   const currentPage = Math.min(page, pages - 1);
@@ -54,7 +56,7 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
     : [{ model: '模型额度', period: '尚未读取', remaining: null, reset: '' }];
   const local = provider.local;
   const isBalance = local?.id === 'deepseek';
-  const source = !local ? '演示' : local.connection === 'offline' ? '未运行'
+  const source = testing ? '测试数据' : !local ? '演示' : local.connection === 'offline' ? '未运行'
     : local.connection === 'auth-required' ? '待登录' : local.source === 'account' ? '账号余额'
     : local.source === 'local-api' ? '本地服务' : local.source === 'cache' ? isBalance ? '历史记录' : '本地记录' : '未连接';
   const phase = !local ? provider.running ? '演示运行' : '演示待机'
@@ -79,7 +81,7 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
           <button aria-label={`${provider.name} 下一页额度`} disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight size={11} /></button>
         </div> : <span className="quota-time" title={local?.observedAt ? `记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}>{local ? local.id === 'claude' && !local.quotas.length ? '未提供 Code 额度' : time ? `记录 ${time}` : isBalance ? '自动识别登录态' : '额度未知' : '示例额度'}</span>}
       </div>
-      {isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>Code 额度暂不可用</strong><p>Free 账号不包含 Code 权限</p><small>{local.surfaces?.desktop}<br />{local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={`${local ? '本地' : '演示'}剩余额度`}>
+      {isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>Code 额度暂不可用</strong><p>Free 账号不包含 Code 权限</p><small>{local.surfaces?.desktop}<br />{local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={`${testing ? '测试' : local ? '本地' : '演示'}剩余额度`}>
         {quotas.map((quota, row) => {
           const known = quota.remaining !== null && !quota.stale;
           return <div className={`quota ${known ? '' : 'quota-unknown'}`} key={`${quota.model}:${quota.period}:${row}`} title={quotaTitle(quota)}>
@@ -98,6 +100,11 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
 export default function App() {
   const [state, setState] = useState(previewState);
   const [localStatus, setLocalStatus] = useState<LocalStatus | null>(null);
+  const [testMode, setTestMode] = useState(false);
+  const [testConfig, setTestConfig] = useState(defaultTestConfig);
+  const [testSampledAt, setTestSampledAt] = useState(() => new Date().toISOString());
+  const testStatus = useMemo(() => makeTestStatus(testConfig, testSampledAt), [testConfig, testSampledAt]);
+  const displayStatus = testMode ? testStatus : localStatus;
   const [images, setImages] = useState(readImages);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -107,15 +114,25 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const targetImage = useRef<ProviderId>('claude');
   const visibleProviders = providers.map((provider) => {
-    if (!state.desktop) return provider;
-    const local = localStatus?.[provider.id];
+    if (!state.desktop && !testMode) return provider;
+    const local = displayStatus?.[provider.id];
     return { ...provider, running: local?.activity === 'running', task: local?.task || '正在读取本地状态',
       quotas: local?.quotas || [], local: local || { id: provider.id, source: 'unavailable' as const,
         connection: 'unavailable' as const, activity: 'unknown' as const, activeTasks: 0,
         task: '正在读取本地状态', quotas: [], observedAt: null, sampledAt: null, detail: '等待首次读取' } };
   });
-  const activeTasks = providers.reduce((total, provider) => total + (localStatus?.[provider.id].activeTasks || 0), 0);
-  const refreshTime = localStatus?.sampledAt ? new Date(localStatus.sampledAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '读取中';
+  const activeTasks = providers.reduce((total, provider) => total + (displayStatus?.[provider.id].activeTasks || 0), 0);
+  const refreshTime = displayStatus?.sampledAt ? new Date(displayStatus.sampledAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '读取中';
+
+  function openSettings() { setDraft({ side: state.side, locked: state.locked, animate: state.animate }); setSettingsOpen(true); }
+  function toggleTestMode(enabled: boolean) {
+    setTestMode(enabled); setTestSampledAt(new Date().toISOString());
+    setNotice(enabled ? '测试模式已开启' : state.desktop ? '已恢复本地监看' : '已恢复浏览器预览');
+  }
+  function changeTestSelection(id: ProviderId, patch: Partial<TestSelection>) {
+    setTestConfig(current => ({ ...current, [id]: { ...current[id], ...patch } }));
+    setTestSampledAt(new Date().toISOString());
+  }
 
   useEffect(() => {
     const bridge = window.panel;
@@ -163,7 +180,10 @@ export default function App() {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      if (window.panel) {
+      if (testMode) {
+        await new Promise(resolve => setTimeout(resolve, 450));
+        setTestSampledAt(new Date().toISOString()); setNotice('测试画面已刷新');
+      } else if (window.panel) {
         setLocalStatus(await window.panel.refreshStatus());
         setNotice('本地状态已重新读取');
       } else setNotice('浏览器预览使用演示数据；本地接入请打开桌面版');
@@ -210,7 +230,7 @@ export default function App() {
     } catch { setNotice('无法读取这张图片'); }
   }
 
-  return <main data-sampled-at={localStatus?.sampledAt || ''} className={`panel ${state.collapsed ? 'collapsed' : ''} ${!state.animate ? 'no-animation' : ''}`}>
+  return <main data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel ${state.collapsed ? 'collapsed' : ''} ${!state.animate ? 'no-animation' : ''}`}>
     {state.collapsed ? <aside className="collapsed-rail" aria-label="收起的监看面板">
       <div className="rail-grip"><GripVertical size={15} /></div>
       <button className="rail-expand" title="展开面板" aria-label="展开面板" onClick={() => collapse(false)}>{state.side === 'right' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}</button>
@@ -219,23 +239,26 @@ export default function App() {
         <Avatar provider={provider} image={images[provider.id]} monitor /><span className={`status-dot ${provider.running ? 'active' : provider.local?.activity === 'waiting' ? 'waiting' : provider.local?.activity === 'unknown' ? 'unknown' : ''}`} />
       </div>)}</div>
       <button className={`rail-lock ${state.locked ? 'selected' : ''}`} title="锁定窗口" aria-label="锁定窗口" aria-pressed={state.locked} onClick={toggleLock}>{state.locked ? <LockKeyhole size={15} /> : <UnlockKeyhole size={15} />}</button>
-      <span className="rail-demo">{state.desktop ? '本地' : '演示'}</span>
+      {testMode ? <button className="rail-demo test-badge" aria-label="测试模式设置" onClick={async () => { await collapse(false); openSettings(); }}>测试</button> : <span className="rail-demo">{state.desktop ? '本地' : '演示'}</span>}
     </aside> : <div className="panel-regions">
       <header className="control-region">
         <div className="brand-line"><div className="brand"><Activity size={15} strokeWidth={1.7} /><h1>AI WATCH</h1></div><GripVertical size={13} className="drag-hint" /></div>
-        <div className="overview" title="运行数只统计本地接入且有运行证据的任务；未知状态和演示卡片不计入。"><span><span className={`tiny-dot ${activeTasks ? 'active' : ''}`} />{state.desktop ? `${activeTasks} 项运行` : '界面预览'} <span className="demo-tag">{localStatus?.isTestData ? '测试' : state.desktop ? '本地' : '演示'}</span></span><time>{state.desktop ? refreshTime : '演示数据'}</time></div>
+        <div className="overview" title={testMode ? '当前运行数、任务、额度与余额均为手动选择的测试数据。' : '运行数只统计本地接入且有运行证据的任务；未知状态和演示卡片不计入。'}><span><span className={`tiny-dot ${activeTasks ? 'active' : ''}`} />{state.desktop || testMode ? `${activeTasks} 项运行` : '界面预览'} {testMode ? <button className="demo-tag test-badge" aria-label="测试模式设置" onClick={openSettings}>测试模式</button> : <span className="demo-tag">{localStatus?.isTestData ? '测试' : state.desktop ? '本地' : '演示'}</span>}</span><time>{state.desktop || testMode ? refreshTime : '演示数据'}</time></div>
         <nav className="toolbar" aria-label="面板控制">
           <button className={state.locked ? 'selected' : ''} aria-label="锁定窗口" aria-pressed={state.locked} title={state.locked ? '解除跨桌面锁定' : '锁定：置顶并显示在所有桌面'} onClick={toggleLock}>{state.locked ? <LockKeyhole /> : <UnlockKeyhole />}</button>
           <button aria-label="收起面板" title="收起为状态窄条" onClick={() => collapse(true)}>{state.side === 'right' ? <ArrowRightToLine /> : <ArrowLeftToLine />}</button>
-          <button aria-label="刷新面板" title="重新读取本地额度与任务状态" disabled={refreshing} onClick={refresh}><RefreshCw className={refreshing ? 'spinning' : ''} /></button>
-          <button aria-label="打开配置" title="配置面板" onClick={() => { setDraft(state); setSettingsOpen(true); }}><Settings2 /></button>
+          <button aria-label="刷新面板" title={testMode ? '刷新测试画面' : '重新读取本地额度与任务状态'} disabled={refreshing} onClick={refresh}><RefreshCw className={refreshing ? 'spinning' : ''} /></button>
+          <button aria-label="打开配置" title="配置面板" onClick={openSettings}><Settings2 /></button>
         </nav>
       </header>
-      {visibleProviders.map((provider, index) => <ProviderCard key={provider.id} provider={provider} index={index} image={images[provider.id]} />)}
+      {visibleProviders.map((provider, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${provider.id}`} provider={provider} index={index} image={images[provider.id]} testing={Boolean(displayStatus?.isTestData)} />)}
     </div>}
     <dialog ref={modal} className="settings-dialog" aria-labelledby="settings-title" onCancel={() => setSettingsOpen(false)}>
       <div className="settings-heading"><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">面板配置</h2></div><button className="icon-button" aria-label="关闭配置" onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
       <div className="settings-content">
+        <TestControls enabled={testMode} config={testConfig} onToggle={toggleTestMode} onChange={changeTestSelection}
+          onPreset={preset => { setTestConfig(current => applyTestPreset(current, preset)); setTestSampledAt(new Date().toISOString()); }}
+          onView={() => setSettingsOpen(false)} />
         <fieldset><legend>默认停靠位置</legend><div className="segmented"><button className={draft.side === 'left' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'left' })}>左侧</button><button className={draft.side === 'right' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'right' })}>右侧</button></div></fieldset>
         <label className="switch-row"><span>跨桌面锁定<small>置顶并跟随桌面切换</small></span><input type="checkbox" checked={draft.locked} onChange={(event) => setDraft({ ...draft, locked: event.target.checked })} /></label>
         <label className="switch-row"><span>状态灯动画<small>LOGO 外沿每 5 秒呼吸一次</small></span><input type="checkbox" checked={draft.animate} onChange={(event) => setDraft({ ...draft, animate: event.target.checked })} /></label>
@@ -246,8 +269,8 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.5</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
-          {localStatus && <>{(['claude', 'codex', 'antigravity', 'deepseek'] as const).map((id) => <p key={id}><b>{id === 'claude' ? 'Claude Code' : id === 'codex' ? 'Codex' : id === 'deepseek' ? 'DeepSeek Harness' : 'Antigravity'}</b><br />{localStatus[id].detail}<br />{localStatus[id].activityDetail && <>{localStatus[id].activityDetail}<br /></>}{localStatus[id].observedAt ? `记录时间：${new Date(localStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
+        <div className="settings-note"><span className="note-title">本地状态 · v0.6</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+          {displayStatus && <>{(['claude', 'codex', 'antigravity', 'deepseek'] as const).map((id) => <p key={id}><b>{id === 'claude' ? 'Claude Code' : id === 'codex' ? 'Codex' : id === 'deepseek' ? 'DeepSeek Harness' : 'Antigravity'}</b><br />{displayStatus[id].detail}<br />{displayStatus[id].activityDetail && <>{displayStatus[id].activityDetail}<br /></>}{displayStatus[id].observedAt ? `记录时间：${new Date(displayStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>
       <div className="settings-footer"><button className="save-button" onClick={saveSettings}><Check size={15} />保存配置</button>{state.desktop && <button className="quit-button" onClick={() => window.panel?.quit()}>退出面板</button>}</div>
