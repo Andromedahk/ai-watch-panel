@@ -22,7 +22,7 @@ test('restore clamps a moved rail into the available display area', () => {
   assert.deepEqual(clampBounds({ x: 1500, y: 100, width: 200, height: 900 }, { x: 0, y: 25, width: 1600, height: 900 }), { x: 1400, y: 25, width: 200, height: 900 });
 });
 test('unknown configuration values fall back without broadening capabilities', () => {
-  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false });
+  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, animeMode: false, providerApps: {} });
 });
 test('provider order rejects missing, duplicate and unknown cards and migrates old preferences', () => {
   for (const value of [null, 'codex', [], ['codex', 'codex', 'claude', 'deepseek'], ['claude', 'codex', 'antigravity', 'other']]) {
@@ -32,7 +32,7 @@ test('provider order rejects missing, duplicate and unknown cards and migrates o
   const reversed = [...PROVIDER_ORDER].reverse();
   assert.equal(isProviderOrder(reversed), true);
   const settings = validPreferences({ side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed });
-  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false });
+  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, animeMode: false, providerApps: {} });
   reversed.reverse();
   assert.notDeepEqual(settings.providerOrder, reversed);
 });
@@ -83,4 +83,20 @@ test('six-provider selection migration retains disabled cards and enables only t
   const four = ['codex', 'deepseek', 'claude', 'antigravity'];
   assert.deepEqual(validPreferences({ providerOrder: four, enabledProviders: ['codex'] }).enabledProviders, ['codex', 'zcode', 'kimi', 'qwen', 'workbuddy']);
   assert.deepEqual(validPreferences({ providerOrder: four, enabledProviders: [] }).enabledProviders, []);
+});
+
+test('anime mode is disabled for older preferences and only explicit true opts in', () => {
+  for (const animeMode of [undefined, null, false, 'true', 1, {}, []]) assert.equal(validPreferences({ animeMode }).animeMode, false);
+  assert.equal(validPreferences({ animeMode: true }).animeMode, true);
+});
+
+test('launch preferences retain only known provider absolute local paths', () => {
+  const path = require('node:path');
+  const file = path.resolve('example.app');
+  const original = { claude: file, codex: 'https://example.invalid', qwen: 'relative.app', workbuddy: `${file}\0`, deepseek: true, kimi: '/', extra: file };
+  assert.deepEqual(validPreferences({ providerApps: original }).providerApps, { claude: file, kimi: '/' });
+  assert.deepEqual(validPreferences({ providerApps: [file] }).providerApps, {});
+  assert.deepEqual(validPreferences({ providerApps: null }).providerApps, {});
+  original.claude = 'changed';
+  assert.equal(validPreferences({ providerApps: { codex: file } }).providerApps.codex, file);
 });

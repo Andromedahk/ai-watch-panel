@@ -260,3 +260,55 @@ legend { margin-bottom: 10px; color: var(--label); font-size: 12px; }
   .credit-value { font-size: clamp(12px, 6vw, 18px); }
   .task-line { padding-top: 6px; }
 }
+
+/* Launchers remain normal controls, excluded from the card's long-press gesture. */
+.avatar-launch { display: block; flex-shrink: 0; border: 0; padding: 0; margin: 0; background: transparent; border-radius: 10px; cursor: pointer; -webkit-app-region: no-drag; }
+.avatar-launch .avatar { pointer-events: none; }
+.avatar-launch:hover .avatar-face { border-color: var(--accent-ink, var(--accent)); }
+.avatar-launch:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.avatar-launch:disabled { opacity: .75; cursor: progress; }
+.rail-providers .avatar-launch { border-radius: 7px; }
+.app-option { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0; }
+.app-option > span { font-size: 10px; min-width: 0; }
+.app-option > button { flex-shrink: 0; background: var(--image-button-bg); color: var(--control-text); border: 1px solid var(--page-border); border-radius: 4px; padding: 4px 7px; font-size: 9px; }
+.anime-mode .provider-card { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 50% minmax(0, 1fr) auto; gap: 6px; padding: 8px 10px; }
+.anime-mode .card-heading { display: grid; grid-template-columns: 52% minmax(0, 1fr); align-items: center; gap: 8px; min-height: 0; height: 100%; }
+.anime-mode .card-heading .avatar-launch, .anime-mode .card-heading .avatar { width: 100%; height: 100%; min-height: 0; min-width: 0; }
+.anime-mode .card-heading .avatar, .anime-mode .card-heading .avatar-launch { border-radius: 11px; }
+.anime-mode .card-heading .avatar img { padding: 3px; object-fit: contain; }
+.anime-mode .identity h2 { font-size: clamp(10px, 4.4vw, 15px); overflow-wrap: anywhere; line-height: 1.25; }
+.anime-mode .eyebrow { font-size: clamp(6px, 2.6vw, 8px); letter-spacing: 1px; line-height: 1.4; }
+.anime-mode .card-index { top: 0; right: 0; }
+.anime-mode .plan-summary { margin-top: 5px; flex-wrap: wrap; gap: 2px; font-size: clamp(7px, 3vw, 10px); }
+.anime-mode .quota-area { gap: 3px; }
+.anime-mode .quota-list { gap: 4px; justify-content: space-evenly; }
+.anime-mode .quota-label { margin-bottom: 3px; font-size: clamp(8px, 3.7vw, 12px); }
+.anime-mode .quota-label strong { font-size: clamp(10px, 4.8vw, 15px); }
+.anime-mode .task-line { padding-top: 5px; font-size: clamp(7px, 3.4vw, 10px); }
+.anime-mode .credit-item { padding-block: 1px; }
+.anime-mode .credit-value { font-size: clamp(12px, 6vw, 20px); }
+.anime-mode .balance-content { gap: 3px; }
+.anime-mode .balance-total strong { font-size: clamp(18px, 8vw, 26px); }
+.anime-mode .claude-empty { font-size: 9px; }
+.anime-mode .claude-empty strong { font-size: clamp(8px, 3.8vw, 12px); }
+.anime-mode .claude-empty p { margin-block: 3px; }
+.anime-mode .claude-empty small { display: none; }
+.anime-mode .credits-empty p { margin-top: 2px; -webkit-line-clamp: 1; }
+.anime-mode .credits-empty > span { font-size: 15px; margin-top: 2px; }
+@media (max-height: 1000px) {
+  .anime-mode .quota-tools { min-height: 12px; }
+  .anime-mode .source-tag { font-size: 7px; padding: 0 3px; }
+  .anime-mode .quota-time { font-size: 7px; }
+  .anime-mode .quota-pagination button { height: 13px; width: 17px; }
+  .anime-mode .quota-label { margin-bottom: 2px; line-height: 1.1; }
+  .anime-mode .quota-label small { font-size: 6px; }
+  .anime-mode .quota-track { height: 3px; }
+  .anime-mode .quota-list { gap: 3px; }
+  .anime-mode .remaining-label { font-size: 6px; margin-right: 3px; }
+  .anime-mode .credit-label { font-size: 8px; }
+  .anime-mode .credit-amount { gap: 3px; }
+  .anime-mode .credit-amount > span, .anime-mode .credit-amount small { font-size: 7px; }
+  .anime-mode .balance-caption, .anime-mode .balance-parts { font-size: 8px; }
+  .anime-mode .balance-total strong { font-size: 18px; line-height: 1; }
+  .anime-mode .balance-total small { font-size: 11px; }
+}

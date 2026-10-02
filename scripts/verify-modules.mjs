@@ -176,10 +176,11 @@ try {
   assert.deepEqual(await page.locator('.control-region').boundingBox(), header);
   await scroll('top');
   // A held card at the bottom edge auto-scrolls far enough to reach the eighth slot.
-  const box = await card('workbuddy').boundingBox(), view = await viewport().boundingBox();
-  await page.mouse.move(box.x + 30, box.y + 35); await page.mouse.down();
+  // Avatar clicks now launch applications; use the explicit drag grip for reordering.
+  const box = await card('workbuddy').locator('.card-index').boundingBox(), view = await viewport().boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
   await expect(card('workbuddy')).toHaveClass(/is-dragging/);
-  await page.mouse.move(box.x + 30, view.y + view.height - 12, { steps: 12 });
+  await page.mouse.move(box.x + box.width / 2, view.y + view.height - 12, { steps: 12 });
   await expect.poll(() => viewport().evaluate(el => el.scrollTop), { timeout: 10000 }).toBeGreaterThan(firstHeight);
   await expect(page.locator('.sort-hint')).toContainText('第 8 位', { timeout: 10000 });
   await page.mouse.up(); await expect.poll(order).toEqual(all);

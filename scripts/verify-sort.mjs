@@ -40,7 +40,8 @@ try {
   assert.ok(Math.abs(layout[0].top - header.y - header.height - 8) < .1);
   assert.ok(Math.abs(bounds.height - layout[3].bottom - 8) < .1);
   const grab = async (id, hold = true) => {
-    const box = await card(id).boundingBox(); const point = { x: box.x + 30, y: box.y + 35 };
+    // The avatar is an application-launch button; drag from the explicit index grip.
+    const box = await card(id).locator('.card-index').boundingBox(); const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     await page.mouse.move(point.x, point.y); await page.mouse.down();
     if (hold) try { await expect(card(id)).toHaveClass(/is-dragging/); }
     catch (error) { console.log(await page.evaluate(() => window.sortEvents)); throw error; }

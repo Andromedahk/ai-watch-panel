@@ -1,4 +1,11 @@
-import type { Provider } from './types';
+import type { Provider, ProviderId } from './types';
+
+export const animeImages: Record<ProviderId, string> = {
+  claude: 'Claude-二次元.png', codex: 'ChatGPT-二次元.png',
+  antigravity: 'Gemini-二次元.png', deepseek: 'DeepSeek-二次元.png',
+  zcode: 'ZCODE-GLM-二次元.png', kimi: 'KIMI-二次元.png',
+  qwen: 'Qwen-二次元.png', workbuddy: 'workbuddy.svg',
+};
 
 // UI samples only. These labels and percentages are not provider plan specifications.
 export const providers: Provider[] = [

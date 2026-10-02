@@ -1,3 +1,4 @@
+const path = require('node:path');
 const RATIO = 4.5;
 const COLLAPSED_WIDTH = 46;
 const PROVIDER_ORDER = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi', 'qwen', 'workbuddy'];
@@ -42,6 +43,16 @@ function clampBounds(bounds, workArea) {
   };
 }
 
+function validProviderApps(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const apps = {};
+  for (const id of PROVIDER_ORDER) {
+    const file = value[id];
+    if (typeof file === 'string' && file.length <= 4096 && !file.includes('\0') && path.isAbsolute(file)) apps[id] = file;
+  }
+  return apps;
+}
+
 function validPreferences(value) {
   return {
     side: value?.side === 'left' ? 'left' : 'right',
@@ -49,6 +60,8 @@ function validPreferences(value) {
     animate: value?.animate !== false,
     theme: isTheme(value?.theme) ? value.theme : 'system',
     qwenKeychainAllowed: value?.qwenKeychainAllowed === true,
+    animeMode: value?.animeMode === true,
+    providerApps: validProviderApps(value?.providerApps),
     providerOrder: migrateOrder(value?.providerOrder),
     enabledProviders: migrateEnabled(value),
   };

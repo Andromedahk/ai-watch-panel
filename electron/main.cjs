@@ -3,11 +3,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { panelBounds, clampBounds, validPreferences, isTheme, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
+const { ProviderLauncher } = require('./provider-launcher.cjs');
 const statusReader = new LocalStatusReader();
 let statusTimer;
 let statusSnapshot = statusReader.current;
 const fixtureVariant = process.env.AI_WATCH_TEST_STATUS;
 const fixtureMode = Boolean(process.env.AI_WATCH_TEST_PROFILE && ['fixture', 'glow-running', 'glow-attention'].includes(fixtureVariant));
+const providerLauncher = new ProviderLauncher({ fixtureMode });
 async function refreshLocalStatus(force = false) {
   statusSnapshot = fixtureMode
     ? JSON.parse(await fs.promises.readFile(path.join(__dirname, '../tests/fixtures/local-status.json'), 'utf8'))
@@ -42,7 +44,8 @@ function savePreferences() {
 }
 function currentState() {
   const display = screen.getDisplayMatching(window.getBounds());
-  return { ...preferences, collapsed, desktop: true, platform: process.platform,
+  const { providerApps: _privateLaunchPaths, ...publicPreferences } = preferences;
+  return { ...publicPreferences, collapsed, desktop: true, platform: process.platform,
     resolvedTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
 }
@@ -161,12 +164,27 @@ else {
       setCollapsed(value); return currentState();
     });
     handle('panel:configure', (value) => {
-      const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed });
+      const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
       emitState(); return currentState();
     });
+    handle('panel:anime-mode', (value) => {
+      if (typeof value !== 'boolean') throw new Error('Invalid anime mode');
+      const previous = preferences.animeMode;
+      preferences.animeMode = value;
+      try { savePreferences(); } catch (error) { preferences.animeMode = previous; throw error; }
+      emitState(); return currentState();
+    });
+    handle('panel:open-provider', (id) => providerLauncher.launch(id, preferences.providerApps[id]));
+    handle('panel:choose-provider-app', (id) => providerLauncher.choose(id,
+      options => dialog.showOpenDialog(window, options),
+      (provider, file) => {
+        const previous = preferences.providerApps;
+        preferences.providerApps = { ...previous, [provider]: file };
+        try { savePreferences(); } catch (error) { preferences.providerApps = previous; throw error; }
+      }));
     handle('panel:theme', (value) => {
       if (!isTheme(value)) throw new Error('Invalid theme');
       const previous = preferences.theme;

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
 import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
-import { providers, providerIds } from './data';
+import { providers, providerIds, animeImages as defaultAnimeImages } from './data';
 import { useVisibleCards } from './useVisibleCards';
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
@@ -13,9 +13,13 @@ const previewState: PanelState = {
   desktop: false, platform: 'browser', scaleFactor: window.devicePixelRatio,
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
+  animeMode: readAnimeMode(),
   theme: window.panel ? 'system' : readTheme(),
   resolvedTheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
 };
+function readAnimeMode() {
+  try { return localStorage.getItem('ai-watch:anime-mode') === 'true'; } catch { return false; }
+}
 function readTheme(): Theme {
   try { const theme = localStorage.getItem('ai-watch:theme'); return theme === 'dark' || theme === 'light' ? theme : 'system'; }
   catch { return 'system'; }
@@ -43,20 +47,27 @@ function readEnabled(): ProviderId[] {
     return enabled;
   } catch { return [...providerIds]; }
 }
-function readImages(): Partial<Record<ProviderId, string>> {
-  try { return JSON.parse(localStorage.getItem('ai-watch:images') ?? '{}'); }
+function readImages(anime = false): Partial<Record<ProviderId, string>> {
+  try { return JSON.parse(localStorage.getItem(anime ? 'ai-watch:anime-images' : 'ai-watch:images') ?? '{}'); }
   catch { return {}; }
 }
-function Avatar({ provider, image, monitor = false }: { provider: Provider; image?: string; monitor?: boolean }) {
+function Avatar({ provider, image, monitor = false, anime = false }: { provider: Provider; image?: string; monitor?: boolean; anime?: boolean }) {
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [image]);
+  useEffect(() => setFailed(false), [image, anime]);
   const attention = provider.id === 'codex' && (provider.local?.activity === 'waiting' || (provider.local?.waitingTasks || 0) > 0);
   const glow = monitor ? attention ? 'attention' : provider.running ? 'running' : 'off' : 'off';
-  return <div className="avatar" data-provider={provider.id} data-glow={glow} data-default-image={!image}>
+  return <div className="avatar" data-provider={provider.id} data-glow={glow} data-default-image={!image && !anime} data-anime={anime}>
     <div className="avatar-face">
-    {failed ? <span>{provider.name.slice(0, 1)}</span> : <img src={image || `./${provider.image}`} alt={`${provider.name} 助手图片`} onError={() => setFailed(true)} />}
+    {failed ? <span>{provider.name.slice(0, 1)}</span> : <img src={image || (anime ? `./anime/${defaultAnimeImages[provider.id]}` : `./${provider.image}`)} alt={`${provider.name} 助手图片`} onError={() => setFailed(true)} />}
     </div>
   </div>;
+}
+function LaunchAvatar({ provider, image, anime, onOpen, busy = false }: {
+  provider: Provider; image?: string; anime: boolean; onOpen: () => void; busy?: boolean;
+}) {
+  return <button type="button" className="avatar-launch" aria-label={`打开 ${provider.name}`} title={`打开 ${provider.name}`} disabled={busy} onClick={onOpen}>
+    <Avatar provider={provider} image={image} anime={anime} monitor />
+  </button>;
 }
 function money(value: string) {
   const number = new Big(value);
@@ -112,17 +123,18 @@ function EntitlementCard({ provider, page }: { provider: Provider; page: number 
     </div>
   </div>;
 }
-function ProviderCard({ provider, index, image, testing = false, sortProps, dragging = false }: {
-  provider: Provider; index: number; image?: string; testing?: boolean; sortProps?: HTMLAttributes<HTMLElement>; dragging?: boolean;
+function ProviderCard({ provider, index, image, anime = false, onOpen, launchBusy, testing = false, sortProps, dragging = false }: {
+  provider: Provider; index: number; image?: string; anime?: boolean; onOpen: () => void; launchBusy?: boolean; testing?: boolean; sortProps?: HTMLAttributes<HTMLElement>; dragging?: boolean;
 }) {
   const [page, setPage] = useState(0);
   const local = provider.local;
   const isEntitlement = provider.id === 'qwen' || provider.id === 'workbuddy';
   const itemCount = isEntitlement ? local?.credits?.items.length || 0 : provider.quotas.length;
-  const pages = Math.max(1, Math.ceil(itemCount / (isEntitlement ? 2 : 3)));
+  const pageSize = isEntitlement || anime ? 2 : 3;
+  const pages = Math.max(1, Math.ceil(itemCount / pageSize));
   const currentPage = Math.min(page, pages - 1);
   useEffect(() => setPage((old) => Math.min(old, pages - 1)), [pages]);
-  const quotas = provider.quotas.length ? provider.quotas.slice(currentPage * 3, currentPage * 3 + 3)
+  const quotas = provider.quotas.length ? provider.quotas.slice(currentPage * pageSize, currentPage * pageSize + pageSize)
     : [{ model: '模型额度', period: '尚未读取', remaining: null, reset: '' }];
   const isBalance = local?.id === 'deepseek';
   const source = testing ? '测试数据' : !local ? '演示' : local.connection === 'offline' ? '未运行'
@@ -138,7 +150,7 @@ function ProviderCard({ provider, index, image, testing = false, sortProps, drag
   return <section {...sortProps} className={`provider-card ${provider.running ? 'is-running' : ''} ${dragging ? 'is-dragging' : ''}`} style={{ '--accent': provider.color, ...sortProps?.style } as CSSProperties}
     aria-label={`${provider.name} 面板`} data-provider={provider.id} data-attention={local?.id === 'codex' && local.activity === 'waiting'} tabIndex={0} aria-describedby="card-sort-help" onDragStart={event => event.preventDefault()}>
     <div className="card-heading">
-      <Avatar provider={provider} image={image} monitor />
+      <LaunchAvatar provider={provider} image={image} anime={anime} onOpen={onOpen} busy={launchBusy} />
       <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? '桌面版 · 终端版' : provider.subtitle}</span><h2>{provider.name}</h2>{provider.id !== 'deepseek' && <PlanBadge provider={provider} />}</div>
       <span className="card-index" title="长按卡片拖动排序"><GripVertical size={10} aria-hidden="true" /><span>0{index + 1}</span></span>
     </div>
@@ -175,7 +187,11 @@ export default function App() {
   const [testSampledAt, setTestSampledAt] = useState(() => new Date().toISOString());
   const testStatus = useMemo(() => makeTestStatus(testConfig, testSampledAt), [testConfig, testSampledAt]);
   const displayStatus = testMode ? testStatus : localStatus;
-  const [images, setImages] = useState(readImages);
+  const [images, setImages] = useState(() => readImages());
+  const [animeImages, setAnimeImages] = useState(() => readImages(true));
+  const [animeSaving, setAnimeSaving] = useState(false);
+  const [launching, setLaunching] = useState<ProviderId | null>(null);
+  const [choosingApp, setChoosingApp] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
@@ -190,7 +206,7 @@ export default function App() {
   const [draft, setDraft] = useState<Preferences>(previewState);
   const modal = useRef<HTMLDialogElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const targetImage = useRef<ProviderId>('claude');
+  const targetImage = useRef<{ provider: ProviderId; anime: boolean }>({ provider: 'claude', anime: false });
   const visibleProviders = enabledOrder.map(id => providers.find(provider => provider.id === id)!).map((provider) => {
     if (!state.desktop && !testMode) return provider;
     const local = displayStatus?.[provider.id];
@@ -222,6 +238,36 @@ export default function App() {
       else { localStorage.setItem('ai-watch:enabled-providers', JSON.stringify(next)); setState(current => ({ ...current, enabledProviders: next })); }
     } catch { setNotice('模块选择保存失败，请重试'); }
     finally { setModulesSaving(false); }
+  }
+  async function changeAnimeMode(value: boolean) {
+    if (animeSaving) return;
+    setAnimeSaving(true);
+    try {
+      if (window.panel) setState(await window.panel.setAnimeMode(value));
+      else { localStorage.setItem('ai-watch:anime-mode', String(value)); setState(current => ({ ...current, animeMode: value })); }
+    } catch { setNotice('二次元模式保存失败，请重试'); }
+    finally { setAnimeSaving(false); }
+  }
+  async function openProvider(provider: Provider) {
+    if (testMode) { if (state.collapsed) await collapse(false); setNotice(`测试模式：已模拟打开 ${provider.name}`); return; }
+    if (!window.panel) { if (state.collapsed) await collapse(false); setNotice('打开应用请使用桌面版'); return; }
+    if (launching) return;
+    setLaunching(provider.id);
+    try {
+      const result = await window.panel.openProvider(provider.id);
+      if (result.status !== 'opened' && state.collapsed) await collapse(false);
+      setNotice(result.message);
+    } catch { setNotice('应用打开失败，请在配置中检查启动应用'); if (state.collapsed) await collapse(false); }
+    finally { setLaunching(null); }
+  }
+  async function chooseProviderApp(provider: Provider) {
+    if (testMode) { setNotice(`测试模式：已模拟选择 ${provider.name} 的启动应用`); return; }
+    if (!window.panel) { setNotice('选择启动应用请使用桌面版'); return; }
+    if (choosingApp) return;
+    setChoosingApp(true);
+    try { const result = await window.panel.chooseProviderApp(provider.id); if (result.status !== 'cancelled') setNotice(result.message); }
+    catch { setNotice('启动应用保存失败，请重新选择'); }
+    finally { setChoosingApp(false); }
   }
   async function changeQwenAccess(allowed: boolean) {
     if (qwenAccessSaving || !window.panel) return;
@@ -344,21 +390,22 @@ export default function App() {
       setSettingsOpen(false); setNotice('配置已保存');
     } catch { setNotice('保存失败，请重试'); }
   }
-  function storeImage(provider: ProviderId, value: string) {
-    const next = { ...images, [provider]: value };
-    try { localStorage.setItem('ai-watch:images', JSON.stringify(next)); setImages(next); }
+  function storeImage(provider: ProviderId, value: string, anime: boolean) {
+    const next = { ...(anime ? animeImages : images), [provider]: value };
+    try { localStorage.setItem(anime ? 'ai-watch:anime-images' : 'ai-watch:images', JSON.stringify(next)); (anime ? setAnimeImages : setImages)(next); }
     catch { setNotice('图片存储空间不足，请使用更小的图片'); }
   }
-  async function chooseImage(provider: ProviderId) {
+  async function chooseImage(provider: ProviderId, anime = false) {
     try {
       if (window.panel) {
         const value = await window.panel.chooseImage(provider);
-        if (value) storeImage(provider, value);
-      } else { targetImage.current = provider; fileInput.current?.click(); }
+        if (value) storeImage(provider, value, anime);
+      } else { targetImage.current = { provider, anime }; fileInput.current?.click(); }
     } catch { setNotice('无法读取图片，请选择 8 MB 以内的 PNG、JPG 或 WebP'); }
   }
   async function readFile(file?: File) {
     if (!file) return;
+    const target = targetImage.current;
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
       setNotice('请选择 8 MB 以内的 PNG、JPG 或 WebP'); return;
     }
@@ -371,17 +418,17 @@ export default function App() {
       const canvas = document.createElement('canvas');
       canvas.width = 256; canvas.height = Math.round(256 * image.height / image.width);
       canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
-      storeImage(targetImage.current, canvas.toDataURL('image/png'));
+      storeImage(target.provider, canvas.toDataURL('image/png'), target.anime);
     } catch { setNotice('无法读取这张图片'); }
   }
 
-  return <main data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${!state.animate ? 'no-animation' : ''}`}>
+  return <main data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${!state.animate ? 'no-animation' : ''}`}>
     {state.collapsed ? <aside className="collapsed-rail" aria-label="收起的监看面板">
       <div className="rail-grip"><GripVertical size={15} /></div>
       <button className="rail-expand" title="展开面板" aria-label="展开面板" onClick={() => collapse(false)}>{state.side === 'right' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}</button>
       <span className="rail-brand">AI</span>
       <div className="rail-providers">{visibleProviders.map((provider) => <div key={provider.id} title={`${provider.name} · ${provider.local?.task || (provider.running ? '演示运行中' : '演示待机')}`} style={{ '--accent': provider.color } as CSSProperties}>
-        <Avatar provider={provider} image={images[provider.id]} monitor /><span className={`status-dot ${provider.running ? 'active' : provider.local?.activity === 'waiting' ? 'waiting' : provider.local?.activity === 'unknown' ? 'unknown' : ''}`} />
+        <LaunchAvatar provider={provider} image={(state.animeMode ? animeImages : images)[provider.id]} anime={state.animeMode} onOpen={() => void openProvider(provider)} busy={launching === provider.id} /><span className={`status-dot ${provider.running ? 'active' : provider.local?.activity === 'waiting' ? 'waiting' : provider.local?.activity === 'unknown' ? 'unknown' : ''}`} />
       </div>)}</div>
       <button className={`rail-lock ${state.locked ? 'selected' : ''}`} title="锁定窗口" aria-label="锁定窗口" aria-pressed={state.locked} onClick={toggleLock}>{state.locked ? <LockKeyhole size={15} /> : <UnlockKeyhole size={15} />}</button>
       {testMode ? <button className="rail-demo test-badge" aria-label="测试模式设置" onClick={async () => { await collapse(false); openSettings(); }}>测试</button> : <span className="rail-demo">{state.desktop ? '本地' : '演示'}</span>}
@@ -398,7 +445,7 @@ export default function App() {
       </header>
       <div ref={viewport} className="provider-viewport" aria-label="工具模块列表" aria-busy={orderSaving || modulesSaving} tabIndex={0}>
       {!visibleProviders.length && <div className="empty-providers"><p>尚未启用模块</p><button onClick={openSettings}>选择监看模块</button></div>}
-      {visibleProviders.map((provider, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${provider.id}`} provider={provider} index={index} image={images[provider.id]} testing={Boolean(displayStatus?.isTestData)} dragging={sorting.activeId === provider.id}
+      {visibleProviders.map((provider, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${provider.id}`} provider={provider} index={index} image={(state.animeMode ? animeImages : images)[provider.id]} anime={state.animeMode} onOpen={() => void openProvider(provider)} launchBusy={launching === provider.id} testing={Boolean(displayStatus?.isTestData)} dragging={sorting.activeId === provider.id}
         sortProps={{ style: sorting.style(provider.id), onPointerDown: event => sorting.start(event, provider.id), onKeyDown: event => {
           if (event.target !== event.currentTarget || !event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key) || sorting.sorting) return;
           event.preventDefault();
@@ -435,6 +482,8 @@ export default function App() {
           <p className="appearance-hint">仅访问千问专属的系统钥匙串记录，可能需要系统授权。登录信息不保存到面板；关闭会清除已读取的套餐和积分。拒绝授权后不会自动反复弹窗，可处理授权后手动刷新。</p>
         </fieldset>
         <fieldset className="appearance-settings"><legend>外观</legend>
+          <label className="switch-row"><span>二次元模式<small>大图占卡片约四分之一</small></span><input aria-label="二次元模式" type="checkbox" checked={state.animeMode} disabled={animeSaving} onChange={event => void changeAnimeMode(event.target.checked)} /></label>
+          <p className="appearance-hint">使用专属角色图片，WorkBuddy 暂用占位图；可在下方替换。普通 LOGO 独立保留。</p>
           <label className="switch-row"><span>跟随系统<small>自动切换浅色和深色外观</small></span><input aria-label="跟随系统" type="checkbox" checked={state.theme === 'system'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'system' : resolvedTheme)} /></label>
           <label className="switch-row"><span>暗夜模式<small>{state.theme === 'system' ? '手动切换后停止跟随系统' : '已手动指定外观'}</small></span><input aria-label="暗夜模式" type="checkbox" checked={resolvedTheme === 'dark'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'dark' : 'light')} /></label>
           <p className="appearance-hint">当前为{resolvedTheme === 'dark' ? '深色' : '浅色'} · 立即生效并保存</p>
@@ -449,7 +498,13 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.11</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+        <div className="settings-section"><h3>二次元图片</h3><p>独立保存；推荐透明背景，完整显示不裁切</p>{providers.map(provider => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
+          <Avatar provider={provider} image={animeImages[provider.id]} anime /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id, true)} aria-label={`替换 ${provider.name} 二次元图片`}>替换</button>
+        </div>)}</div>
+        <div className="settings-section"><h3>启动应用</h3><p>点击卡片或收起栏图标打开应用；未找到时可手动选择安装位置。</p>{providers.map(provider => <div className="app-option" key={provider.id}>
+          <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={`选择 ${provider.name} 启动应用`}>选择应用</button>
+        </div>)}</div>
+        <div className="settings-note"><span className="note-title">本地状态 · v0.12</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
           {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{displayStatus[id]?.detail}<br />{displayStatus[id]?.activityDetail && <>{displayStatus[id]?.activityDetail}<br /></>}{displayStatus[id]?.observedAt ? `记录时间：${new Date(displayStatus[id]?.observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 300"><title>workbuddy 二次元占位图</title>
+<ellipse cx="128" cy="277" rx="79" ry="9" fill="#267765" opacity=".12"/>
+<path d="M62 105Q20 100 39 173L70 148M194 105Q235 100 217 173L186 148" fill="#60d8b5" stroke="#267765" stroke-width="5"/><path d="M57 130Q47 51 126 49Q207 45 204 134L209 209Q176 226 128 212Q78 229 47 204Z" fill="#267765"/>
+
+<path d="M66 128Q68 76 128 72Q190 75 190 131L187 157Q182 196 128 199Q75 194 69 159Z" fill="#ffe5d9" stroke="#267765" stroke-width="4"/>
+<path d="M56 128Q48 53 126 49Q204 48 204 129L176 98 162 124 138 86 117 128 98 93 72 130Z" fill="#60d8b5" stroke="#267765" stroke-width="4" stroke-linejoin="round"/>
+<circle cx="184" cy="106" r="10" fill="#ffd889"/><path d="m184 92 3 10 10 4-10 3-3 11-3-11-10-3 10-4Z" fill="#fff4d0"/><ellipse cx="97" cy="151" rx="9" ry="13" fill="#267765"/><ellipse cx="159" cy="151" rx="9" ry="13" fill="#267765"/>
+<circle cx="100" cy="146" r="3" fill="white"/><circle cx="162" cy="146" r="3" fill="white"/><ellipse cx="83" cy="171" rx="11" ry="5" fill="#e8949f" opacity=".65"/><ellipse cx="173" cy="171" rx="11" ry="5" fill="#e8949f" opacity=".65"/>
+<path d="M119 177q9 8 18 0" fill="none" stroke="#267765" stroke-width="3" stroke-linecap="round"/>
+<path d="M88 203 128 215 168 203Q193 216 201 266L177 274 170 244 170 279 86 279 86 244 78 274 55 266Q64 216 88 203Z" fill="#60d8b5" stroke="#267765" stroke-width="4" stroke-linejoin="round"/>
+<path d="m98 204 30 36 30-36-30 10Z" fill="#fff5e9"/><path d="m128 226-8 13 8 22 8-22Z" fill="#267765"/>
+<rect x="102" y="264" width="52" height="25" rx="8" fill="#267765"/><text x="128" y="281" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="#fff">WB</text>
+</svg>

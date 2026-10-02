@@ -16,3 +16,20 @@
 | WorkBuddy | `WorkBuddy.png` |
 
 如需更改文件类型，同时更新 `src/data.ts` 中的相对文件名。此目录是 Vite 的公共资源目录，构建时复制到输出根目录。
+
+## 二次元图片
+
+`anime` 内为七张用户提供并批准作为默认素材同步的 PNG，以及代码绘制的 WorkBuddy SVG 占位图。保留原图，界面等比缩放、不裁切；普通 LOGO 与二次元图片独立保存。
+
+| 工具 | 二次元默认文件 |
+| --- | --- |
+| Claude Code | `anime/Claude-二次元.png` |
+| Codex | `anime/ChatGPT-二次元.png` |
+| Antigravity | `anime/Gemini-二次元.png` |
+| DeepSeek Harness | `anime/DeepSeek-二次元.png` |
+| ZCode | `anime/ZCODE-GLM-二次元.png` |
+| Kimi Code | `anime/KIMI-二次元.png` |
+| Qwen（千问） | `anime/Qwen-二次元.png` |
+| WorkBuddy | `anime/workbuddy.svg`（占位图） |
+
+文件映射在 `src/data.ts`。也可在配置的“二次元图片”部分单独替换；配置内自选图片仅本机保存，不写入仓库。

@@ -6,6 +6,7 @@ export type PanelState = Preferences & {
   providerOrder: ProviderId[];
   enabledProviders: ProviderId[];
   qwenKeychainAllowed: boolean;
+  animeMode: boolean;
   theme: Theme; resolvedTheme: 'light' | 'dark';
   bounds?: { x: number; y: number; width: number; height: number };
 };
@@ -43,6 +44,9 @@ declare global {
       setOrder(order: ProviderId[]): Promise<PanelState>;
       setEnabled(ids: ProviderId[]): Promise<PanelState>;
       setQwenAccess(allowed: boolean): Promise<PanelState>;
+      setAnimeMode(enabled: boolean): Promise<PanelState>;
+      openProvider(provider: ProviderId): Promise<{ status: 'opened' | 'missing' | 'unsupported' | 'error' | 'test'; message: string }>;
+      chooseProviderApp(provider: ProviderId): Promise<{ status: 'selected' | 'cancelled' | 'error'; message: string }>;
       setTheme(theme: Theme): Promise<PanelState>;
       dock(): Promise<PanelState>;
       chooseImage(provider: ProviderId): Promise<string | null>;
