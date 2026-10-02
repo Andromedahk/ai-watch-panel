@@ -171,7 +171,8 @@ try {
     const metrics = await preview.locator('.provider-card').evaluateAll(cards => {
       const box = element => { const { x, y, top, bottom, left, right, width, height } = element.getBoundingClientRect(); return { x, y, top, bottom, left, right, width, height }; };
       return cards.map(card => ({ id: card.dataset.provider, card: box(card), heading: box(card.querySelector('.card-heading')),
-        avatar: box(card.querySelector('.avatar')), content: box(card.querySelector('.quota-area')), footer: box(card.querySelector('.task-line')),
+        avatar: box(card.querySelector('.avatar')), identity: box(card.querySelector('.identity')), content: box(card.querySelector('.quota-area')), footer: box(card.querySelector('.task-line')),
+        identityText: [...card.querySelectorAll('.identity h2, .identity .eyebrow, .identity .plan-summary')].map(element => ({ box: box(element), overflow: element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1 })),
         imageLoaded: card.querySelectorAll('.avatar img').length === 1 && [...card.querySelectorAll('.avatar img')].every(image => image.complete && image.naturalWidth > 0),
         imageFit: getComputedStyle(card.querySelector('.avatar img') || card).objectFit,
         overflow: card.scrollWidth > card.clientWidth + 1 || card.scrollHeight > card.clientHeight + 1,
@@ -186,6 +187,12 @@ try {
       const ratio = item.avatar.width * item.avatar.height / (item.card.width * item.card.height);
       assert.ok(ratio >= .20 && ratio <= .28, `Avatar area ${ratio}: ${context}`);
       assert.ok(item.heading.bottom <= item.content.top + 1, context);
+      assert.ok(item.identity.top >= item.heading.top - 1 && item.identity.bottom <= item.heading.bottom + 1, context);
+      assert.ok(item.avatar.right < item.identity.left && item.identity.right <= item.heading.right + 1, context);
+      for (const text of item.identityText) {
+        assert.equal(text.overflow, false, context);
+        assert.ok(text.box.left >= item.identity.left - 1 && text.box.right <= item.identity.right + 1, context);
+      }
       assert.ok(item.content.bottom <= item.footer.top + 1, context);
       assert.ok(item.footer.bottom <= item.card.bottom + 1, context);
       for (const row of item.rows) {
@@ -225,6 +232,26 @@ try {
         await previewCard(id).getByRole('button', { name: `${names[id]} 上一页额度`, exact: true }).click();
       }
       await preview.screenshot({ path: `docs/screenshots/anime-more-${size.height}-${theme}.png`, animations: 'disabled' });
+      await settings();
+      await preview.getByRole('combobox', { name: 'Claude Code 测试数据显示', exact: true }).selectOption('free');
+      await dismiss(); await scroll(false); await geometry(size, theme);
+      const empty = await previewCard('claude').locator('.claude-empty').evaluate(element => ({
+        overflow: element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1,
+        top: element.getBoundingClientRect().top, bottom: element.getBoundingClientRect().bottom,
+        titleTop: element.querySelector('strong').getBoundingClientRect().top,
+        descriptionBottom: element.querySelector('p').getBoundingClientRect().bottom,
+      }));
+      assert.equal(empty.overflow, false);
+      assert.ok(empty.titleTop > empty.top && empty.descriptionBottom < empty.bottom);
+      if (size.height === 1440 && theme === 'dark') await previewCard('claude').screenshot({ path: 'docs/screenshots/anime-card-empty-dark.png', animations: 'disabled' });
+      await settings();
+      await preview.getByRole('combobox', { name: 'Claude Code 测试数据显示', exact: true }).selectOption('unknown');
+      await dismiss(); await geometry(size, theme);
+      await expect(previewCard('claude').locator('.plan-name')).toHaveText('未知');
+      await expect(previewCard('claude').locator('.plan-summary')).toHaveAttribute('title', '套餐：套餐未知');
+      await settings();
+      await preview.getByRole('combobox', { name: 'Claude Code 测试数据显示', exact: true }).selectOption('normal');
+      await dismiss();
     }
   }
   await settings();

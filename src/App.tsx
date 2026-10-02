@@ -98,15 +98,16 @@ function creditNumber(value: string) {
     return number.toFixed(2).replace(/\.?0+$/, '').replace(/^$/, '0');
   } catch { return '—'; }
 }
-function PlanBadge({ provider }: { provider: Provider }) {
+function PlanBadge({ provider, compact = false }: { provider: Provider; compact?: boolean }) {
   const local = provider.local;
   const plan = local?.plan;
   const expired = Boolean(plan?.expiresAt && Date.parse(plan.expiresAt) <= Date.now());
   const label = plan?.name || (local ? '套餐未知' : '示例套餐');
+  const displayLabel = compact && !plan?.name ? local ? '未知' : '示例' : label;
   const state = plan?.name ? plan.stale ? '历史' : expired ? '已到期' : '' : '';
   return <div className={`plan-summary ${plan?.stale ? 'is-stale' : ''}`} aria-label={`${provider.name} 套餐档位`}
     title={[`套餐：${label}`, plan?.status, state, plan?.expiresAt ? `有效期至 ${new Date(plan.expiresAt).toLocaleString('zh-CN')}` : ''].filter(Boolean).join(' · ')}>
-    <span className="plan-name">{label}</span>{state && <span className="plan-status">{state}</span>}
+    <span className="plan-name">{displayLabel}</span>{state && <span className="plan-status">{state}</span>}
   </div>;
 }
 function EntitlementCard({ provider, page }: { provider: Provider; page: number }) {
@@ -151,7 +152,7 @@ function ProviderCard({ provider, index, image, anime = false, onOpen, launchBus
     aria-label={`${provider.name} 面板`} data-provider={provider.id} data-attention={local?.id === 'codex' && local.activity === 'waiting'} tabIndex={0} aria-describedby="card-sort-help" onDragStart={event => event.preventDefault()}>
     <div className="card-heading">
       <LaunchAvatar provider={provider} image={image} anime={anime} onOpen={onOpen} busy={launchBusy} />
-      <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? '桌面版 · 终端版' : provider.subtitle}</span><h2>{provider.name}</h2>{provider.id !== 'deepseek' && <PlanBadge provider={provider} />}</div>
+      <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? '桌面版 · 终端版' : provider.subtitle}</span><h2>{provider.name}</h2>{provider.id !== 'deepseek' && <PlanBadge provider={provider} compact={anime} />}</div>
       <span className="card-index" title="长按卡片拖动排序"><GripVertical size={10} aria-hidden="true" /><span>0{index + 1}</span></span>
     </div>
     <div className="quota-area">
@@ -504,7 +505,7 @@ export default function App() {
         <div className="settings-section"><h3>启动应用</h3><p>点击卡片或收起栏图标打开应用；未找到时可手动选择安装位置。</p>{providers.map(provider => <div className="app-option" key={provider.id}>
           <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={`选择 ${provider.name} 启动应用`}>选择应用</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.12</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+        <div className="settings-note"><span className="note-title">本地状态 · v0.12.1</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
           {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{displayStatus[id]?.detail}<br />{displayStatus[id]?.activityDetail && <>{displayStatus[id]?.activityDetail}<br /></>}{displayStatus[id]?.observedAt ? `记录时间：${new Date(displayStatus[id]?.observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>

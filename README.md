@@ -2,7 +2,7 @@
 
 macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vite**，预留 Windows、Linux 的构建入口。
 
-> v0.12 支持点击图标打开对应桌面应用，新增二次元模式：角色图片约占卡片四分之一，普通 LOGO 与二次元图片独立保存。内置七张已批准同步的角色图，WorkBuddy 暂用占位图；保留套餐、额度、呼吸灯、排序与本地状态接入。
+> v0.12.1 优化二次元卡片信息层级：名称优先、来源在下、套餐独立分行，空额度提示居中。支持点击图标打开对应桌面应用，新增二次元模式：角色图片约占卡片四分之一，普通 LOGO 与二次元图片独立保存。内置七张已批准同步的角色图，WorkBuddy 暂用占位图；保留套餐、额度、呼吸灯、排序与本地状态接入。
 
 <img src="docs/screenshots/panel.png" width="220" alt="AI Watch 固定顶部与四卡首屏预览" />
 
@@ -76,7 +76,7 @@ Windows / Linux 已准备手动选择可执行程序的入口，实际启动行�
 
 内置 Claude、Codex、Antigravity、DeepSeek、ZCode、Kimi 与千问角色图；其中 ChatGPT 图用于 Codex，Gemini 图用于 Antigravity，WorkBuddy 暂用角色占位图。普通 LOGO 与二次元图片各有独立的“替换”入口，切换模式不会覆盖另一套图片。
 
-二次元模式每页最多显示两项额度或积分，超出可翻页；套餐和底部任务状态仍完整显示。原有 5 秒呼吸灯、Codex 红色等待提示、屏幕外活动提醒和图标启动行为继续生效。收起栏使用同一套角色图，保持窄栏尺寸。
+角色右侧优先显示工具名称，下方为来源与独立套餐行；长名称自然换行，无额度说明居中展示。单卡示例：[卡片层级与空额度提示](docs/screenshots/anime-card-empty-dark.png)。二次元模式每页最多显示两项额度或积分，超出可翻页；套餐和底部任务状态仍完整显示。原有 5 秒呼吸灯、Codex 红色等待提示、屏幕外活动提醒和图标启动行为继续生效。收起栏使用同一套角色图，保持窄栏尺寸。
 
 <img src="docs/screenshots/anime-first-1440-light.png" width="220" alt="二次元模式首屏，角色大图与合成额度" /> <img src="docs/screenshots/anime-more-1440-dark.png" width="220" alt="二次元模式后四卡与占位图，合成数据" />
 
@@ -304,6 +304,12 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 额度窗口字段参考 OpenAI 官方 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。此版本读取既有本地记录，不另外启动 App Server；Antigravity 桌面接口按当前安装版本验证，其 CLI 的 [状态栏文档](https://antigravity.google/docs/cli/statusline) 作为后续适配参考。
 
 ## 更新记录
+
+### 0.12.1 · 2026-10-03
+
+- 优化二次元卡片右侧信息：突出工具名称，来源文字移至名称下方，套餐以轻分隔线和标签单独展示，长档位名称自然换行。
+- 居中无额度说明，统一卡片内文字间距；保持大图完整显示、四卡首屏比例、图标启动和呼吸灯。
+- 检查大小窗口与明暗主题下的名称、套餐边界和额度分页；更新合成截图与 macOS 应用包。
 
 ### 0.12.0 · 2026-10-03
 
