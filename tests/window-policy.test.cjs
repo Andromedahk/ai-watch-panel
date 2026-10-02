@@ -22,7 +22,7 @@ test('restore clamps a moved rail into the available display area', () => {
   assert.deepEqual(clampBounds({ x: 1500, y: 100, width: 200, height: 900 }, { x: 0, y: 25, width: 1600, height: 900 }), { x: 1400, y: 25, width: 200, height: 900 });
 });
 test('unknown configuration values fall back without broadening capabilities', () => {
-  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, providerOrder: PROVIDER_ORDER });
+  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, theme: 'system', providerOrder: PROVIDER_ORDER });
 });
 test('provider order rejects missing, duplicate and unknown cards and migrates old preferences', () => {
   for (const value of [null, 'codex', [], ['codex', 'codex', 'claude', 'deepseek'], ['claude', 'codex', 'antigravity', 'other']]) {
@@ -31,8 +31,13 @@ test('provider order rejects missing, duplicate and unknown cards and migrates o
   }
   const reversed = [...PROVIDER_ORDER].reverse();
   assert.equal(isProviderOrder(reversed), true);
-  const settings = validPreferences({ side: 'left', locked: true, animate: false, providerOrder: reversed });
-  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, providerOrder: reversed });
+  const settings = validPreferences({ side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed });
+  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed });
   reversed.reverse();
   assert.notDeepEqual(settings.providerOrder, reversed);
+});
+
+test('theme defaults to system for older settings and accepts only known modes', () => {
+  for (const theme of [undefined, null, '', 'auto', 1, {}, ['dark']]) assert.equal(validPreferences({ theme }).theme, 'system');
+  for (const theme of ['system', 'dark', 'light']) assert.equal(validPreferences({ theme }).theme, theme);
 });

@@ -1,6 +1,7 @@
 const RATIO = 4.5;
 const COLLAPSED_WIDTH = 46;
 const PROVIDER_ORDER = ['claude', 'codex', 'antigravity', 'deepseek'];
+const isTheme = value => ['system', 'light', 'dark'].includes(value);
 function isProviderOrder(value) {
   return Array.isArray(value) && value.length === PROVIDER_ORDER.length
     && new Set(value).size === PROVIDER_ORDER.length && value.every(id => PROVIDER_ORDER.includes(id));
@@ -27,8 +28,9 @@ function validPreferences(value) {
     side: value?.side === 'left' ? 'left' : 'right',
     locked: value?.locked === true,
     animate: value?.animate !== false,
+    theme: isTheme(value?.theme) ? value.theme : 'system',
     providerOrder: isProviderOrder(value?.providerOrder) ? [...value.providerOrder] : [...PROVIDER_ORDER],
   };
 }
 
-module.exports = { panelBounds, clampBounds, validPreferences, isProviderOrder, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };
+module.exports = { panelBounds, clampBounds, validPreferences, isTheme, isProviderOrder, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };

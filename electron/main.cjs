@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, screen, dialog, Menu, nativeTheme } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, validPreferences, isProviderOrder } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, validPreferences, isTheme, isProviderOrder } = require('./window-policy.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
 const statusReader = new LocalStatusReader();
 let statusTimer;
@@ -43,10 +43,16 @@ function savePreferences() {
 function currentState() {
   const display = screen.getDisplayMatching(window.getBounds());
   return { ...preferences, collapsed, desktop: true, platform: process.platform,
+    resolvedTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
 }
 function emitState() {
   if (window && !window.isDestroyed()) window.webContents.send('panel:changed', currentState());
+}
+function updateAppearance() {
+  if (!window || window.isDestroyed()) return;
+  window.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#111519' : '#edf1f5');
+  emitState();
 }
 function setBounds(bounds) {
   repositioning = true;
@@ -98,19 +104,20 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { window?.show(); window?.focus(); });
   app.whenReady().then(() => {
-    nativeTheme.themeSource = 'dark';
     preferences = readPreferences();
+    nativeTheme.themeSource = preferences.theme;
     const display = screen.getPrimaryDisplay();
     lastDisplayId = display.id;
     window = new BrowserWindow({
       ...panelBounds(display.workArea, preferences.side), title: 'AI Watch',
       frame: false, resizable: false, maximizable: false, fullscreenable: false,
-      show: false, backgroundColor: '#111519', autoHideMenuBar: true,
+      show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#111519' : '#edf1f5', autoHideMenuBar: true,
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),
         contextIsolation: true, nodeIntegration: false, sandbox: true,
       },
     });
+    nativeTheme.on('updated', updateAppearance);
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       ...(process.platform === 'darwin' ? [{ label: 'AI Watch', submenu: [
         { role: 'about' }, { type: 'separator' },
@@ -153,11 +160,19 @@ else {
       setCollapsed(value); return currentState();
     });
     handle('panel:configure', (value) => {
-      const next = validPreferences({ ...value, providerOrder: preferences.providerOrder });
+      const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
       emitState(); return currentState();
+    });
+    handle('panel:theme', (value) => {
+      if (!isTheme(value)) throw new Error('Invalid theme');
+      const previous = preferences.theme;
+      preferences.theme = value;
+      try { savePreferences(); } catch (error) { preferences.theme = previous; throw error; }
+      nativeTheme.themeSource = value;
+      updateAppearance(); return currentState();
     });
     handle('panel:order', (value) => {
       if (!isProviderOrder(value)) throw new Error('Invalid provider order');
@@ -186,5 +201,5 @@ else {
     app.on('activate', () => window.show());
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { clearInterval(statusTimer); statusReader.codexAttention.close(); });
+  app.on('before-quit', () => { clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance); statusReader.codexAttention.close(); });
 }

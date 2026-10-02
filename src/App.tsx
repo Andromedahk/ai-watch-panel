@@ -1,17 +1,23 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
 import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
 import { providers } from './data';
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
 import Big from 'big.js';
-import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provider, ProviderId, Quota } from './types';
+import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provider, ProviderId, Quota, Theme } from './types';
 
 const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
   desktop: false, platform: 'browser', scaleFactor: window.devicePixelRatio,
   providerOrder: readOrder(),
+  theme: window.panel ? 'system' : readTheme(),
+  resolvedTheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
 };
+function readTheme(): Theme {
+  try { const theme = localStorage.getItem('ai-watch:theme'); return theme === 'dark' || theme === 'light' ? theme : 'system'; }
+  catch { return 'system'; }
+}
 function readOrder(): ProviderId[] {
   const fallback = providers.map(provider => provider.id);
   try {
@@ -122,6 +128,8 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
   const [orderSaving, setOrderSaving] = useState(false);
+  const [themeSaving, setThemeSaving] = useState(false);
+  const resolvedTheme = state.theme === 'system' ? state.resolvedTheme : state.theme;
   const [draft, setDraft] = useState<Preferences>(previewState);
   const modal = useRef<HTMLDialogElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -151,6 +159,18 @@ export default function App() {
   }
 
   function openSettings() { setDraft({ side: state.side, locked: state.locked, animate: state.animate }); setSettingsOpen(true); }
+  async function changeTheme(theme: Theme) {
+    if (themeSaving) return;
+    setThemeSaving(true);
+    try {
+      if (window.panel) setState(await window.panel.setTheme(theme));
+      else {
+        localStorage.setItem('ai-watch:theme', theme);
+        setState(current => ({ ...current, theme }));
+      }
+    } catch { setNotice('外观保存失败，请重试'); }
+    finally { setThemeSaving(false); }
+  }
   function toggleTestMode(enabled: boolean) {
     setTestMode(enabled); setTestSampledAt(new Date().toISOString());
     setNotice(enabled ? '测试模式已开启' : state.desktop ? '已恢复本地监看' : '已恢复浏览器预览');
@@ -170,6 +190,14 @@ export default function App() {
     const stateListener = bridge.onState(setState);
     const statusListener = bridge.onStatus(acceptStatus);
     return () => { stateListener(); statusListener(); };
+  }, []);
+  useLayoutEffect(() => { document.documentElement.dataset.theme = resolvedTheme; }, [resolvedTheme]);
+  useEffect(() => {
+    if (window.panel) return;
+    const media = matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setState(current => ({ ...current, resolvedTheme: media.matches ? 'dark' : 'light' }));
+    update(); media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
   }, []);
   useEffect(() => {
     if (!notice) return;
@@ -293,6 +321,11 @@ export default function App() {
         <TestControls enabled={testMode} config={testConfig} onToggle={toggleTestMode} onChange={changeTestSelection}
           onPreset={preset => { setTestConfig(current => applyTestPreset(current, preset)); setTestSampledAt(new Date().toISOString()); }}
           onView={() => setSettingsOpen(false)} />
+        <fieldset className="appearance-settings"><legend>外观</legend>
+          <label className="switch-row"><span>跟随系统<small>自动切换浅色和深色外观</small></span><input aria-label="跟随系统" type="checkbox" checked={state.theme === 'system'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'system' : resolvedTheme)} /></label>
+          <label className="switch-row"><span>暗夜模式<small>{state.theme === 'system' ? '手动切换后停止跟随系统' : '已手动指定外观'}</small></span><input aria-label="暗夜模式" type="checkbox" checked={resolvedTheme === 'dark'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'dark' : 'light')} /></label>
+          <p className="appearance-hint">当前为{resolvedTheme === 'dark' ? '深色' : '浅色'} · 立即生效并保存</p>
+        </fieldset>
         <fieldset><legend>默认停靠位置</legend><div className="segmented"><button className={draft.side === 'left' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'left' })}>左侧</button><button className={draft.side === 'right' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'right' })}>右侧</button></div></fieldset>
         <label className="switch-row"><span>跨桌面锁定<small>置顶并跟随桌面切换</small></span><input type="checkbox" checked={draft.locked} onChange={(event) => setDraft({ ...draft, locked: event.target.checked })} /></label>
         <label className="switch-row"><span>状态灯动画<small>LOGO 外沿每 5 秒呼吸一次</small></span><input type="checkbox" checked={draft.animate} onChange={(event) => setDraft({ ...draft, animate: event.target.checked })} /></label>
@@ -303,7 +336,7 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.7</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+        <div className="settings-note"><span className="note-title">本地状态 · v0.8</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
           {displayStatus && <>{(['claude', 'codex', 'antigravity', 'deepseek'] as const).map((id) => <p key={id}><b>{id === 'claude' ? 'Claude Code' : id === 'codex' ? 'Codex' : id === 'deepseek' ? 'DeepSeek Harness' : 'Antigravity'}</b><br />{displayStatus[id].detail}<br />{displayStatus[id].activityDetail && <>{displayStatus[id].activityDetail}<br /></>}{displayStatus[id].observedAt ? `记录时间：${new Date(displayStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('panel', {
   setCollapsed: (collapsed) => ipcRenderer.invoke('panel:collapse', collapsed),
   configure: (preferences) => ipcRenderer.invoke('panel:configure', preferences),
   setOrder: (order) => ipcRenderer.invoke('panel:order', order),
+  setTheme: (theme) => ipcRenderer.invoke('panel:theme', theme),
   dock: () => ipcRenderer.invoke('panel:dock'),
   chooseImage: (provider) => ipcRenderer.invoke('panel:image', provider),
   quit: () => ipcRenderer.invoke('panel:quit'),

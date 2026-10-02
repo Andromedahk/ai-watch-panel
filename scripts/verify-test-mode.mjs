@@ -90,7 +90,7 @@ try {
   await page.getByRole('button', { name: '全部运行', exact: true }).click();
   await page.getByRole('checkbox', { name: '状态灯动画' }).uncheck();
   await page.getByRole('button', { name: '保存配置', exact: true }).click();
-  assert.equal(await card('Codex').locator('.avatar').evaluate(el => getComputedStyle(el, '::before').animationName), 'none');
+  await expect.poll(() => card('Codex').locator('.avatar').evaluate(el => getComputedStyle(el, '::before').animationName)).toBe('none');
   await page.getByRole('button', { name: '收起面板' }).click();
   await expect(page.locator('.rail-providers .avatar[data-glow="running"]')).toHaveCount(4);
   assert.equal((await page.evaluate(() => window.panel.getState())).bounds.width, 46);

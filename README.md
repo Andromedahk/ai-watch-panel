@@ -2,7 +2,7 @@
 
 macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vite**，预留 Windows、Linux 的构建入口。
 
-> v0.7 新增 **8px 留边的圆角卡片与长按拖动排序**。设置中提供测试模式，可检查运行光晕、Codex 红灯、额度、余额和窗口控件。已接入 **Claude 桌面用量记录与桌面/终端 Code 会话发现**、**Codex 本地额度与任务记录**、**Antigravity 本地服务**及 **DeepSeek Harness 账户余额与任务活动**。Claude Free 不包含 Code 权限，缺少数据时显示不可用。浏览器预览全部使用示例数据。
+> v0.8 新增 **跟随系统的浅色 / 深色外观与手动暗夜模式开关**。保留 8px 留边的圆角卡片与长按拖动排序。设置中提供测试模式，可检查运行光晕、Codex 红灯、额度、余额和窗口控件。已接入 **Claude 桌面用量记录与桌面/终端 Code 会话发现**、**Codex 本地额度与任务记录**、**Antigravity 本地服务**及 **DeepSeek Harness 账户余额与任务活动**。Claude Free 不包含 Code 权限，缺少数据时显示不可用。浏览器预览全部使用示例数据。
 
 <img src="docs/screenshots/panel.png" width="220" alt="AI Watch 五区面板预览" />
 
@@ -21,6 +21,24 @@ macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vi
 | Codex | 助手图片、本地额度快照、近期任务活动指示灯 |
 | Antigravity | 助手图片、本地模型额度分页、当前任务指示灯 |
 | DeepSeek Harness | 助手图片、账户可用余额、现金与赠送金额、任务活动及等待确认状态 |
+
+## 外观与暗夜模式
+
+默认开启 **跟随系统**，系统外观改变后面板会自动切换，无需重启；已有旧配置升级后也默认跟随系统。
+
+在设置的“外观”区域：
+
+- **跟随系统**：开启时自动使用系统的浅色或深色外观；关闭时固定当前外观。
+- **暗夜模式**：可随时手动切换深色 / 浅色，同时关闭自动跟随。
+- 外观选择立即生效并保存，关闭设置页后仍生效，重启后保留；其他配置仍使用“保存配置”按钮。
+
+两种主题覆盖顶部、卡片、额度和余额、收起栏、测试选项与设置控件。LOGO 底板随外观调整，品牌呼吸灯、Codex 红色等待提醒、8px 间距和模块顺序保持一致。浏览器预览同样跟随系统，也可单独保存手动选择。
+
+桌面版通过 [Electron nativeTheme](https://www.electronjs.org/docs/latest/api/native-theme) 读取与监听外观变化。当前在 macOS 验收；Windows / Linux 的实际系统联动待相应平台验证。
+
+<img src="docs/screenshots/theme-light.png" width="220" alt="浅色面板与测试状态" /> <img src="docs/screenshots/theme-dark.png" width="220" alt="深色面板与测试状态" />
+
+设置预览：[外观开关](docs/screenshots/theme-settings.png) · [浅色设置页](docs/screenshots/theme-settings-light.png)。以上预览均为合成测试数据。
 
 ## 模块排序
 
@@ -184,6 +202,7 @@ npm run build
 npm run test:desktop
 npm run test:ui  # 手动测试选项与恢复本地状态的自动检查
 npm run test:sort  # 长按排序、取消、留边与重启保存检查
+npm run test:theme  # 系统外观事件、手动切换、保存恢复与两种主题检查
 AI_WATCH_TEST_STATUS=glow-running npm run test:desktop
 AI_WATCH_TEST_STATUS=glow-attention npm run test:desktop
 AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存在忽略目录
@@ -198,6 +217,13 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 额度窗口字段参考 OpenAI 官方 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。此版本读取既有本地记录，不另外启动 App Server；Antigravity 桌面接口按当前安装版本验证，其 CLI 的 [状态栏文档](https://antigravity.google/docs/cli/statusline) 作为后续适配参考。
 
 ## 更新记录
+
+### 0.8.0 · 2026-10-02
+
+- 默认跟随系统自动切换浅色 / 深色外观，监听运行期间的变化，无需重启；旧配置自动采用系统模式。
+- 设置新增“跟随系统”和“暗夜模式”开关，手动选择立即生效并保存，重启后保留；普通配置与模块排序不会覆盖外观偏好。
+- 统一两套界面配色，覆盖卡片、额度、余额、设置、测试模式、收起栏和提示；LOGO 底板同步调整，兼容随系统变色的 Codex 素材。
+- 新增主题偏好校验、系统事件与浏览器媒体变化、手动覆盖、冷启动、文字对比度检查，更新主题截图与 macOS 应用包。
 
 ### 0.7.0 · 2026-10-02
 
