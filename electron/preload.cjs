@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('panel', {
   setLocked: (locked) => ipcRenderer.invoke('panel:lock', locked),
   setCollapsed: (collapsed) => ipcRenderer.invoke('panel:collapse', collapsed),
   configure: (preferences) => ipcRenderer.invoke('panel:configure', preferences),
+  setOrder: (order) => ipcRenderer.invoke('panel:order', order),
   dock: () => ipcRenderer.invoke('panel:dock'),
   chooseImage: (provider) => ipcRenderer.invoke('panel:image', provider),
   quit: () => ipcRenderer.invoke('panel:quit'),

@@ -1,6 +1,6 @@
 {
   "name": "ai-watch-panel",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "A cross-platform vertical AI activity and quota panel",
   "private": true,
   "type": "module",
@@ -17,7 +17,8 @@
     "dist:mac": "npm run build && electron-builder --mac zip",
     "dist:win": "npm run build && electron-builder --win nsis",
     "dist:linux": "npm run build && electron-builder --linux AppImage",
-    "test:ui": "node scripts/verify-test-mode.mjs"
+    "test:ui": "node scripts/verify-test-mode.mjs",
+    "test:sort": "node scripts/verify-sort.mjs"
   },
   "dependencies": {
     "big.js": "^7.0.1",

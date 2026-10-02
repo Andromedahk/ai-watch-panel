@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, screen, dialog, Menu, nativeTheme } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, validPreferences } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, validPreferences, isProviderOrder } = require('./window-policy.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
 const statusReader = new LocalStatusReader();
 let statusTimer;
@@ -153,10 +153,17 @@ else {
       setCollapsed(value); return currentState();
     });
     handle('panel:configure', (value) => {
-      const next = validPreferences(value);
+      const next = validPreferences({ ...value, providerOrder: preferences.providerOrder });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
+      emitState(); return currentState();
+    });
+    handle('panel:order', (value) => {
+      if (!isProviderOrder(value)) throw new Error('Invalid provider order');
+      const previous = preferences.providerOrder;
+      preferences.providerOrder = [...value];
+      try { savePreferences(); } catch (error) { preferences.providerOrder = previous; throw error; }
       emitState(); return currentState();
     });
     handle('panel:dock', () => { dock(); return currentState(); });

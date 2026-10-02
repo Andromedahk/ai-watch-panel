@@ -9,7 +9,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 button:disabled { cursor: wait; }
 button, input, select, textarea, label, summary { -webkit-app-region: no-drag; }
 .panel { height: 100%; overflow: hidden; position: relative; background: var(--surface); }
-.panel-regions { height: 100%; display: grid; grid-template-rows: .5fr repeat(4, 1fr); }
+.panel-regions { height: 100%; display: grid; grid-template-rows: .5fr repeat(4, 1fr); gap: 8px; padding-bottom: 8px; }
 .control-region { min-height: 0; display: flex; flex-direction: column; justify-content: center; padding: 9px var(--gutter); gap: 8px; border-bottom: 1px solid var(--line); background: #151a20; -webkit-app-region: drag; }
 .brand-line { display: flex; align-items: center; justify-content: space-between; }
 .brand { display: flex; align-items: center; gap: 7px; color: #e3e8ed; }
@@ -26,8 +26,13 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .toolbar svg { width: clamp(12px, 5.6vw, 16px); height: clamp(12px, 5.6vw, 16px); stroke-width: 1.6; }
 .toolbar button:hover, .icon-button:hover { color: #f2f5f7; background: #2c3540; }
 .toolbar button.selected, .rail-lock.selected { background: #293d37; color: #95ccac; border-color: #456251; }
-.provider-card { min-height: 0; position: relative; overflow: hidden; padding: clamp(9px, 1.5vh, 22px) var(--gutter); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: clamp(9px, 1.55vh, 20px); background: radial-gradient(ellipse at 0 0, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%); }
-.provider-card:last-child { border-bottom: none; }
+.provider-card { min-height: 0; min-width: 0; position: relative; overflow: hidden; margin-inline: 8px; padding: clamp(9px, 1.5vh, 22px) max(10px, calc(var(--gutter) - 6px)); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; gap: clamp(9px, 1.55vh, 20px); background: radial-gradient(ellipse at 0 0, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%), #171d24; box-shadow: 0 2px 5px #0002; cursor: grab; touch-action: none; user-select: none; -webkit-app-region: no-drag; }
+.provider-card:focus-visible { outline: 2px solid #adbcca; outline-offset: -3px; }
+.is-sorting .provider-card { transition: transform .16s ease; }
+.is-sorting .provider-card.is-dragging { transition: none; z-index: 4; cursor: grabbing; border-color: var(--accent); box-shadow: 0 8px 24px #0009, 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
+.is-sorting { cursor: grabbing; }
+.sort-hint { position: absolute; z-index: 5; bottom: 12px; left: 16px; right: 16px; padding: 8px; border: 1px solid #596b7c; border-radius: 6px; background: #253440f5; color: #dce7ee; font-size: 10px; text-align: center; pointer-events: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
 .provider-card::before { position: absolute; top: 20%; left: 0; height: 24px; width: 2px; background: var(--accent); opacity: .55; content: ''; }
 .card-heading { display: flex; align-items: center; gap: clamp(6px, 2.8vw, 10px); position: relative; }
 .avatar { width: clamp(28px, 16.3vw, 52px); height: clamp(28px, 16.3vw, 52px); flex-shrink: 0; position: relative; isolation: isolate; border-radius: 10px; --halo-color: #d97757; }
@@ -55,8 +60,8 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .identity { min-width: 0; }
 .eyebrow { display: block; color: var(--muted); font-size: clamp(6px, 3vw, 9px); letter-spacing: 1.45px; line-height: 1.7; }
 .identity h2 { font-size: clamp(10px, 5.9vw, 18px); line-height: 1.3; margin: 1px 0 0; font-weight: 600; letter-spacing: -.35px; }
-.provider-card:last-child .identity h2 { font-size: clamp(9px, 5.1vw, 16px); }
-.card-index { position: absolute; right: 0; top: 0; font: 8px ui-monospace, monospace; color: #616b76; }
+.provider-card[data-provider="deepseek"] .identity h2 { font-size: clamp(9px, 5.1vw, 16px); }
+.card-index { position: absolute; right: -3px; top: -10px; display: flex; align-items: center; gap: 2px; font: 8px ui-monospace, monospace; color: #74808c; }
 .quota-area { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 7px; }
 .quota-tools { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 16px; font-size: 9px; color: #8795a3; }
 .source-tag { font-size: 8px; border: 1px solid #38424d; border-radius: 3px; padding: 1px 4px; white-space: nowrap; }
@@ -175,7 +180,8 @@ legend { margin-bottom: 10px; color: #b7c3ce; font-size: 12px; }
   .provider-card { gap: 6px; padding-block: 7px; }
   .card-heading .avatar { width: clamp(24px, 5vh, 34px); height: clamp(24px, 5vh, 34px); border-radius: 7px; }
   .identity h2 { font-size: clamp(10px, 4.5vw, 13px); }
-  .provider-card:last-child .identity h2 { font-size: clamp(9px, 4.3vw, 12px); }
+  .provider-card[data-provider="deepseek"] .identity h2 { font-size: clamp(9px, 4.3vw, 12px); }
+  .card-index { top: -3px; font-size: 7px; }
   .quota-list { gap: 4px; }
   .quota-area { gap: 3px; }
   .balance-content { gap: 3px; }

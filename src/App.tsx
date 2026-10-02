@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
 import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
 import { providers } from './data';
 import { TestControls } from './TestControls';
+import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
 import Big from 'big.js';
 import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provider, ProviderId, Quota } from './types';
@@ -9,7 +10,15 @@ import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provide
 const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
   desktop: false, platform: 'browser', scaleFactor: window.devicePixelRatio,
+  providerOrder: readOrder(),
 };
+function readOrder(): ProviderId[] {
+  const fallback = providers.map(provider => provider.id);
+  try {
+    const value = JSON.parse(localStorage.getItem('ai-watch:provider-order') || 'null');
+    return Array.isArray(value) && value.length === 4 && new Set(value).size === 4 && value.every(id => fallback.includes(id)) ? value : fallback;
+  } catch { return fallback; }
+}
 function readImages(): Partial<Record<ProviderId, string>> {
   try { return JSON.parse(localStorage.getItem('ai-watch:images') ?? '{}'); }
   catch { return {}; }
@@ -47,7 +56,9 @@ function BalanceCard({ local }: { local: LocalProviderStatus }) {
     </> : <div className="balance-empty"><strong>{local.connection === 'auth-required' ? '等待 Harness 登录' : local.connection === 'ready' ? '暂无钱包记录' : '余额暂不可用'}</strong><p>{local.detail}</p></div>}
   </div>;
 }
-function ProviderCard({ provider, index, image, testing = false }: { provider: Provider; index: number; image?: string; testing?: boolean }) {
+function ProviderCard({ provider, index, image, testing = false, sortProps, dragging = false }: {
+  provider: Provider; index: number; image?: string; testing?: boolean; sortProps?: HTMLAttributes<HTMLElement>; dragging?: boolean;
+}) {
   const [page, setPage] = useState(0);
   const pages = Math.max(1, Math.ceil(provider.quotas.length / 3));
   const currentPage = Math.min(page, pages - 1);
@@ -66,11 +77,12 @@ function ProviderCard({ provider, index, image, testing = false }: { provider: P
     const reset = quota.reset && local ? `重置时间 ${new Date(quota.reset).toLocaleString('zh-CN')}` : quota.reset;
     return `${quota.model} · ${quota.period}${reset ? ` · ${reset}` : ''}${quota.stale ? ` · 已过时，历史剩余 ${quota.remaining ?? '未知'}%` : ''}`;
   }
-  return <section className={`provider-card ${provider.running ? 'is-running' : ''}`} style={{ '--accent': provider.color } as CSSProperties} aria-label={`${provider.name} 面板`} data-attention={local?.id === 'codex' && local.activity === 'waiting'}>
+  return <section {...sortProps} className={`provider-card ${provider.running ? 'is-running' : ''} ${dragging ? 'is-dragging' : ''}`} style={{ '--accent': provider.color, ...sortProps?.style } as CSSProperties}
+    aria-label={`${provider.name} 面板`} data-provider={provider.id} data-attention={local?.id === 'codex' && local.activity === 'waiting'} tabIndex={0} aria-describedby="card-sort-help" onDragStart={event => event.preventDefault()}>
     <div className="card-heading">
       <Avatar provider={provider} image={image} monitor />
       <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? '桌面版 · 终端版' : provider.subtitle}</span><h2>{provider.name}</h2></div>
-      <span className="card-index">0{index + 1}</span>
+      <span className="card-index" title="长按卡片拖动排序"><GripVertical size={10} aria-hidden="true" /><span>0{index + 1}</span></span>
     </div>
     <div className="quota-area">
       <div className="quota-tools">
@@ -109,11 +121,12 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
+  const [orderSaving, setOrderSaving] = useState(false);
   const [draft, setDraft] = useState<Preferences>(previewState);
   const modal = useRef<HTMLDialogElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const targetImage = useRef<ProviderId>('claude');
-  const visibleProviders = providers.map((provider) => {
+  const visibleProviders = state.providerOrder.map(id => providers.find(provider => provider.id === id)!).map((provider) => {
     if (!state.desktop && !testMode) return provider;
     const local = displayStatus?.[provider.id];
     return { ...provider, running: local?.activity === 'running', task: local?.task || '正在读取本地状态',
@@ -123,6 +136,19 @@ export default function App() {
   });
   const activeTasks = providers.reduce((total, provider) => total + (displayStatus?.[provider.id].activeTasks || 0), 0);
   const refreshTime = displayStatus?.sampledAt ? new Date(displayStatus.sampledAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '读取中';
+  const sorting = useCardSort(state.providerOrder, order => { void saveOrder(order); }, settingsOpen || state.collapsed || orderSaving);
+
+  async function saveOrder(order: ProviderId[]) {
+    if (orderSaving) return;
+    const previous = state.providerOrder;
+    setOrderSaving(true); setState(current => ({ ...current, providerOrder: order }));
+    try {
+      if (window.panel) setState(await window.panel.setOrder(order));
+      else localStorage.setItem('ai-watch:provider-order', JSON.stringify(order));
+      setNotice('模块顺序已保存');
+    } catch { setState(current => ({ ...current, providerOrder: previous })); setNotice('顺序保存失败，已恢复原顺序'); }
+    finally { setOrderSaving(false); }
+  }
 
   function openSettings() { setDraft({ side: state.side, locked: state.locked, animate: state.animate }); setSettingsOpen(true); }
   function toggleTestMode(enabled: boolean) {
@@ -240,7 +266,7 @@ export default function App() {
       </div>)}</div>
       <button className={`rail-lock ${state.locked ? 'selected' : ''}`} title="锁定窗口" aria-label="锁定窗口" aria-pressed={state.locked} onClick={toggleLock}>{state.locked ? <LockKeyhole size={15} /> : <UnlockKeyhole size={15} />}</button>
       {testMode ? <button className="rail-demo test-badge" aria-label="测试模式设置" onClick={async () => { await collapse(false); openSettings(); }}>测试</button> : <span className="rail-demo">{state.desktop ? '本地' : '演示'}</span>}
-    </aside> : <div className="panel-regions">
+    </aside> : <div className={`panel-regions ${sorting.sorting ? 'is-sorting' : ''}`}>
       <header className="control-region">
         <div className="brand-line"><div className="brand"><Activity size={15} strokeWidth={1.7} /><h1>AI WATCH</h1></div><GripVertical size={13} className="drag-hint" /></div>
         <div className="overview" title={testMode ? '当前运行数、任务、额度与余额均为手动选择的测试数据。' : '运行数只统计本地接入且有运行证据的任务；未知状态和演示卡片不计入。'}><span><span className={`tiny-dot ${activeTasks ? 'active' : ''}`} />{state.desktop || testMode ? `${activeTasks} 项运行` : '界面预览'} {testMode ? <button className="demo-tag test-badge" aria-label="测试模式设置" onClick={openSettings}>测试模式</button> : <span className="demo-tag">{localStatus?.isTestData ? '测试' : state.desktop ? '本地' : '演示'}</span>}</span><time>{state.desktop || testMode ? refreshTime : '演示数据'}</time></div>
@@ -251,8 +277,16 @@ export default function App() {
           <button aria-label="打开配置" title="配置面板" onClick={openSettings}><Settings2 /></button>
         </nav>
       </header>
-      {visibleProviders.map((provider, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${provider.id}`} provider={provider} index={index} image={images[provider.id]} testing={Boolean(displayStatus?.isTestData)} />)}
+      {visibleProviders.map((provider, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${provider.id}`} provider={provider} index={index} image={images[provider.id]} testing={Boolean(displayStatus?.isTestData)} dragging={sorting.activeId === provider.id}
+        sortProps={{ style: sorting.style(provider.id), onPointerDown: event => sorting.start(event, provider.id), onKeyDown: event => {
+          if (event.target !== event.currentTarget || !event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key) || sorting.sorting) return;
+          event.preventDefault();
+          const next = [...state.providerOrder], target = Math.max(0, Math.min(3, index + (event.key === 'ArrowUp' ? -1 : 1)));
+          if (target !== index) { next.splice(index, 1); next.splice(target, 0, provider.id); void saveOrder(next); }
+        } }} />)}
     </div>}
+    <span id="card-sort-help" className="sr-only">长按卡片约半秒后上下拖动，松开保存顺序；Escape 取消。键盘聚焦卡片后可按 Alt 加上下方向键排序。</span>
+    {sorting.sorting && <div className="sort-hint" role="status">拖动排序 · 第 {(sorting.target ?? 0) + 1} 位 · 松开保存</div>}
     <dialog ref={modal} className="settings-dialog" aria-labelledby="settings-title" onCancel={() => setSettingsOpen(false)}>
       <div className="settings-heading"><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">面板配置</h2></div><button className="icon-button" aria-label="关闭配置" onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
       <div className="settings-content">
@@ -269,7 +303,7 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.6.1</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+        <div className="settings-note"><span className="note-title">本地状态 · v0.7</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
           {displayStatus && <>{(['claude', 'codex', 'antigravity', 'deepseek'] as const).map((id) => <p key={id}><b>{id === 'claude' ? 'Claude Code' : id === 'codex' ? 'Codex' : id === 'deepseek' ? 'DeepSeek Harness' : 'Antigravity'}</b><br />{displayStatus[id].detail}<br />{displayStatus[id].activityDetail && <>{displayStatus[id].activityDetail}<br /></>}{displayStatus[id].observedAt ? `记录时间：${new Date(displayStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>

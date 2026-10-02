@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { panelBounds, clampBounds, validPreferences } = require('../electron/window-policy.cjs');
+const { panelBounds, clampBounds, validPreferences, isProviderOrder, PROVIDER_ORDER } = require('../electron/window-policy.cjs');
 
 test('right docking uses the full available height with the requested ratio', () => {
   const result = panelBounds({ x: 0, y: 25, width: 1920, height: 1080 });
@@ -22,5 +22,17 @@ test('restore clamps a moved rail into the available display area', () => {
   assert.deepEqual(clampBounds({ x: 1500, y: 100, width: 200, height: 900 }, { x: 0, y: 25, width: 1600, height: 900 }), { x: 1400, y: 25, width: 200, height: 900 });
 });
 test('unknown configuration values fall back without broadening capabilities', () => {
-  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true });
+  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, providerOrder: PROVIDER_ORDER });
+});
+test('provider order rejects missing, duplicate and unknown cards and migrates old preferences', () => {
+  for (const value of [null, 'codex', [], ['codex', 'codex', 'claude', 'deepseek'], ['claude', 'codex', 'antigravity', 'other']]) {
+    assert.equal(isProviderOrder(value), false);
+    assert.deepEqual(validPreferences({ providerOrder: value }).providerOrder, PROVIDER_ORDER);
+  }
+  const reversed = [...PROVIDER_ORDER].reverse();
+  assert.equal(isProviderOrder(reversed), true);
+  const settings = validPreferences({ side: 'left', locked: true, animate: false, providerOrder: reversed });
+  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, providerOrder: reversed });
+  reversed.reverse();
+  assert.notDeepEqual(settings.providerOrder, reversed);
 });

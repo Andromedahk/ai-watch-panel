@@ -2,6 +2,7 @@ export type ProviderId = 'claude' | 'codex' | 'antigravity' | 'deepseek';
 export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: boolean };
 export type PanelState = Preferences & {
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
+  providerOrder: ProviderId[];
   bounds?: { x: number; y: number; width: number; height: number };
 };
 export type Quota = { model: string; period: string; remaining: number | null; reset: string; stale?: boolean };
@@ -31,6 +32,7 @@ declare global {
       setLocked(locked: boolean): Promise<PanelState>;
       setCollapsed(collapsed: boolean): Promise<PanelState>;
       configure(preferences: Preferences): Promise<PanelState>;
+      setOrder(order: ProviderId[]): Promise<PanelState>;
       dock(): Promise<PanelState>;
       chooseImage(provider: ProviderId): Promise<string | null>;
       quit(): Promise<void>;

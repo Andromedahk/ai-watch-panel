@@ -2,7 +2,7 @@
 
 macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vite**，预留 Windows、Linux 的构建入口。
 
-> v0.6.1 修复设置顶部测试开关被窗口拖动区拦截的问题。v0.6 新增设置中的 **测试模式与手动 UI 场景选择**，可检查运行光晕、Codex 红灯、额度、余额和窗口控件。已接入 **Claude 桌面用量记录与桌面/终端 Code 会话发现**、**Codex 本地额度与任务记录**、**Antigravity 本地服务**及 **DeepSeek Harness 账户余额与任务活动**。Claude Free 不包含 Code 权限，缺少数据时显示不可用。浏览器预览全部使用示例数据。
+> v0.7 新增 **8px 留边的圆角卡片与长按拖动排序**。设置中提供测试模式，可检查运行光晕、Codex 红灯、额度、余额和窗口控件。已接入 **Claude 桌面用量记录与桌面/终端 Code 会话发现**、**Codex 本地额度与任务记录**、**Antigravity 本地服务**及 **DeepSeek Harness 账户余额与任务活动**。Claude Free 不包含 Code 权限，缺少数据时显示不可用。浏览器预览全部使用示例数据。
 
 <img src="docs/screenshots/panel.png" width="220" alt="AI Watch 五区面板预览" />
 
@@ -12,7 +12,7 @@ macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vi
 
 展开窗口的高宽比为 **4.5 : 1**，高度占满当前显示器的可用工作区域，默认贴右边。可用区域会避开系统菜单栏与 Dock。尺寸按逻辑像素计算，由系统自动处理 HiDPI 缩放。
 
-五个区域按 **0.5 : 1 : 1 : 1 : 1** 分配：
+顶部控制栏保持固定，下方四个工具模块采用 14px 圆角矩形。卡片左右距离窗口边缘各 8px，卡片之间、顶部控制栏下方及窗口底部保留 8px 间距。尺寸均为逻辑像素，在 HiDPI 下自动缩放；扣除间距后，五个区域仍按 **0.5 : 1 : 1 : 1 : 1** 分配：
 
 | 区域 | 内容 |
 | --- | --- |
@@ -21,6 +21,18 @@ macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vi
 | Codex | 助手图片、本地额度快照、近期任务活动指示灯 |
 | Antigravity | 助手图片、本地模型额度分页、当前任务指示灯 |
 | DeepSeek Harness | 助手图片、账户可用余额、现金与赠送金额、任务活动及等待确认状态 |
+
+## 模块排序
+
+在任意工具卡片的 LOGO、标题、额度文字或空白处 **按住约半秒（450ms）**，看到边框高亮后上下拖动，松开保存新顺序。其他卡片会随目标位置移位，顶部控制栏不参与排序。
+
+- 直接点击或按住后立即滑动不会开始排序；翻页、币种切换等按钮保持正常点击。
+- 拖动中按 Esc，或窗口失去焦点、尺寸变化时取消操作，保留原顺序。
+- 四个模块的顺序保存在本设备偏好中，重启后保留；收起窄栏、测试模式也使用同一顺序。改变停靠、锁定、动画配置不会重置顺序。
+- 键盘可用 Tab 聚焦卡片，再按 Alt + ↑ / ↓ 调整位置。
+- 顶部标题区域仍用于移动整个窗口，卡片拖动只调整模块位置。设置打开时继续停用底层窗口拖动区，避免遮挡开关。
+
+浏览器预览的排序仅存于该浏览器。拖动示例：[卡片排序中](docs/screenshots/card-sorting.png)。
 
 ## LOGO 呼吸灯
 
@@ -171,6 +183,7 @@ npm test
 npm run build
 npm run test:desktop
 npm run test:ui  # 手动测试选项与恢复本地状态的自动检查
+npm run test:sort  # 长按排序、取消、留边与重启保存检查
 AI_WATCH_TEST_STATUS=glow-running npm run test:desktop
 AI_WATCH_TEST_STATUS=glow-attention npm run test:desktop
 AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存在忽略目录
@@ -185,6 +198,14 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 额度窗口字段参考 OpenAI 官方 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。此版本读取既有本地记录，不另外启动 App Server；Antigravity 桌面接口按当前安装版本验证，其 CLI 的 [状态栏文档](https://antigravity.google/docs/cli/statusline) 作为后续适配参考。
 
 ## 更新记录
+
+### 0.7.0 · 2026-10-02
+
+- 将四个助手模块改成独立圆角卡片，窗口两侧、卡片之间和底部留边 8px，顶部控制栏保持固定。
+- 新增长按约半秒拖动排序、目标位置反馈、Esc 取消与键盘排序，卡片内部按钮保持正常操作。
+- 模块顺序单独校验并保存在本机偏好，旧配置自动补充默认顺序；收起窄栏与测试模式同步顺序。
+- 修正 DeepSeek 标题样式与最后一张卡片位置绑定的问题，排序后仍按工具身份显示。
+- 增加无效顺序检查与拖动 / 保存 / 冷启动交互验收，更新截图、README 与 macOS 应用包。
 
 ### 0.6.1 · 2026-10-02
 
