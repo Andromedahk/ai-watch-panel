@@ -26,7 +26,7 @@ export function TestControls({ enabled, config, onToggle, onChange, onPreset, on
           onChange={event => onChange(provider.id, { activity: event.target.value as TestSelection['activity'] })}>
           {activityOptions(provider.id).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
-        <label><span>{provider.id === 'deepseek' ? '余额显示' : ['qwen', 'workbuddy'].includes(provider.id) ? '套餐 / 积分' : '额度显示'}</span><select aria-label={`${provider.name} 测试数据显示`} value={config[provider.id].data}
+        <label><span>{provider.id === 'deepseek' ? '余额显示' : ['qwen', 'workbuddy'].includes(provider.id) ? '套餐 / 积分' : '套餐 / 额度'}</span><select aria-label={`${provider.name} 测试数据显示`} value={config[provider.id].data}
           onChange={event => onChange(provider.id, { data: event.target.value as TestSelection['data'] })}>
           {dataOptions(provider.id).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>

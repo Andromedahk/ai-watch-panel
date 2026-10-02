@@ -87,18 +87,22 @@ function creditNumber(value: string) {
     return number.toFixed(2).replace(/\.?0+$/, '').replace(/^$/, '0');
   } catch { return '—'; }
 }
-function EntitlementCard({ provider, page }: { provider: Provider; page: number }) {
+function PlanBadge({ provider }: { provider: Provider }) {
   const local = provider.local;
   const plan = local?.plan;
+  const expired = Boolean(plan?.expiresAt && Date.parse(plan.expiresAt) <= Date.now());
+  const label = plan?.name || (local ? '套餐未知' : '示例套餐');
+  const state = plan?.name ? plan.stale ? '历史' : expired ? '已到期' : '' : '';
+  return <div className={`plan-summary ${plan?.stale ? 'is-stale' : ''}`} aria-label={`${provider.name} 套餐档位`}
+    title={[`套餐：${label}`, plan?.status, state, plan?.expiresAt ? `有效期至 ${new Date(plan.expiresAt).toLocaleString('zh-CN')}` : ''].filter(Boolean).join(' · ')}>
+    <span className="plan-name">{label}</span>{state && <span className="plan-status">{state}</span>}
+  </div>;
+}
+function EntitlementCard({ provider, page }: { provider: Provider; page: number }) {
+  const local = provider.local;
   const credits = local?.credits;
   const items = local ? credits?.items || [] : [{ label: '示例积分', remaining: '1234.5', unit: '积分', total: '2000' }];
-  const expired = Boolean(plan?.expiresAt && Date.parse(plan.expiresAt) <= Date.now());
-  const planLabel = plan?.name || (local ? '套餐未知' : '示例套餐');
-  const statusLabel = ({ free: '免费', member: '会员', unknown: '待确认' } as Record<string, string>)[plan?.status || ''] || plan?.status || '套餐';
   return <div className="entitlement-content">
-    <div className={`plan-summary ${plan?.stale ? 'is-stale' : ''}`} title={[planLabel, plan?.status, plan?.expiresAt ? `${expired ? '到期于' : '有效期至'} ${new Date(plan.expiresAt).toLocaleString('zh-CN')}` : '', plan?.stale ? '历史记录' : ''].filter(Boolean).join(' · ')}>
-      <span className="plan-name">{planLabel}</span><span className="plan-status">{plan?.stale ? '历史套餐' : expired ? '已到期' : statusLabel}</span>
-    </div>
     <div className="credits-list" aria-label={`${provider.name} 剩余积分`}>
       {items.length ? items.slice(page * 2, page * 2 + 2).map((item, index) => <div className={`credit-item ${credits?.stale ? 'is-stale' : ''}`} key={`${item.label}:${index}`}
         title={[item.label, item.remaining === null ? '剩余未知' : `剩余 ${item.remaining} ${item.unit}`, item.total != null ? `总量 ${item.total} ${item.unit}` : '', item.reset ? `重置 / 到期时间 ${new Date(item.reset).toLocaleString('zh-CN')}` : '', credits?.stale ? '历史快照，当前值待更新' : ''].filter(Boolean).join(' · ')}>
@@ -135,7 +139,7 @@ function ProviderCard({ provider, index, image, testing = false, sortProps, drag
     aria-label={`${provider.name} 面板`} data-provider={provider.id} data-attention={local?.id === 'codex' && local.activity === 'waiting'} tabIndex={0} aria-describedby="card-sort-help" onDragStart={event => event.preventDefault()}>
     <div className="card-heading">
       <Avatar provider={provider} image={image} monitor />
-      <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? '桌面版 · 终端版' : provider.subtitle}</span><h2>{provider.name}</h2></div>
+      <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? '桌面版 · 终端版' : provider.subtitle}</span><h2>{provider.name}</h2>{provider.id !== 'deepseek' && <PlanBadge provider={provider} />}</div>
       <span className="card-index" title="长按卡片拖动排序"><GripVertical size={10} aria-hidden="true" /><span>0{index + 1}</span></span>
     </div>
     <div className="quota-area">
@@ -147,7 +151,7 @@ function ProviderCard({ provider, index, image, testing = false, sortProps, drag
           <button aria-label={`${provider.name} 下一页额度`} disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight size={11} /></button>
         </div> : <span className="quota-time" title={local?.observedAt ? `记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}>{local ? local.id === 'claude' && !local.quotas.length ? '未提供 Code 额度' : time ? `记录 ${time}` : isBalance ? '自动识别登录态' : '额度未知' : '示例额度'}</span>}
       </div>
-      {isEntitlement ? <EntitlementCard provider={provider} page={currentPage} /> : isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>Code 额度暂不可用</strong><p>Free 账号不包含 Code 权限</p><small>{local.surfaces?.desktop}<br />{local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={`${testing ? '测试' : local ? '本地' : '演示'}剩余额度`}>
+      {isEntitlement ? <EntitlementCard provider={provider} page={currentPage} /> : isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>Code 额度暂不可用</strong><p>{local.plan?.name === 'Free' ? 'Free 账号不包含 Code 权限' : '当前本地记录未提供额度窗口'}</p><small>{local.surfaces?.desktop}<br />{local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={`${testing ? '测试' : local ? '本地' : '演示'}剩余额度`}>
         {quotas.map((quota, row) => {
           const known = quota.remaining !== null && !quota.stale;
           return <div className={`quota ${known ? '' : 'quota-unknown'}`} key={`${quota.model}:${quota.period}:${row}`} title={quotaTitle(quota)}>
@@ -445,7 +449,7 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.10</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+        <div className="settings-note"><span className="note-title">本地状态 · v0.11</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
           {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{displayStatus[id]?.detail}<br />{displayStatus[id]?.activityDetail && <>{displayStatus[id]?.activityDetail}<br /></>}{displayStatus[id]?.observedAt ? `记录时间：${new Date(displayStatus[id]?.observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>

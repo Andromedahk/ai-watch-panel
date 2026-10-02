@@ -26,7 +26,11 @@
     ],
     "observedAt": "2026-10-02T00:00:00Z",
     "sampledAt": "2026-10-02T00:00:00Z",
-    "detail": "用于界面检查的合成记录，不是账户数据。"
+    "detail": "用于界面检查的合成记录，不是账户数据。",
+    "plan": {
+      "name": "Plus",
+      "stale": false
+    }
   },
   "antigravity": {
     "id": "antigravity",
@@ -137,7 +141,11 @@
     ],
     "observedAt": "2026-10-02T00:00:00Z",
     "sampledAt": "2026-10-02T00:00:00Z",
-    "detail": "用于分页检查的合成记录，不是账户数据。"
+    "detail": "用于分页检查的合成记录，不是账户数据。",
+    "plan": {
+      "name": "Google AI Pro",
+      "stale": false
+    }
   },
   "deepseek": {
     "id": "deepseek",
@@ -183,6 +191,10 @@
     "surfaces": {
       "desktop": "桌面已打开 · 无 Code 运行记录",
       "terminal": "终端无运行会话"
+    },
+    "plan": {
+      "name": "Free",
+      "stale": false
     }
   },
   "zcode": {
@@ -203,7 +215,11 @@
     "observedAt": "2026-10-02T00:00:00Z",
     "sampledAt": "2026-10-02T00:00:00Z",
     "detail": "合成测试记录，不是账户数据。",
-    "activityDetail": "合成测试活动，不代表真实运行。"
+    "activityDetail": "合成测试活动，不代表真实运行。",
+    "plan": {
+      "name": "GLM Coding Pro",
+      "stale": false
+    }
   },
   "kimi": {
     "id": "kimi",
@@ -223,7 +239,11 @@
     "observedAt": "2026-10-02T00:00:00Z",
     "sampledAt": "2026-10-02T00:00:00Z",
     "detail": "合成测试记录，不是账户数据。",
-    "activityDetail": "合成测试活动，不代表真实运行。"
+    "activityDetail": "合成测试活动，不代表真实运行。",
+    "plan": {
+      "name": "Moderato",
+      "stale": false
+    }
   },
   "qwen": {
     "id": "qwen",

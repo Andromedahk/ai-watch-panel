@@ -38,7 +38,7 @@ export function dataOptions(id: ProviderId): [TestData, string][] {
   ];
   return [
     ['normal', id === 'antigravity' ? '正常额度 · 3 页' : '正常额度'], ['low', '低额度 12.5%'],
-    ['zero', '额度耗尽 0%'], ['full', '满额 100%'], ['unknown', '额度未知'], ['stale', '记录过时'],
+    ['zero', '额度耗尽 0%'], ['full', '满额 100%'], ['unknown', '套餐 / 额度未知'], ['stale', '历史套餐 / 额度'],
     ...(id === 'claude' ? [['free', 'Free · 无 Code 额度']] as [TestData, string][] : []),
   ];
 }
@@ -73,6 +73,10 @@ export function makeTestStatus(config: TestConfig, at: string): LocalStatus {
       waitingTasks: activity === 'mixed' ? 2 : 1,
       waitingReason: activity === 'input' ? 'input' : activity === 'approval' ? 'approval' : 'both', attentionAvailable: true,
     });
+    if (['claude', 'codex', 'antigravity', 'kimi', 'zcode'].includes(id)) {
+      const examplePlans: Partial<Record<ProviderId, string>> = { claude: 'Pro', codex: 'Plus', antigravity: 'Google AI Pro', kimi: 'Moderato', zcode: 'GLM Coding Pro' };
+      status.plan = { name: data === 'unknown' ? null : data === 'free' ? 'Free' : examplePlans[id] || null, stale: data === 'stale' };
+    }
     if (id === 'claude') status.surfaces = { desktop: '测试 · 桌面版状态', terminal: '测试 · 终端版状态' };
     if (id === 'qwen' || id === 'workbuddy') {
       const empty = ['signed-out', 'unknown', 'error'].includes(data);

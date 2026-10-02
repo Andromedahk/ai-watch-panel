@@ -1,6 +1,6 @@
 {
   "name": "ai-watch-panel",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "A cross-platform vertical AI activity and quota panel",
   "private": true,
   "type": "module",
@@ -21,7 +21,8 @@
     "test:sort": "node scripts/verify-sort.mjs",
     "test:theme": "node scripts/verify-theme.mjs",
     "test:modules": "node scripts/verify-modules.mjs",
-    "test:credits": "node scripts/verify-credits.mjs"
+    "test:credits": "node scripts/verify-credits.mjs",
+    "test:plans": "node scripts/verify-plans.mjs"
   },
   "dependencies": {
     "big.js": "^7.0.1",

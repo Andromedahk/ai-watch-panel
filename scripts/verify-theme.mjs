@@ -81,10 +81,10 @@ try {
   await settings(); await page.getByRole('checkbox', { name: '测试模式', exact: true }).uncheck();
   await dark().click(); await theme('light');
   await expect(page.locator('.toast')).toBeHidden();
-  await page.locator('.appearance-settings').scrollIntoViewIfNeeded();
+  await page.getByRole('group', { name: '外观', exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'docs/screenshots/theme-settings-light.png' });
   await follow().click(); await expect(follow()).toBeChecked();
-  await page.locator('.appearance-settings').scrollIntoViewIfNeeded();
+  await page.getByRole('group', { name: '外观', exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'docs/screenshots/theme-settings.png' });
   assert.equal(await follow().evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag');
   const saved = JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8'));

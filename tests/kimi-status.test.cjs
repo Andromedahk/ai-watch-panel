@@ -5,10 +5,12 @@ const path = require('node:path');
 const os = require('node:os');
 const { EventEmitter } = require('node:events');
 const { PassThrough } = require('node:stream');
-const { KimiStatusReader, KimiError, resolveKimiPaths, normalizeKimiUsage, requestJson,
+const { KimiStatusReader, KimiError, resolveKimiPaths, normalizeKimiUsage, normalizeKimiPlan, requestJson,
   readOAuth, validInstance, SESSION_PATHS, GLOBAL_SLOT } = require('../electron/kimi-status.cjs');
 const now = Date.parse('2026-10-02T12:00:00Z');
 const usage = { usages: { limit_5h: { used_ratio: 0.3, reset_time: '2026-10-02T17:00:00Z' }, limit_7d: { used_ratio: '0.6' } } };
+const profile = { user_id: 'PRIVATE_USER', user_level_name: 'Moderato' };
+const createReader = options => new KimiStatusReader({ requestPlan: async () => profile, ...options });
 const processes = [{ pid: 123, command: '/fixture/kimi' }];
 async function fixture(t) {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-kimi-'));
@@ -47,7 +49,7 @@ test('Kimi accepts legacy official quota shape without converting missing values
   assert.deepEqual(quotas.map(q => [q.period, q.remaining]), [['1 周', 75], ['5 小时', 75]]);
 });
 test('Kimi missing installation is read-only, process alone is unknown, not running', async t => {
-  const f = await fixture(t); const reader = new KimiStatusReader({ home: f.home, env: {}, request: () => assert.fail('network must not be called') });
+  const f = await fixture(t); const reader = createReader({ home: f.home, env: {}, request: () => assert.fail('network must not be called') });
   assert.equal((await reader.poll([], now)).activity, 'offline');
   const result = await reader.poll(processes, now);
   assert.equal(result.activity, 'unknown'); assert.equal(result.activeTasks, 0); assert.deepEqual(result.quotas, []);
@@ -56,7 +58,7 @@ test('Kimi missing installation is read-only, process alone is unknown, not runn
 });
 test('Kimi uses this device OAuth, throttles usage, reports cache stale and clears logout data', async t => {
   const f = await fixture(t); const file = await f.login(); let calls = 0;
-  const reader = new KimiStatusReader({ home: f.home, env: {}, request: async args => {
+  const reader = createReader({ home: f.home, env: {}, request: async args => {
     calls++; assert.equal(args.hostname, 'api.kimi.com'); assert.equal(args.endpoint, '/coding/v1/usages');
     assert.equal(args.token, 'PRIVATE_TOKEN'); if (calls > 1) throw new KimiError('network'); return usage;
   } });
@@ -69,12 +71,12 @@ test('Kimi uses this device OAuth, throttles usage, reports cache stale and clea
 });
 test('Kimi account switch during request discards old quota', async t => {
   const f = await fixture(t); await f.login();
-  const reader = new KimiStatusReader({ home: f.home, env: {}, request: async () => { await f.login('PRIVATE_NEW'); return usage; } });
+  const reader = createReader({ home: f.home, env: {}, request: async () => { await f.login('PRIVATE_NEW'); return usage; } });
   assert.deepEqual((await reader.poll([], now)).quotas, []);
 });
 test('Kimi marks individual quota windows stale at reset while the usage cache remains fresh', async t => {
   const f = await fixture(t); await f.login(); let calls = 0;
-  const reader = new KimiStatusReader({ home: f.home, env: {}, request: async () => {
+  const reader = createReader({ home: f.home, env: {}, request: async () => {
     calls++; return { usages: {
       limit_5h: { used_ratio: 0.2, reset_time: new Date(now + 1000).toISOString() },
       limit_7d: { used_ratio: 0.4, reset_time: new Date(now - 1).toISOString() },
@@ -89,7 +91,7 @@ test('Kimi marks individual quota windows stale at reset while the usage cache r
 });
 test('Kimi rate limit cooldown survives repeated refreshes and never starts account renewal', async t => {
   const f = await fixture(t); const file = await f.login(); const before = await fs.readFile(file, 'utf8'); let calls = 0;
-  const reader = new KimiStatusReader({ home: f.home, env: {}, request: async () => { calls++; throw new KimiError('rate', 120000); } });
+  const reader = createReader({ home: f.home, env: {}, request: async () => { calls++; throw new KimiError('rate', 120000); } });
   await reader.poll([], now); await reader.poll([], now + 60000); await reader.poll([], now + 119999);
   assert.equal(calls, 1); await reader.poll([], now + 120000); assert.equal(calls, 2);
   assert.equal(await fs.readFile(file, 'utf8'), before);
@@ -117,7 +119,7 @@ test('Kimi reads legacy OAuth only while new home is absent and prevents symlink
 });
 test('Kimi uses live service activity with strict heartbeat/PID/port checks, no history guesses', async t => {
   const f = await fixture(t); await f.server(); let running = ['PRIVATE_SESSION']; let waiting = []; let calls = 0;
-  const reader = new KimiStatusReader({ home: f.home, env: {}, checkPort: async (pid, port) => pid === 123 && port === 34567,
+  const reader = createReader({ home: f.home, env: {}, checkPort: async (pid, port) => pid === 123 && port === 34567,
     request: async args => { calls++; assert.equal(args.token, 'PRIVATE_LOCAL_TOKEN'); assert.equal(args.hostname, '127.0.0.1'); return page(args.endpoint === SESSION_PATHS.running ? running : waiting); } });
   let result = await reader.poll(processes, now);
   assert.equal(result.activity, 'running'); assert.equal(result.activeTasks, 1); assert.equal(result.source, 'local-api');
@@ -131,17 +133,17 @@ test('Kimi uses live service activity with strict heartbeat/PID/port checks, no 
 });
 test('Kimi deduplicates active sessions across instances and refuses incomplete or invalid API data', async t => {
   const f = await fixture(t); await f.server(); await f.server('SERVER_TWO'); let incomplete = false;
-  const reader = new KimiStatusReader({ home: f.home, env: {}, checkPort: async () => true,
+  const reader = createReader({ home: f.home, env: {}, checkPort: async () => true,
     request: async args => incomplete ? { code: 0, data: { items: [], total: 2, has_more: true } } : page(args.endpoint === SESSION_PATHS.running ? ['same'] : []) });
   assert.equal((await reader.poll(processes, now)).activeTasks, 1);
   incomplete = true; const result = await reader.poll(processes, now); assert.equal(result.activity, 'unknown'); assert.equal(result.activeTasks, 0);
-  const wrongOwner = new KimiStatusReader({ home: f.home, env: {}, checkPort: async () => false, request: () => assert.fail('no request to unowned port') });
+  const wrongOwner = createReader({ home: f.home, env: {}, checkPort: async () => false, request: () => assert.fail('no request to unowned port') });
   assert.equal((await wrongOwner.poll(processes, now)).activity, 'unknown');
 });
 test('Kimi accepts official base64url server token with 0600 mode and rejects permissive or multiline tokens', async t => {
   const f = await fixture(t); await f.server(); const token = Buffer.alloc(32, 123).toString('base64url');
   const file = await f.write('.kimi-code/server.token', token); let calls = 0;
-  const reader = new KimiStatusReader({ home: f.home, env: {}, platform: 'darwin', checkPort: async () => true,
+  const reader = createReader({ home: f.home, env: {}, platform: 'darwin', checkPort: async () => true,
     request: async args => { calls++; assert.equal(args.token, token); return page([]); } });
   assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
   assert.equal((await reader.poll(processes, now)).activity, 'idle'); assert.equal(calls, 2);
@@ -181,4 +183,84 @@ test('Kimi total deadline stops a nonresponsive local service', async () => {
   const transport = { request() { const req = new EventEmitter(); req.end = () => {}; req.destroy = () => { destroyed = true; req.emit('close'); }; return req; } };
   await assert.rejects(requestJson({ hostname: '127.0.0.1', port: 123, endpoint: SESSION_PATHS.running, token: 'private' }, { transport, timeoutMs: 5 }), /network/);
   assert.equal(destroyed, true);
+});
+
+test('Kimi only displays allowlisted /me product names, never nickname or numeric levels', () => {
+  for (const name of ['Andante', 'Moderato', 'Allegretto', 'Allegro', 'Vivace', 'Plus', 'Pro', 'Max', 'Ultra']) {
+    assert.equal(normalizeKimiPlan({ ...profile, user_level_name: name }).name, name);
+  }
+  for (const payload of [
+    { ...profile, user_level_name: 'PRIVATE_PLAN', nickname: 'Pro' },
+    { user_id: 'PRIVATE', user_level: 30, nickname: 'Moderato' },
+    { ...profile, user_level_name: '__proto__' },
+  ]) assert.deepEqual(normalizeKimiPlan(payload), { name: null });
+  assert.throws(() => normalizeKimiPlan({ user_level_name: 'Pro' }), /format/);
+});
+test('Kimi queries the official profile independently and preserves usage on profile errors', async t => {
+  const f = await fixture(t); await f.login(); let profileCalls = 0; let quotaCalls = 0;
+  const reader = new KimiStatusReader({ home: f.home, env: {}, request: async args => {
+    assert.equal(args.hostname, 'api.kimi.com'); assert.equal(args.token, 'PRIVATE_TOKEN');
+    if (args.endpoint === '/coding/v1/usages') { quotaCalls++; return usage; }
+    assert.equal(args.endpoint, '/coding/v1/me');
+    if (++profileCalls > 1) throw new KimiError('network');
+    return { ...profile, nickname: 'PRIVATE_NICKNAME', email: 'PRIVATE_MAIL' };
+  } });
+  const result = await reader.poll([], now);
+  assert.deepEqual(result.plan, { name: 'Moderato', stale: false });
+  assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+  const old = await reader.poll([], now + 60000);
+  assert.deepEqual(old.plan, { name: 'Moderato', stale: true });
+  assert.equal(old.quotas[0].remaining, 70); assert.equal(old.quotas[0].stale, false);
+  assert.equal(old.connection, 'ready'); assert.equal(quotaCalls, 2); assert.equal(profileCalls, 2);
+});
+test('Kimi missing or unknown new product clears the old plan without hiding valid quota', async t => {
+  const f = await fixture(t); await f.login(); let current = profile;
+  const reader = createReader({ home: f.home, env: {}, request: async () => usage, requestPlan: async () => current });
+  assert.equal((await reader.poll([], now)).plan.name, 'Moderato');
+  current = { ...profile, user_level_name: 'PRIVATE_NEW_PLAN' };
+  const changed = await reader.poll([], now + 60000);
+  assert.equal(changed.plan.name, null); assert.equal(changed.plan.stale, false); assert.equal(changed.quotas[0].remaining, 70);
+});
+test('Kimi plan follows account changes, logout and authorization revocation', async t => {
+  const f = await fixture(t); const file = await f.login(); let next = profile;
+  const reader = createReader({ home: f.home, env: {}, request: async () => usage, requestPlan: async () => next });
+  assert.equal((await reader.poll([], now)).plan.name, 'Moderato');
+  await f.login('PRIVATE_NEW'); next = { ...profile, user_level_name: 'Pro' };
+  assert.equal((await reader.poll([], now + 1)).plan.name, 'Pro');
+  await fs.unlink(file); const out = await reader.poll([], now + 2);
+  assert.equal(out.plan.name, null); assert.deepEqual(out.quotas, []);
+  await f.login(); reader.requestPlan = async () => { throw new KimiError('login'); };
+  const denied = await reader.poll([], now + 3);
+  assert.equal(denied.plan.name, null); assert.deepEqual(denied.quotas, []); assert.equal(denied.connection, 'auth-required');
+});
+test('Kimi plan and quota are discarded together on an in-flight account change', async t => {
+  const f = await fixture(t); await f.login();
+  const reader = createReader({ home: f.home, env: {}, request: async () => usage,
+    requestPlan: async () => { await f.login('PRIVATE_NEW'); return profile; } });
+  const result = await reader.poll([], now);
+  assert.deepEqual(result.plan, { name: null }); assert.deepEqual(result.quotas, []);
+});
+test('Kimi profile rate limits preserve fresh usage and apply the server cooldown', async t => {
+  const f = await fixture(t); await f.login(); let calls = 0;
+  const reader = createReader({ home: f.home, env: {}, request: async () => { calls++; return usage; },
+    requestPlan: async () => { throw new KimiError('rate', 180000); } });
+  const first = await reader.poll([], now);
+  assert.equal(first.quotas[0].remaining, 70); assert.equal(first.plan.name, null);
+  await reader.poll([], now + 179999); assert.equal(calls, 1);
+  await reader.poll([], now + 180000); assert.equal(calls, 2);
+});
+test('Kimi profile transport accepts only the fixed official GET and rejects other profile endpoints', async () => {
+  const args = { hostname: 'api.kimi.com', endpoint: '/coding/v1/me', token: 'PRIVATE_TOKEN' };
+  assert.deepEqual(await requestJson(args, { transport: mockTransport(200, JSON.stringify(profile)) }), profile);
+  await assert.rejects(requestJson({ ...args, endpoint: '/coding/v1/me/update' }), /endpoint/);
+  await assert.rejects(requestJson({ ...args, hostname: 'api.other.invalid' }), /endpoint/);
+  await assert.rejects(requestJson(args, { transport: mockTransport(302, '') }), /network/);
+});
+
+test('Kimi valid plan remains available when the independent quota endpoint fails', async t => {
+  const f = await fixture(t); await f.login();
+  const reader = createReader({ home: f.home, env: {}, request: async () => { throw new KimiError('network'); } });
+  const result = await reader.poll([], now);
+  assert.deepEqual(result.plan, { name: 'Moderato', stale: false });
+  assert.deepEqual(result.quotas, []); assert.equal(result.source, 'account'); assert.equal(result.connection, 'ready');
 });

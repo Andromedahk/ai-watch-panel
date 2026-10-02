@@ -68,3 +68,57 @@ test('Claude Free-compatible missing records stay unknown, read-only and never u
     await fs.unlink(file); assert.deepEqual((await reader.poll([], now)).quotas, []);
   } finally { await fs.rm(home, { recursive: true, force: true }); }
 });
+
+test('Claude plan reads explicit login product fields only and never guesses from quota or account labels', () => {
+  const { normalizeClaudePlan } = require('../electron/claude-status.cjs');
+  const oauth = { accessToken: 'PRIVATE_TOKEN', expiresAt: now + 60000, subscriptionType: 'max', rateLimitTier: 'default_claude_max_5x' };
+  assert.equal(normalizeClaudePlan({ claudeAiOauth: oauth }, now).name, 'Max 5×');
+  assert.equal(normalizeClaudePlan({ claudeAiOauth: { ...oauth, rateLimitTier: 'default_claude_max_20x' } }, now).name, 'Max 20×');
+  for (const [type, name] of [['free', 'Free'], ['pro', 'Pro'], ['team', 'Team'], ['enterprise', 'Enterprise']]) {
+    assert.equal(normalizeClaudePlan({ claudeAiOauth: { ...oauth, subscriptionType: type } }, now).name, name);
+  }
+  for (const obj of [
+    { claudeAiOauth: { ...oauth, subscriptionType: 'PRIVATE_NAME' } },
+    { claudeAiOauth: { ...oauth, subscriptionType: '__proto__' } },
+    { claudeAiOauth: { ...oauth, subscriptionType: null } },
+    { claudeAiOauth: { ...oauth, expiresAt: now } },
+    { claudeAiOauth: { ...oauth, accessToken: '' } },
+    { oauthAccount: { displayName: 'Pro', hasExtraUsageEnabled: true } },
+  ]) assert.deepEqual(normalizeClaudePlan(obj, now), { name: null });
+  assert.doesNotMatch(JSON.stringify(normalizeClaudePlan({ claudeAiOauth: oauth }, now)), /PRIVATE/);
+});
+test('Claude file-backed plan is read-only, expires and clears immediately on logout or account switch', async t => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-claude-plan-'));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const reader = new ClaudeStatusReader({ home, env: {}, platform: 'darwin' });
+  const dir = reader.paths.config; await fs.mkdir(dir, { recursive: true });
+  const file = path.join(dir, '.credentials.json');
+  const put = async subscriptionType => {
+    const text = JSON.stringify({ claudeAiOauth: { accessToken: 'PRIVATE', refreshToken: 'PRIVATE_REFRESH', expiresAt: now + 7200000, subscriptionType } });
+    await fs.writeFile(file, text, { mode: 0o600 }); await fs.utimes(file, now / 1000, now / 1000); return text;
+  };
+  const before = await put('pro');
+  assert.deepEqual((await reader.poll([], now)).plan, { name: 'Pro', status: '终端登录', stale: false });
+  assert.equal(await fs.readFile(file, 'utf8'), before);
+  assert.deepEqual((await reader.poll([], now + 1800001)).plan, { name: 'Pro', status: '终端登录', stale: true });
+  await put('team'); assert.equal((await reader.poll([], now)).plan.name, 'Team');
+  await put('new-product'); assert.equal((await reader.poll([], now)).plan.name, null);
+  await put('max'); assert.equal((await reader.poll([], now + 7200000)).plan.name, null);
+  await fs.unlink(file); assert.equal((await reader.poll([], now)).plan.name, null);
+});
+test('Claude plan refuses permissive, symlinked, oversized or invalid login files', async t => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-claude-plan-'));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const reader = new ClaudeStatusReader({ home, env: {}, platform: 'darwin' });
+  await fs.mkdir(reader.paths.config, { recursive: true });
+  const file = path.join(reader.paths.config, '.credentials.json');
+  const text = JSON.stringify({ claudeAiOauth: { accessToken: 'PRIVATE', expiresAt: now + 100000, subscriptionType: 'pro' } });
+  await fs.writeFile(file, text, { mode: 0o644 });
+  assert.equal((await reader.poll([], now)).plan.name, null);
+  await fs.chmod(file, 0o600); await fs.writeFile(file, 'x'.repeat(65537));
+  assert.equal((await reader.poll([], now)).plan.name, null);
+  await fs.writeFile(file, '{broken'); assert.equal((await reader.poll([], now)).plan.name, null);
+  await fs.unlink(file);
+  const outside = path.join(home, 'other.json'); await fs.writeFile(outside, text, { mode: 0o600 });
+  await fs.symlink(outside, file); assert.equal((await reader.poll([], now)).plan.name, null);
+});

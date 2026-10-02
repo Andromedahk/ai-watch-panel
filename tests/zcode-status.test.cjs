@@ -102,3 +102,13 @@ test('ZCode metadata reader uses official SQLite schema and excludes content and
   const link = path.join(root, 'linked.sqlite'); await fs.symlink(file, link);
   await assert.rejects(readZcodeTurns({ file: link, root }));
 });
+
+test('ZCode telemetry and product-like user fields never imply a current subscription', async () => {
+  const rows = [turn({ status: 'completed', completed_at: NOW, plan: 'Pro', productName: 'PRIVATE_PRODUCT', user_info: { plan: 'Max' } })];
+  const reader = mock(rows);
+  for (const processes of [PROCESS, [], null]) {
+    const result = await reader.poll(processes, NOW);
+    assert.deepEqual(result.plan, { name: null });
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE_PRODUCT/);
+  }
+});

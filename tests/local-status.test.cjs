@@ -6,10 +6,41 @@ const os = require('node:os');
 const http = require('node:http');
 const { DatabaseSync } = require('node:sqlite');
 const { normalizeCodexRates, normalizeCodexActivity, normalizeAntigravityQuotas,
-  normalizeAntigravityActivity, ACTIVITY_FRESH_MS, QUOTA_FRESH_MS } = require('../electron/status-normalizers.cjs');
+  normalizeCodexPlan, normalizeAntigravityPlan, normalizeAntigravityActivity,
+  ACTIVITY_FRESH_MS, QUOTA_FRESH_MS } = require('../electron/status-normalizers.cjs');
 const { LocalStatusReader, readTail, postLocal } = require('../electron/local-status.cjs');
 const now = Date.parse('2026-10-02T00:00:00Z');
 const reset = (now + 3600000) / 1000;
+
+test('Codex plans use the main rate-limit bucket and whitelist exact product names', () => {
+  assert.deepEqual(normalizeCodexPlan({ plan_type: 'pro', email: 'PRIVATE' }, now, now),
+    { name: 'Pro', status: '本地快照', stale: false });
+  assert.equal(normalizeCodexPlan({ rateLimits: { planType: 'business' } }, now, now).name, 'Business');
+  assert.equal(normalizeCodexPlan({ rateLimitsByLimitId: { codex: { planType: 'plus' }, codex_reviews: { planType: 'pro' } } }, now, now).name, 'Plus');
+  assert.equal(normalizeCodexPlan({ rateLimitsByLimitId: { codex_reviews: { planType: 'pro' } } }, now, now).name, null);
+  for (const value of ['PRIVATE ACCOUNT', 'pro <script>', 'constructor', '__proto__', null, {}, 1]) {
+    const plan = normalizeCodexPlan({ plan_type: value }, now, now);
+    assert.equal(plan.name, null);
+    assert.ok(!JSON.stringify(plan).includes('PRIVATE'));
+  }
+  assert.equal(normalizeCodexPlan({ plan_type: 'pro' }, now - QUOTA_FRESH_MS - 1, now).stale, true);
+  assert.equal(normalizeCodexPlan({ plan_type: 'pro' }, now + 120001, now).stale, true);
+});
+
+test('Antigravity prefers explicit product tiers, never profile names or unknown fallback guesses', () => {
+  const payload = { userStatus: { name: 'PRIVATE ACCOUNT', email: 'PRIVATE',
+    userTier: { name: 'Google AI Ultra', description: 'PRIVATE' },
+    planStatus: { planInfo: { planName: 'Pro', teamsTier: 'TEAMS_TIER_PRO' } } } };
+  assert.deepEqual(normalizeAntigravityPlan(payload, now, now), { name: 'Google AI Ultra', stale: false });
+  payload.userStatus.userTier.name = 'PRIVATE ACCOUNT';
+  assert.equal(normalizeAntigravityPlan(payload, now, now).name, null);
+  delete payload.userStatus.userTier;
+  assert.equal(normalizeAntigravityPlan(payload, now, now).name, 'Pro');
+  delete payload.userStatus.planStatus;
+  assert.equal(normalizeAntigravityPlan(payload, now, now).name, null);
+  assert.equal(normalizeAntigravityPlan({ userStatus: { userTier: { name: 'constructor' } } }, now, now).name, null);
+  assert.equal(normalizeAntigravityPlan(payload, now - QUOTA_FRESH_MS - 1, now).stale, true);
+});
 
 test('Codex used percentages, snake/camel names, multi buckets, missing windows', () => {
   const quotas = normalizeCodexRates({ rateLimitsByLimitId: {
@@ -147,4 +178,88 @@ test('loopback RPC rejects oversized and stalled responses', async () => {
     await assert.rejects(postLocal(port, 'fixture-runtime-token', 'GetUserStatus'), /too large/);
     await assert.rejects(postLocal(port, 'fixture-runtime-token', 'GetAllCascadeTrajectories'), /timeout/);
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+});
+
+test('Codex latest snapshot replaces plan on account changes and clears absent or null entitlement', async () => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-codex-plan-'));
+  const codexHome = path.join(home, '.codex');
+  await fs.mkdir(codexHome);
+  const db = new DatabaseSync(path.join(codexHome, 'state_5.sqlite'));
+  try {
+    db.exec('CREATE TABLE threads (rollout_path TEXT, updated_at INTEGER)');
+    const file = path.join(codexHome, 'record.jsonl');
+    db.prepare('INSERT INTO threads VALUES (?,?)').run(file, 1);
+    const base = Date.now() - 10000;
+    let lines = '';
+    const reader = new LocalStatusReader({ home, codexHome });
+    const sample = async (rates, index) => {
+      lines += JSON.stringify({ timestamp: new Date(base + index * 1000).toISOString(), type: 'event_msg',
+        payload: { type: 'token_count', rate_limits: rates } }) + '\n';
+      await fs.writeFile(file, lines);
+      return reader.codex([], true);
+    };
+    assert.equal((await sample({ plan_type: 'pro' }, 0)).plan.name, 'Pro');
+    assert.equal((await sample({ plan_type: 'free' }, 1)).plan.name, 'Free');
+    assert.equal((await sample({ primary: { used_percent: 60, window_minutes: 300 } }, 2)).plan.name, null);
+    assert.equal((await sample({ plan_type: 'plus' }, 3)).plan.name, 'Plus');
+    const result = await sample(null, 4);
+    assert.equal(result.plan.name, null);
+    assert.ok(result.quotas.every(q => q.remaining === null));
+    await fs.unlink(file);
+    assert.equal((await reader.codex([], true)).plan.name, null);
+  } finally { db.close(); await fs.rm(home, { recursive: true, force: true }); }
+});
+
+function antigravityPlanFixture(home) {
+  let payload = { userStatus: { userTier: { name: 'Google AI Pro' } } };
+  let fail = false;
+  const reader = new LocalStatusReader({ home,
+    runCommand: async (command) => ({ stdout: command === 'ps' ? 'server --csrf_token fixture-token' : 'n127.0.0.1:43210\n' }),
+    requestLocal: async (_port, _token, method) => {
+      if (method === 'GetAllCascadeTrajectories') return { trajectorySummaries: {} };
+      if (fail) throw new Error('Unavailable fixture');
+      return payload;
+    },
+  });
+  return { reader, list: [{ pid: 123, command: '/app/Antigravity/language_server' }],
+    setPayload: value => { payload = value; }, setFail: value => { fail = value; } };
+}
+
+test('Antigravity reads plan without quota models and clears old account data on empty responses', async () => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-antigravity-plan-'));
+  try {
+    const f = antigravityPlanFixture(home);
+    const initial = await f.reader.antigravity(f.list, true);
+    assert.deepEqual(initial.plan, { name: 'Google AI Pro', stale: false });
+    assert.deepEqual(initial.quotas, []);
+    f.setPayload({ userStatus: { userTier: { name: 'Free' }, name: 'PRIVATE ACCOUNT' } });
+    const switched = await f.reader.antigravity(f.list, true);
+    assert.equal(switched.plan.name, 'Free');
+    assert.ok(!JSON.stringify(switched).includes('PRIVATE'));
+    f.setPayload({ userStatus: {} });
+    assert.equal((await f.reader.antigravity(f.list, true)).plan.name, null);
+    f.setPayload({ userStatus: { userTier: { name: 'Google AI Ultra' } } });
+    assert.equal((await f.reader.antigravity(f.list, true)).plan.name, 'Google AI Ultra');
+    f.setPayload({});
+    assert.equal((await f.reader.antigravity(f.list, true)).plan.name, null);
+    assert.equal(f.reader.antigravityRateCache, null);
+  } finally { await fs.rm(home, { recursive: true, force: true }); }
+});
+
+test('Antigravity plan is historical on service failure/offline and never crosses a restarted endpoint', async () => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-antigravity-stale-'));
+  try {
+    const f = antigravityPlanFixture(home);
+    await f.reader.antigravity(f.list, true);
+    f.setFail(true);
+    const failed = await f.reader.antigravity(f.list, true);
+    assert.equal(failed.plan.name, 'Google AI Pro');
+    assert.equal(failed.plan.stale, true);
+    f.setFail(false);
+    assert.equal((await f.reader.antigravity(f.list, true)).plan.stale, false);
+    assert.equal((await f.reader.antigravity([], true)).plan.stale, true);
+    f.setFail(true);
+    assert.equal((await f.reader.antigravity([{ ...f.list[0], pid: 124 }], true)).plan.name, null);
+    assert.equal(f.reader.antigravityRateCache, null);
+  } finally { await fs.rm(home, { recursive: true, force: true }); }
 });

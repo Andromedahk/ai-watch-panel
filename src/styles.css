@@ -232,18 +232,31 @@ legend { margin-bottom: 10px; color: var(--label); font-size: 12px; }
 .empty-providers button { padding: 9px; color: var(--control-text); background: var(--control-bg); border: 1px solid var(--control-border); border-radius: 6px; }
 .avatar[data-provider="qwen"], .hidden-activity-light[data-provider="qwen"] { --halo-color: #536fff; }
 .avatar[data-provider="workbuddy"], .hidden-activity-light[data-provider="workbuddy"] { --halo-color: #14c9a5; }
-.entitlement-content { display: flex; flex: 1; flex-direction: column; min-height: 0; gap: clamp(5px, .8vh, 10px); }
-.plan-summary { display: flex; align-items: center; justify-content: space-between; gap: 5px; padding-block: 3px; border-bottom: 1px solid var(--divider); font-size: clamp(9px, 4vw, 12px); color: var(--strong); }
-.plan-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.entitlement-content { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.plan-summary { display: flex; align-items: center; gap: 5px; max-width: 100%; margin-top: 3px; font-size: clamp(8px, 3.5vw, 10px); line-height: 1.4; color: var(--strong); }
+.plan-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .plan-status { flex-shrink: 0; font-size: 8px; color: var(--muted); }
-.credits-list { flex: 1; display: flex; flex-direction: column; justify-content: space-around; min-height: 0; gap: 6px; }
-.credit-item { min-height: 0; }
-.credit-label { font-size: clamp(8px, 3.7vw, 11px); color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.credit-amount { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; margin-top: 3px; }
+.credits-list { flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0; }
+.credit-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 1 1 0; min-height: 0; max-height: 54px; padding-block: 3px; }
+.credit-item + .credit-item { border-top: 1px solid var(--divider); }
+.credit-label { flex: 1; min-width: 0; font-size: clamp(8px, 3.7vw, 11px); line-height: 1.4; color: var(--label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.credit-amount { display: flex; align-items: baseline; justify-content: flex-end; gap: 4px; min-width: 0; max-width: 67%; white-space: nowrap; }
 .credit-amount > span, .credit-amount small { font-size: clamp(7px, 3vw, 9px); color: var(--muted); }
-.credit-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--accent-ink, var(--accent)); font: 500 clamp(12px, 7vw, 22px) ui-monospace, 'SF Mono', monospace; }
+.credit-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--accent-ink, var(--accent)); font: 500 clamp(12px, 7vw, 22px) ui-monospace, 'SF Mono', monospace; font-variant-numeric: tabular-nums; }
 .credit-item.is-stale .credit-value, .plan-summary.is-stale { color: var(--secondary); }
 .credits-empty { color: var(--muted); min-height: 0; }
 .credits-empty strong { display: block; font-size: clamp(9px, 4vw, 12px); font-weight: 500; }
 .credits-empty > span { display: block; margin-top: 5px; font-size: 22px; }
 .credits-empty p { font-size: clamp(7px, 3.3vw, 10px); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 5px 0 0; }
+
+@media (max-height: 1000px) {
+  .provider-card { gap: 7px; padding-block: 9px; }
+  .card-heading .avatar { width: clamp(24px, 4.5vh, 42px); height: clamp(24px, 4.5vh, 42px); }
+  .eyebrow { line-height: 1.25; }
+  .plan-summary { margin-top: 2px; font-size: 8px; line-height: 1.2; }
+  .plan-name { padding-block: 0; }
+  .quota-list { gap: 5px; }
+  .quota-label { margin-bottom: 3px; }
+  .credit-value { font-size: clamp(12px, 6vw, 18px); }
+  .task-line { padding-top: 6px; }
+}

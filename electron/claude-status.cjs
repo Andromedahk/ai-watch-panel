@@ -32,10 +32,41 @@ function isCodeProcess(command) {
   return /(?:^|[/\\])claude(?:\.exe)?$/.test(command)
     || /[/\\]claude[/\\]versions[/\\]\d+\.\d+\.\d+(?:\.exe)?$/.test(command);
 }
+function normalizeClaudePlan(payload, now) {
+  const oauth = payload?.claudeAiOauth;
+  // CLI file-backed login only. Desktop encrypted caches and ordinary quota history
+  // are not evidence of a current plan, and are never decrypted here.
+  if (!oauth || typeof oauth.accessToken !== 'string' || !oauth.accessToken
+    || !Number.isFinite(oauth.expiresAt) || oauth.expiresAt <= now) return { name: null };
+  const names = { free: 'Free', pro: 'Pro', max: 'Max', team: 'Team', enterprise: 'Enterprise' };
+  const type = typeof oauth.subscriptionType === 'string' ? oauth.subscriptionType.toLowerCase() : '';
+  let name = Object.hasOwn(names, type) ? names[type] : null;
+  if (type === 'max') {
+    if (oauth.rateLimitTier === 'default_claude_max_5x') name = 'Max 5×';
+    if (oauth.rateLimitTier === 'default_claude_max_20x') name = 'Max 20×';
+  }
+  return { name };
+}
+async function readClaudePlan(config, platform, now) {
+  const file = path.join(config, '.credentials.json');
+  try {
+    const stat = await fs.lstat(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || (platform !== 'win32' && (stat.mode & 0o077))) return { name: null };
+    const buffer = await boundedFile(file, config, 65536);
+    try {
+      const plan = normalizeClaudePlan(JSON.parse(buffer.toString('utf8')), now);
+      const latest = await fs.lstat(file);
+      if (latest.ino !== stat.ino || latest.size !== stat.size || latest.mtimeMs !== stat.mtimeMs) return { name: null };
+      return plan.name ? { ...plan, status: '终端登录', stale: stat.mtimeMs > now + 120000 || now - stat.mtimeMs > 1800000 } : plan;
+    }
+    finally { buffer.fill(0); }
+  } catch { return { name: null }; }
+}
 class ClaudeStatusReader {
-  constructor(options = {}) { this.paths = resolveClaudePaths(options); }
+  constructor(options = {}) { this.paths = resolveClaudePaths(options); this.platform = options.platform || process.platform; }
   async poll(processes, now = Date.now()) {
     const { desktop, config } = this.paths;
+    const plan = await readClaudePlan(config, this.platform, now);
     const desktopOpen = processes?.some(p => /(?:^|[/\\])Claude(?:\.exe)?$/.test(p.command)) || false;
     const codeProcesses = processes?.filter(p => isCodeProcess(p.command)) || [];
     const pids = new Set(codeProcesses.map(p => p.pid));
@@ -73,13 +104,14 @@ class ClaudeStatusReader {
     const task = activeTasks ? `${activeTasks} 项 Code 任务有近期活动` : waiting ? `${waiting} 项任务等待确认`
       : activity === 'idle' ? '已连接会话暂无运行任务' : activity === 'offline' ? 'Claude Code 未运行'
         : desktopOpen && !codeProcesses.length ? '桌面已打开 · 暂无 Code 状态' : 'Code 当前任务状态未知';
-    return { id: 'claude', source: usage || values.length ? 'cache' : 'unavailable',
+    return { id: 'claude', source: usage || values.length || plan.name ? 'cache' : 'unavailable',
       connection: processes === null ? 'error' : desktopOpen || codeProcesses.length ? 'ready' : 'offline',
-      activity, activeTasks, task, quotas: usage?.quotas || [], observedAt: usage?.observedAt || null,
+      activity, activeTasks, task, plan, quotas: usage?.quotas || [], observedAt: usage?.observedAt || null,
       surfaces, activityObservedAt: values.length ? new Date(Math.max(...values.map(s => s.at))).toISOString() : null,
       activityDetail: `${surfaces.desktop}；${surfaces.terminal}。只读会话登记并校验进程和十分钟时效；后台子任务不单独计数。`,
-      detail: usage?.quotas.length ? '桌面用量历史中的额度快照；未返回的窗口和重置时间不作推测。'
-        : '本地未提供 Code 额度。Free 账号不包含 Code 权限；普通聊天额度无法由这些记录读取。有可用记录后会自动识别。' };
+      detail: (usage?.quotas.length ? '桌面用量历史中的额度快照；未返回的窗口和重置时间不作推测。'
+        : '本地未提供 Code 额度；普通聊天额度无法由这些记录读取。有可用记录后会自动识别。')
+        + (plan.name ? '套餐来自文件型终端登录，可能与桌面账号不同；超过三十分钟标为历史。' : '当前没有可读套餐记录；不会由额度推断 Free 或付费档位，也不解密桌面登录缓存。') };
   }
 }
-module.exports = { ClaudeStatusReader, normalizeClaudeUsage, resolveClaudePaths, isCodeProcess };
+module.exports = { ClaudeStatusReader, normalizeClaudeUsage, normalizeClaudePlan, readClaudePlan, resolveClaudePaths, isCodeProcess };

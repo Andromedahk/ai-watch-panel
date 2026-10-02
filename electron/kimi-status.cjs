@@ -11,6 +11,7 @@ const execute = promisify(execFile);
 const MAX_BYTES = 128 * 1024;
 const HEARTBEAT_MS = 60000;
 const USAGE_PATH = '/coding/v1/usages';
+const PROFILE_PATH = '/coding/v1/me';
 const SESSION_PATHS = {
   running: '/api/v2/sessions?activity.status=running&fields=id%2Carchived&page_size=100',
   waiting: '/api/v2/sessions?activity.status=approval&activity.status=question&fields=id%2Carchived&page_size=100',
@@ -65,7 +66,7 @@ async function readOAuth(paths, env, platform, now) {
 function requestJson({ hostname, port, endpoint, token }, { transport, timeoutMs = 5000 } = {}) {
   const local = ['127.0.0.1', '::1'].includes(hostname);
   const valid = local ? Number.isInteger(port) && port > 0 && port <= 65535 && Object.values(SESSION_PATHS).includes(endpoint)
-    : ['api.kimi.com', 'api.kimi.ai'].includes(hostname) && port === undefined && endpoint === USAGE_PATH;
+    : ['api.kimi.com', 'api.kimi.ai'].includes(hostname) && port === undefined && [USAGE_PATH, PROFILE_PATH].includes(endpoint);
   if (!valid || !validToken(token)) return Promise.reject(new KimiError('endpoint'));
   return new Promise((resolve, reject) => {
     const request = (transport || (local ? http : https)).request({ protocol: local ? 'http:' : 'https:', hostname,
@@ -127,6 +128,14 @@ function normalizeKimiUsage(payload) {
   } else throw new KimiError('format');
   return quotas;
 }
+function normalizeKimiPlan(payload) {
+  // This is the official /me product field, never nickname, user ID or quota size.
+  if (!payload || typeof payload.user_id !== 'string' || !payload.user_id || payload.user_id.length > 256) throw new KimiError('format');
+  const names = new Map(['Free', 'Adagio', 'Andante', 'Moderato', 'Allegretto', 'Vivace', 'Allegro', 'Plus', 'Pro', 'Max', 'Ultra']
+    .map(name => [name.toLowerCase(), name]));
+  const value = typeof payload.user_level_name === 'string' ? payload.user_level_name.trim().toLowerCase() : '';
+  return { name: names.get(value) || null };
+}
 function isKimiProcess(command) { return /(?:^|[/\\])kimi(?:-code)?(?:\.exe)?$/i.test(command || ''); }
 function validInstance(row, name, processes, now) {
   return /^[A-Za-z0-9_-]{1,80}\.json$/.test(name) && row?.server_id === name.slice(0, -5)
@@ -162,27 +171,36 @@ const DETAILS = {
   rate: 'Kimi 账户服务要求稍后重试。',
 };
 class KimiStatusReader {
-  constructor({ home = os.homedir(), env = process.env, platform = process.platform, request = requestJson, checkPort = ownsPort } = {}) {
+  constructor({ home = os.homedir(), env = process.env, platform = process.platform, request = requestJson, requestPlan = request, checkPort = ownsPort } = {}) {
     this.paths = resolveKimiPaths({ home, env, platform }); this.env = env; this.platform = platform;
-    this.request = request; this.checkPort = checkPort; this.cache = null; this.identity = null; this.nextAt = 0; this.error = 'login'; this.pending = null;
+    this.request = request; this.requestPlan = requestPlan; this.checkPort = checkPort;
+    this.cache = null; this.planCache = null; this.planError = null; this.identity = null; this.nextAt = 0; this.error = 'login'; this.pending = null;
   }
   async usage(now) {
     let grant;
     try { grant = await readOAuth(this.paths, this.env, this.platform, now); }
-    catch (error) { this.cache = null; this.identity = null; this.nextAt = 0; this.error = error.code || 'unreadable'; return; }
-    if (this.identity !== grant.identity) { this.identity = grant.identity; this.cache = null; this.nextAt = 0; }
+    catch (error) { this.cache = null; this.planCache = null; this.planError = null; this.identity = null; this.nextAt = 0; this.error = error.code || 'unreadable'; return; }
+    if (this.identity !== grant.identity) { this.identity = grant.identity; this.cache = null; this.planCache = null; this.planError = null; this.nextAt = 0; }
     if (now < this.nextAt) return;
-    let result; let failure;
-    try { result = normalizeKimiUsage(await this.request({ hostname: grant.host, endpoint: USAGE_PATH, token: grant.token })); }
-    catch (error) { failure = error instanceof KimiError ? error : new KimiError('network'); }
+    // A profile failure must not hide valid usage, or vice versa. Neither query renews a login.
+    const [usage, profile] = await Promise.allSettled([
+      Promise.resolve().then(() => this.request({ hostname: grant.host, endpoint: USAGE_PATH, token: grant.token })).then(normalizeKimiUsage),
+      Promise.resolve().then(() => this.requestPlan({ hostname: grant.host, endpoint: PROFILE_PATH, token: grant.token })).then(normalizeKimiPlan),
+    ]);
+    const failure = usage.status === 'rejected' ? usage.reason instanceof KimiError ? usage.reason : new KimiError('network') : null;
+    const planFailure = profile.status === 'rejected' ? profile.reason instanceof KimiError ? profile.reason : new KimiError('network') : null;
     // Discard a result if another client changed the login while it was in flight.
     try {
       const latest = await readOAuth(this.paths, this.env, this.platform, now);
       if (latest.identity !== grant.identity) throw new KimiError('login');
-    } catch (error) { this.cache = null; this.identity = null; this.nextAt = 0; this.error = error.code || 'login'; return; }
-    this.nextAt = now + (failure?.retryMs || 60000); this.error = failure?.code || null;
-    if (!failure) this.cache = { quotas: result, at: now };
-    else if (failure.code === 'login') this.cache = null;
+    } catch (error) { this.cache = null; this.planCache = null; this.planError = null; this.identity = null; this.nextAt = 0; this.error = error.code || 'login'; return; }
+    this.nextAt = now + Math.max(failure?.retryMs || 60000, planFailure?.retryMs || 60000);
+    this.error = failure?.code || null; this.planError = planFailure?.code || null;
+    if (failure?.code === 'login' || planFailure?.code === 'login') {
+      this.cache = null; this.planCache = null; this.error = 'login'; return;
+    }
+    if (!failure) this.cache = { quotas: usage.value, at: now };
+    if (!planFailure) this.planCache = { plan: profile.value, at: now };
   }
   async activity(processes, now) {
     const fallback = { activity: processes === null ? 'unknown' : processes.some(p => isKimiProcess(p.command)) ? 'unknown' : 'offline', activeTasks: 0, waitingTasks: 0, live: false };
@@ -227,18 +245,22 @@ class KimiStatusReader {
   async collect(processes, now) {
     const [activity] = await Promise.all([this.activity(processes, now), this.usage(now)]);
     const stale = Boolean(this.error) || Boolean(this.cache && now - this.cache.at > 120000);
-    return { id: 'kimi', source: this.cache ? stale ? 'cache' : 'account' : activity.live ? 'local-api' : 'unavailable',
-      connection: activity.live || (this.cache && !stale) ? 'ready' : ['login', 'expired'].includes(this.error) ? 'auth-required' : this.error ? 'error' : 'offline',
+    const planStale = Boolean(this.planError) || Boolean(this.planCache && now - this.planCache.at > 120000);
+    return { id: 'kimi', source: this.cache ? stale ? 'cache' : 'account'
+      : this.planCache ? planStale ? 'cache' : 'account' : activity.live ? 'local-api' : 'unavailable',
+      connection: activity.live || (this.cache && !stale) || (this.planCache && !planStale) ? 'ready' : ['login', 'expired'].includes(this.error) ? 'auth-required' : this.error ? 'error' : 'offline',
       activity: activity.activity, activeTasks: activity.activeTasks, waitingTasks: activity.waitingTasks,
       task: activity.activeTasks ? `${activity.activeTasks} 项 Kimi 任务正在运行` : activity.waitingTasks ? `${activity.waitingTasks} 项任务等待回应`
         : activity.activity === 'idle' ? 'Kimi 本机服务暂无运行任务' : activity.activity === 'offline' ? 'Kimi Code 未运行' : 'Kimi 当前任务状态未知',
       quotas: (this.cache?.quotas || []).map(q => ({ ...q, stale: stale || Boolean(q.reset && Date.parse(q.reset) <= now) })),
+      plan: this.planCache ? { ...this.planCache.plan, stale: planStale } : { name: null },
       observedAt: this.cache ? new Date(this.cache.at).toISOString() : null,
       sampledAt: new Date(now).toISOString(), activityObservedAt: activity.live ? new Date(now).toISOString() : null,
-      detail: this.error ? DETAILS[this.error] || DETAILS.unreadable : '使用本设备 Kimi OAuth 登录态，每分钟只读查询官方额度；未返回的窗口保持未知。',
+      detail: this.error ? DETAILS[this.error] || DETAILS.unreadable : '使用本设备 Kimi OAuth 登录态，每分钟只读查询官方额度和套餐；未返回的字段保持未知。'
+        + (this.planError ? '套餐查询暂时失败，已有套餐仅作历史快照。' : ''),
       activityDetail: activity.live ? '读取本机 Kimi 服务的实时任务状态；校验进程、监听端口及一分钟内的心跳，不读取对话正文。'
         : '未发现可验证的本机 Kimi 服务；普通终端会话和旧版 CLI 的任务状态暂不可读，进程存在不代表正在运行。' };
   }
 }
-module.exports = { KimiStatusReader, KimiError, resolveKimiPaths, normalizeKimiUsage, requestJson, readOAuth,
-  isKimiProcess, validInstance, sessionIds, SESSION_PATHS, GLOBAL_SLOT };
+module.exports = { KimiStatusReader, KimiError, resolveKimiPaths, normalizeKimiUsage, normalizeKimiPlan, requestJson, readOAuth,
+  isKimiProcess, validInstance, sessionIds, SESSION_PATHS, PROFILE_PATH, GLOBAL_SLOT };

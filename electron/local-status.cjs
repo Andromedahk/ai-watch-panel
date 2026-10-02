@@ -14,7 +14,7 @@ const { QwenStatusReader } = require('./qwen-status.cjs');
 const { WorkBuddyStatusReader } = require('./workbuddy-status.cjs');
 const execute = promisify(execFile);
 const { normalizeCodexRates, unknownCodexQuotas, normalizeAntigravityQuotas,
-  normalizeCodexActivity, normalizeAntigravityActivity } = require('./status-normalizers.cjs');
+  normalizeCodexPlan, normalizeAntigravityPlan, normalizeCodexActivity, normalizeAntigravityActivity } = require('./status-normalizers.cjs');
 
 const SERVICE = '/exa.language_server_pb.LanguageServerService/';
 const METHODS = new Set(['GetUserStatus', 'GetAllCascadeTrajectories']);
@@ -81,13 +81,15 @@ class LocalStatusReader {
     deepseekReader = new DeepSeekBalanceReader({ home }),
     deepseekActivityReader = new DeepSeekActivityReader({ home }), claudeReader = new ClaudeStatusReader({ home }),
     zcodeReader = new ZcodeStatusReader({ home }), kimiReader = new KimiStatusReader({ home }),
-    qwenReader = new QwenStatusReader({ home }), workbuddyReader = new WorkBuddyStatusReader({ home }) } = {}) {
+    qwenReader = new QwenStatusReader({ home }), workbuddyReader = new WorkBuddyStatusReader({ home }),
+    runCommand = execute, requestLocal = postLocal } = {}) {
     this.home = home;
     this.codexHome = codexHome;
     this.codexAttention = new CodexAttentionReader({ codexHome });
     this.antigravityHome = path.join(home, '.gemini', 'antigravity');
     this.codexRateCache = null;
     this.antigravityRateCache = null;
+    this.runCommand = runCommand; this.requestLocal = requestLocal;
     this.deepseekReader = deepseekReader;
     this.deepseekActivityReader = deepseekActivityReader;
     this.claudeReader = claudeReader;
@@ -153,11 +155,12 @@ class LocalStatusReader {
             if (!line.includes('token_count') || !line.includes('rate_limits')) continue;
             let event;
             try { event = JSON.parse(line); } catch { continue; }
-            if (event.type !== 'event_msg' || event.payload?.type !== 'token_count' || !event.payload.rate_limits) continue;
+            if (event.type !== 'event_msg' || event.payload?.type !== 'token_count' || !Object.hasOwn(event.payload, 'rate_limits')) continue;
             const at = Date.parse(event.timestamp);
-            if (Number.isFinite(at) && at <= now + 120000 && (!newest || at > newest.at)) {
-              // Discard tokens, costs, credits, account data, and conversation content.
-              newest = { at, quotas: normalizeCodexRates(event.payload.rate_limits, at, now) };
+            if (Number.isFinite(at) && at <= now + 120000 && (!newest || at >= newest.at)) {
+              // Keep only normalized allowances and an allowlisted plan name.
+              newest = { at, quotas: normalizeCodexRates(event.payload.rate_limits, at, now),
+                plan: normalizeCodexPlan(event.payload.rate_limits, at, now) };
             }
           }
         } catch { /* A session can disappear while the app rotates its files. */ }
@@ -184,20 +187,24 @@ class LocalStatusReader {
     }
     if (list === null) Object.assign(activity, { activity: 'unknown', task: '进程状态暂不可读' });
     return { id: 'codex', source: cached ? 'cache' : 'unavailable', connection: list === null ? 'error' : detected ? 'ready' : 'offline',
-      ...activity, quotas, observedAt: cached ? new Date(cached.at).toISOString() : null,
+      ...activity, quotas, plan: cached ? { ...cached.plan, stale: cached.plan.stale || now - cached.at > 1800000 }
+        : normalizeCodexPlan(null, null, now), observedAt: cached ? new Date(cached.at).toISOString() : null,
       attentionAvailable: attention.connected && attention.observedThreads > 0,
       activityDetail: attention.connected && attention.observedThreads > 0 ? '通过 Codex 本地客户端状态通道监看待回答与待授权请求；红灯优先，处理后自动恢复。' : '任务活动来自本地记录；等待提醒通道暂不可用，不能确认是否有待回答或待授权请求。',
-      detail: '只读本地额度快照与任务记录；十分钟无活动的未结束任务不显示为运行中。缺少的额度窗口显示未知。' };
+      detail: '套餐与额度来自同一条本地快照，不能仅凭快照确认当前登录账号；最新记录缺少套餐时显示未知。十分钟无活动的未结束任务不显示为运行中。' };
   }
   async antigravity(list, force) {
     const now = Date.now();
     const service = list?.find(({ command }) => /antigravity/i.test(command) && /(?:^|\/)language_server(?:\.exe)?$/.test(command));
     let rows = null; let source = 'unavailable'; let live = false;
+    if (service && this.antigravityRateCache && !this.antigravityRateCache.endpoint.startsWith(`${service.pid}:`)) {
+      this.antigravityRateCache = null;
+    }
     if (service) {
       try {
-        const { stdout } = await execute('ps', ['-p', String(service.pid), '-o', 'args='], { timeout: 2000, maxBuffer: 65536 });
+        const { stdout } = await this.runCommand('ps', ['-p', String(service.pid), '-o', 'args='], { timeout: 2000, maxBuffer: 65536 });
         const token = stdout.match(/(?:^|\s)--csrf_token(?:=|\s+)([^\s]+)/)?.[1];
-        const listeners = await execute('lsof', ['-nP', '-a', '-p', String(service.pid), '-iTCP', '-sTCP:LISTEN', '-F', 'n'], { timeout: 2000, maxBuffer: 32768 });
+        const listeners = await this.runCommand('lsof', ['-nP', '-a', '-p', String(service.pid), '-iTCP', '-sTCP:LISTEN', '-F', 'n'], { timeout: 2000, maxBuffer: 32768 });
         const ownedPorts = [...new Set(listeners.stdout.split('\n').flatMap((line) => {
           const match = line.match(/^n(?:127\.0\.0\.1|\[::1\]|\*|localhost):(\d+)$/);
           return match ? [Number(match[1])] : [];
@@ -218,17 +225,24 @@ class LocalStatusReader {
           const cached = this.antigravityRateCache;
           const needQuota = force || !cached || cached.endpoint !== endpoint || now - cached.at >= 30000;
           const replies = await Promise.allSettled([
-            postLocal(port, token, 'GetAllCascadeTrajectories'),
-            needQuota ? postLocal(port, token, 'GetUserStatus') : Promise.resolve(null),
+            this.requestLocal(port, token, 'GetAllCascadeTrajectories'),
+            needQuota ? this.requestLocal(port, token, 'GetUserStatus') : Promise.resolve(null),
           ]);
           if (replies[0].status === 'fulfilled' && replies[0].value?.trajectorySummaries && typeof replies[0].value.trajectorySummaries === 'object') {
             rows = Object.values(replies[0].value.trajectorySummaries).slice(0, 200).map((row) => ({ status: row?.status }));
             live = true; source = 'local-api';
           }
           let quotaRead = false;
-          if (replies[1].status === 'fulfilled' && replies[1].value) {
-            const quotas = normalizeAntigravityQuotas(replies[1].value, now, now);
-            if (quotas.length) { this.antigravityRateCache = { at: now, endpoint, quotas }; quotaRead = true; }
+          if (needQuota && replies[1].status === 'fulfilled') {
+            const payload = replies[1].value;
+            // A successful response with no entitlement clears the previous account's data.
+            if (payload?.userStatus && typeof payload.userStatus === 'object' && !Array.isArray(payload.userStatus)) {
+              this.antigravityRateCache = { at: now, endpoint, quotas: normalizeAntigravityQuotas(payload, now, now),
+                plan: normalizeAntigravityPlan(payload, now, now), readFailed: false };
+              quotaRead = true; source = 'local-api';
+            } else this.antigravityRateCache = null;
+          } else if (needQuota && this.antigravityRateCache?.endpoint === endpoint) {
+            this.antigravityRateCache.readFailed = true;
           }
           if (live || quotaRead) {
             this.antigravityEndpoint = { pid: service.pid, port };
@@ -237,7 +251,10 @@ class LocalStatusReader {
           }
         }
         // The runtime token and raw provider payloads are neither retained nor sent to the renderer.
-      } catch { /* Fall back to allowlisted SQLite metadata if the service changes. */ }
+      } catch {
+        if (this.antigravityRateCache) this.antigravityRateCache.readFailed = true;
+        // Fall back to allowlisted SQLite metadata if the service changes.
+      }
     }
     if (!rows) {
       try {
@@ -249,7 +266,7 @@ class LocalStatusReader {
       } catch { /* Missing data remains explicitly unknown. */ }
     }
     const cached = this.antigravityRateCache;
-    const quotas = cached?.quotas.map((quota) => ({ ...quota, stale: !service || quota.stale
+    const quotas = cached?.quotas.map((quota) => ({ ...quota, stale: !service || cached.readFailed || quota.stale
       || now - cached.at > 1800000 || Boolean(quota.reset && Date.parse(quota.reset) <= now) })) || [];
     const activity = normalizeAntigravityActivity(rows, Boolean(service));
     if (service && source === 'cache' && activity.activity === 'idle') {
@@ -257,8 +274,9 @@ class LocalStatusReader {
     }
     if (list === null) Object.assign(activity, { activity: 'unknown', task: '进程状态暂不可读' });
     return { id: 'antigravity', source, connection: list === null ? 'error' : live ? 'ready' : service ? 'error' : 'offline',
-      ...activity, quotas, observedAt: cached ? new Date(cached.at).toISOString() : null,
-      detail: live ? '读取正在运行的本地服务。额度按服务返回的模型列出，未返回的周期不作推测。'
+      ...activity, quotas, plan: cached ? { ...cached.plan, stale: !service || cached.readFailed || cached.plan.stale || now - cached.at > 1800000 }
+        : normalizeAntigravityPlan(null, null, now), observedAt: cached ? new Date(cached.at).toISOString() : null,
+      detail: live ? '套餐与额度来自正在运行的本地服务，只显示已识别的产品档位；未返回的套餐与周期不作推测。'
         : '本地服务未连接；尝试只读任务缓存，历史运行标记不作为当前运行证据。' };
   }
 }

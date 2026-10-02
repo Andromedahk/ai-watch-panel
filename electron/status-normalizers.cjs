@@ -9,6 +9,35 @@ const timestamp = (value) => {
 const text = (value, fallback) => typeof value === 'string' && value.trim()
   ? value.replace(/[\x00-\x1f\x7f]/g, '').slice(0, 96) : fallback;
 const percentage = (value) => value === null ? null : Math.round(Math.min(100, Math.max(0, value)) * 10) / 10;
+const CODEX_PLANS = Object.freeze({ free: 'Free', go: 'Go', plus: 'Plus', pro: 'Pro',
+  team: 'Team', business: 'Business', enterprise: 'Enterprise', edu: 'Edu' });
+const ANTIGRAVITY_PLANS = Object.freeze({ free: 'Free', pro: 'Pro', ultra: 'Ultra',
+  teams: 'Teams', enterprise: 'Enterprise', 'google ai plus': 'Google AI Plus',
+  'google ai pro': 'Google AI Pro', 'google ai ultra': 'Google AI Ultra' });
+function planName(value, names) {
+  if (typeof value !== 'string' || value.length > 48) return null;
+  const key = value.trim().toLowerCase();
+  return Object.hasOwn(names, key) ? names[key] : null;
+}
+function snapshotStale(observedAt, now) {
+  const observed = timestamp(observedAt);
+  return !observed || now - observed > QUOTA_FRESH_MS || observed > now + 120000;
+}
+function normalizeCodexPlan(payload, observedAt, now = Date.now()) {
+  // Review/other buckets can have a different entitlement. Only the main bucket is authoritative.
+  const bucket = payload?.rateLimitsByLimitId && typeof payload.rateLimitsByLimitId === 'object'
+    ? payload.rateLimitsByLimitId.codex : payload?.rateLimits || payload;
+  return { name: planName(bucket?.plan_type ?? bucket?.planType, CODEX_PLANS),
+    status: '本地快照', stale: snapshotStale(observedAt, now) };
+}
+function normalizeAntigravityPlan(payload, observedAt, now = Date.now()) {
+  const status = payload?.userStatus;
+  // Never read userStatus.name: it is the user's identity, not the product name.
+  // If a newer tier is present but unknown, don't replace it with an older generic plan.
+  const value = status?.userTier && Object.hasOwn(status.userTier, 'name')
+    ? status.userTier.name : status?.planStatus?.planInfo?.planName;
+  return { name: planName(value, ANTIGRAVITY_PLANS), stale: snapshotStale(observedAt, now) };
+}
 function period(minutes) {
   if (minutes === 10080) return '1 周';
   if (minutes && minutes % 60 === 0) return `${minutes / 60} 小时`;
@@ -88,4 +117,5 @@ function normalizeAntigravityActivity(rows, processRunning) {
   return { activity: 'idle', activeTasks: 0, task: '本地服务中暂无运行任务' };
 }
 module.exports = { ACTIVITY_FRESH_MS, QUOTA_FRESH_MS, normalizeCodexRates, unknownCodexQuotas,
-  normalizeAntigravityQuotas, normalizeCodexActivity, normalizeAntigravityActivity };
+  normalizeCodexPlan, normalizeAntigravityPlan, normalizeAntigravityQuotas,
+  normalizeCodexActivity, normalizeAntigravityActivity };
