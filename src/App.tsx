@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
 import { providers } from './data';
-import type { LocalStatus, PanelState, Preferences, Provider, ProviderId, Quota } from './types';
+import Big from 'big.js';
+import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provider, ProviderId, Quota } from './types';
 
 const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
@@ -18,6 +19,28 @@ function Avatar({ provider, image }: { provider: Provider; image?: string }) {
     {failed ? <span>{provider.name.slice(0, 1)}</span> : <img src={image || `./${provider.image}`} alt={`${provider.name} 助手图片`} onError={() => setFailed(true)} />}
   </div>;
 }
+function money(value: string) {
+  const number = new Big(value);
+  if (number.gt(0) && number.lt('0.01')) return '<0.01';
+  if (number.lt(0) && number.gt('-0.01')) return '−<0.01';
+  return number.toFixed(2);
+}
+function BalanceCard({ local }: { local: LocalProviderStatus }) {
+  const wallets = local.balance?.wallets || [];
+  const [page, setPage] = useState(0);
+  const current = Math.min(page, Math.max(0, wallets.length - 1));
+  const wallet = wallets[current];
+  const stale = local.balance?.stale;
+  return <div className="balance-content" aria-label="DeepSeek 账户余额">
+    {wallet ? <>
+      <div className="balance-caption"><span>{stale ? '历史余额 · 待更新' : '账户可用余额'}</span>
+        {wallets.length > 1 && <button className="currency-switch" onClick={() => setPage((current + 1) % wallets.length)} aria-label="切换余额币种">{wallet.currency} ↔</button>}
+      </div>
+      <div className={`balance-total ${stale ? 'is-stale' : ''}`} title={`${wallet.currency} ${wallet.total}`}><small>{wallet.currency === 'CNY' ? '¥' : '$'}</small><strong>{money(wallet.total)}</strong><span>{wallet.currency}</span></div>
+      <div className="balance-parts"><span>现金 <b title={wallet.paid}>{money(wallet.paid)}</b></span><span>赠送 <b title={wallet.bonus}>{money(wallet.bonus)}</b></span></div>
+    </> : <div className="balance-empty"><strong>{local.connection === 'auth-required' ? '等待 Harness 登录' : local.connection === 'ready' ? '暂无钱包记录' : '余额暂不可用'}</strong><p>{local.detail}</p></div>}
+  </div>;
+}
 function ProviderCard({ provider, index, image }: { provider: Provider; index: number; image?: string }) {
   const [page, setPage] = useState(0);
   const pages = Math.max(1, Math.ceil(provider.quotas.length / 3));
@@ -26,8 +49,10 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
   const quotas = provider.quotas.length ? provider.quotas.slice(currentPage * 3, currentPage * 3 + 3)
     : [{ model: '模型额度', period: '尚未读取', remaining: null, reset: '' }];
   const local = provider.local;
+  const isBalance = local?.id === 'deepseek';
   const source = !local ? '演示' : local.connection === 'offline' ? '未运行'
-    : local.source === 'local-api' ? '本地服务' : local.source === 'cache' ? '本地记录' : '未连接';
+    : local.connection === 'auth-required' ? '待登录' : local.source === 'account' ? '账号余额'
+    : local.source === 'local-api' ? '本地服务' : local.source === 'cache' ? isBalance ? '历史记录' : '本地记录' : '未连接';
   const phase = !local ? provider.running ? '演示运行' : '演示待机'
     : { running: '运行中', idle: '待机', unknown: '未知', offline: '离线' }[local.activity];
   const time = local?.observedAt ? new Date(local.observedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
@@ -44,13 +69,13 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
     <div className="quota-area">
       <div className="quota-tools">
         <span className={`source-tag ${local ? 'local' : ''}`} title={local ? `${local.detail}${local.observedAt ? ` 额度记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}` : '仅用于布局的演示数据'}>{source}</span>
-        {pages > 1 ? <div className="quota-pagination" aria-label={`${provider.name} 额度分页`}>
+        {!isBalance && pages > 1 ? <div className="quota-pagination" aria-label={`${provider.name} 额度分页`}>
           <button aria-label={`${provider.name} 上一页额度`} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={11} /></button>
           <span title={`共 ${provider.quotas.length} 个模型额度`}>{currentPage + 1}/{pages}</span>
           <button aria-label={`${provider.name} 下一页额度`} disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight size={11} /></button>
-        </div> : <span className="quota-time" title={local?.observedAt ? `额度记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}>{local ? time ? `记录 ${time}` : '额度未知' : '示例额度'}</span>}
+        </div> : <span className="quota-time" title={local?.observedAt ? `记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}>{local ? time ? `记录 ${time}` : isBalance ? '自动识别登录态' : '额度未知' : '示例额度'}</span>}
       </div>
-      <div className="quota-list" aria-label={`${local ? '本地' : '演示'}剩余额度`}>
+      {isBalance ? <BalanceCard local={local} /> : <div className="quota-list" aria-label={`${local ? '本地' : '演示'}剩余额度`}>
         {quotas.map((quota, row) => {
           const known = quota.remaining !== null && !quota.stale;
           return <div className={`quota ${known ? '' : 'quota-unknown'}`} key={`${quota.model}:${quota.period}:${row}`} title={quotaTitle(quota)}>
@@ -60,7 +85,7 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
             </div>
           </div>;
         })}
-      </div>
+      </div>}
     </div>
     <div className="task-line" title={local?.detail}><span className={`status-dot ${provider.running ? 'active' : ''} ${local?.activity === 'unknown' ? 'unknown' : ''}`} /><span>{provider.task}</span><span className="task-status">{phase}</span></div>
   </section>;
@@ -78,7 +103,7 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const targetImage = useRef<ProviderId>('claude');
   const visibleProviders = providers.map((provider) => {
-    if (!state.desktop || (provider.id !== 'codex' && provider.id !== 'antigravity')) return provider;
+    if (!state.desktop || provider.id === 'claude') return provider;
     const local = localStatus?.[provider.id];
     return { ...provider, running: local?.activity === 'running', task: local?.task || '正在读取本地状态',
       quotas: local?.quotas || [], local: local || { id: provider.id, source: 'unavailable' as const,
@@ -181,7 +206,7 @@ export default function App() {
     } catch { setNotice('无法读取这张图片'); }
   }
 
-  return <main className={`panel ${state.collapsed ? 'collapsed' : ''} ${!state.animate ? 'no-animation' : ''}`}>
+  return <main data-sampled-at={localStatus?.sampledAt || ''} className={`panel ${state.collapsed ? 'collapsed' : ''} ${!state.animate ? 'no-animation' : ''}`}>
     {state.collapsed ? <aside className="collapsed-rail" aria-label="收起的监看面板">
       <div className="rail-grip"><GripVertical size={15} /></div>
       <button className="rail-expand" title="展开面板" aria-label="展开面板" onClick={() => collapse(false)}>{state.side === 'right' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}</button>
@@ -217,8 +242,8 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.2</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。</p><p>Claude Code 与 DeepSeek 仍为演示数据。顶部运行数只统计本地接入的任务。浏览器预览全部使用示例。</p>
-          {localStatus && <>{(['codex', 'antigravity'] as const).map((id) => <p key={id}><b>{id === 'codex' ? 'Codex' : 'Antigravity'}</b><br />{localStatus[id].detail}<br />{localStatus[id].observedAt ? `额度记录：${new Date(localStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用额度记录'}</p>)}</>}
+        <div className="settings-note"><span className="note-title">本地状态 · v0.3</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude Code 仍为演示数据，DeepSeek 任务状态尚未接入。顶部运行数只统计已接入任务。浏览器预览全部使用示例。</p>
+          {localStatus && <>{(['codex', 'antigravity', 'deepseek'] as const).map((id) => <p key={id}><b>{id === 'codex' ? 'Codex' : id === 'deepseek' ? 'DeepSeek Harness' : 'Antigravity'}</b><br />{localStatus[id].detail}<br />{localStatus[id].observedAt ? `记录时间：${new Date(localStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>
       <div className="settings-footer"><button className="save-button" onClick={saveSettings}><Check size={15} />保存配置</button>{state.desktop && <button className="quit-button" onClick={() => window.panel?.quit()}>退出面板</button>}</div>

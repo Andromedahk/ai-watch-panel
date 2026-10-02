@@ -4,6 +4,7 @@ const os = require('node:os');
 const http = require('node:http');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const { DeepSeekBalanceReader } = require('./deepseek-status.cjs');
 const execute = promisify(execFile);
 const { normalizeCodexRates, unknownCodexQuotas, normalizeAntigravityQuotas,
   normalizeCodexActivity, normalizeAntigravityActivity } = require('./status-normalizers.cjs');
@@ -69,13 +70,15 @@ function unavailable(id) {
     observedAt: null, sampledAt: null, detail: '等待首次读取' };
 }
 class LocalStatusReader {
-  constructor({ home = os.homedir(), codexHome = process.env.CODEX_HOME || path.join(home, '.codex') } = {}) {
+  constructor({ home = os.homedir(), codexHome = process.env.CODEX_HOME || path.join(home, '.codex'),
+    deepseekReader = new DeepSeekBalanceReader({ home }) } = {}) {
     this.home = home;
     this.codexHome = codexHome;
     this.antigravityHome = path.join(home, '.gemini', 'antigravity');
     this.codexRateCache = null;
     this.antigravityRateCache = null;
-    this.current = { sampledAt: null, codex: unavailable('codex'), antigravity: unavailable('antigravity') };
+    this.deepseekReader = deepseekReader;
+    this.current = { sampledAt: null, codex: unavailable('codex'), antigravity: unavailable('antigravity'), deepseek: unavailable('deepseek') };
     this.pending = null;
   }
   async poll(force = false) {
@@ -86,10 +89,10 @@ class LocalStatusReader {
   async collect(force) {
     let list;
     try { list = await processes(); } catch { list = null; }
-    const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force)]);
+    const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseekReader.poll(force)]);
     const sampledAt = new Date().toISOString();
     const next = { sampledAt };
-    for (const [index, id] of ['codex', 'antigravity'].entries()) {
+    for (const [index, id] of ['codex', 'antigravity', 'deepseek'].entries()) {
       const result = results[index];
       next[id] = result.status === 'fulfilled' ? result.value : {
         ...unavailable(id), task: '本地状态暂不可读', detail: '读取失败，稍后自动重试', connection: 'error' };

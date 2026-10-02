@@ -47,6 +47,19 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .quota-pagination button { width: 19px; height: 16px; display: grid; place-items: center; padding: 0; background: #252e37; border: 1px solid #394550; border-radius: 3px; color: #c6d2dd; }
 .quota-pagination button:disabled { opacity: .3; cursor: default; }
 .quota-list { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: clamp(6px, 1.1vh, 14px); min-height: 0; }
+.balance-content { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: clamp(4px, .8vh, 10px); }
+.balance-caption { display: flex; justify-content: space-between; align-items: center; color: #96a6b6; font-size: clamp(8px, 3.6vw, 11px); }
+.currency-switch { color: #acc7e5; background: transparent; border: 1px solid #3c4c5d; border-radius: 3px; font-size: 8px; padding: 1px 3px; }
+.balance-total { display: flex; align-items: baseline; gap: 5px; color: var(--accent); white-space: nowrap; min-width: 0; }
+.balance-total strong { font: 500 clamp(18px, 11vw, 34px) ui-monospace, monospace; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.balance-total small { font-size: 16px; }
+.balance-total > span { color: #8097b0; font-size: 9px; }
+.balance-total.is-stale { color: #93a0af; }
+.balance-parts { display: flex; justify-content: space-between; gap: 8px; color: #8c9cae; font-size: clamp(7px, 3.6vw, 11px); }
+.balance-parts > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.balance-parts b { font-weight: 400; color: #bfccdb; font-variant-numeric: tabular-nums; }
+.balance-empty strong { color: #b1c1d4; font-size: clamp(10px, 4vw, 13px); font-weight: 500; }
+.balance-empty p { color: #8e9cac; font-size: clamp(8px, 3.5vw, 11px); line-height: 1.65; margin: 5px 0 0; }
 .quota-label { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; margin-bottom: 6px; font-size: clamp(8px, 4.1vw, 13px); color: #bec6ce; }
 .quota-label > span { display: flex; flex: 1; min-width: 0; align-items: baseline; gap: 5px; white-space: nowrap; }
 .model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -126,6 +139,8 @@ legend { margin-bottom: 10px; color: #b7c3ce; font-size: 12px; }
   .provider-card:last-child .identity h2 { font-size: clamp(9px, 4.3vw, 12px); }
   .quota-list { gap: 4px; }
   .quota-area { gap: 3px; }
+  .balance-content { gap: 3px; }
+  .balance-total strong { font-size: clamp(16px, 10vw, 22px); }
   .quota-tools { min-height: 12px; }
   .source-tag { font-size: 7px; padding-block: 0; }
   .quota-pagination button { height: 12px; width: 17px; }

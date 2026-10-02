@@ -1,6 +1,6 @@
 {
   "name": "ai-watch-panel",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A cross-platform vertical AI activity and quota panel",
   "private": true,
   "type": "module",
@@ -19,12 +19,15 @@
     "dist:linux": "npm run build && electron-builder --linux AppImage"
   },
   "dependencies": {
+    "big.js": "^7.0.1",
     "lucide-react": "^0.577.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/big.js": "^7.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.0",

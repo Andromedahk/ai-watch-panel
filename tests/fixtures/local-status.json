@@ -138,5 +138,34 @@
     "observedAt": "2026-10-02T00:00:00Z",
     "sampledAt": "2026-10-02T00:00:00Z",
     "detail": "用于分页检查的合成记录，不是账户数据。"
+  },
+  "deepseek": {
+    "id": "deepseek",
+    "source": "account",
+    "connection": "ready",
+    "activity": "unknown",
+    "activeTasks": 0,
+    "task": "任务状态尚未接入",
+    "quotas": [],
+    "balance": {
+      "wallets": [
+        {
+          "currency": "CNY",
+          "paid": "12.34",
+          "bonus": "1.23",
+          "total": "13.57"
+        },
+        {
+          "currency": "USD",
+          "paid": "2",
+          "bonus": "0.1",
+          "total": "2.1"
+        }
+      ],
+      "stale": false
+    },
+    "observedAt": "2026-10-02T00:00:00Z",
+    "sampledAt": "2026-10-02T00:00:00Z",
+    "detail": "用于余额布局检查的合成记录，不是账户数据。"
   }
 }

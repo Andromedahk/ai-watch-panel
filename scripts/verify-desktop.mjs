@@ -10,16 +10,22 @@ const app = await electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH
 try {
   const page = await app.firstWindow();
   await page.getByRole('heading', { name: 'AI WATCH', exact: true }).waitFor();
-  await page.waitForFunction(async () => {
-    const snapshot = await window.panel.getStatus();
-    if (!snapshot.sampledAt) return false;
+  // Wait on committed DOM state; an asynchronous predicate can resolve before rendering.
+  await page.waitForFunction(() => Boolean(document.querySelector('main')?.getAttribute('data-sampled-at')));
+  const expected = await page.evaluate(() => window.panel.getStatus());
+  await page.waitForFunction((snapshot) => {
     const cards = document.querySelectorAll('.provider-card');
-    return ['codex', 'antigravity'].every((id, index) => {
+    const quotasReady = ['codex', 'antigravity'].every((id, index) => {
       const card = cards[index + 1];
       return card?.querySelector('.task-line > span:nth-child(2)')?.textContent === snapshot[id].task
         && card.querySelectorAll('.quota').length === Math.max(1, Math.min(3, snapshot[id].quotas.length));
     });
-  });
+    const balanceReady = cards[3]?.querySelector('.balance-content')
+      && cards[3].querySelector('.task-line > span:nth-child(2)')?.textContent === snapshot.deepseek.task;
+    return quotasReady && balanceReady && (snapshot.deepseek.balance?.wallets.length
+      ? cards[3].querySelector('.balance-total')?.getAttribute('title') === `${snapshot.deepseek.balance.wallets[0].currency} ${snapshot.deepseek.balance.wallets[0].total}`
+      : Boolean(cards[3].querySelector('.balance-empty')));
+  }, expected);
   const native = await app.evaluate(({ BrowserWindow, screen }) => {
     const win = BrowserWindow.getAllWindows()[0];
     const display = screen.getDisplayMatching(win.getBounds());
@@ -44,12 +50,13 @@ try {
     });
     const overlaps = [...document.querySelectorAll('.provider-card')].map((card) => {
       const header = card.querySelector('.card-heading').getBoundingClientRect();
-      const first = card.querySelector('.quota').getBoundingClientRect();
-      const last = card.querySelector('.quota:last-child').getBoundingClientRect();
+      const first = card.querySelector('.quota, .balance-content').getBoundingClientRect();
+      const last = card.querySelector('.quota:last-child, .balance-content').getBoundingClientRect();
       const footer = card.querySelector('.task-line').getBoundingClientRect();
       return header.bottom > first.top || last.bottom > footer.top;
     });
-    return { regions, overlaps, images: [...document.querySelectorAll('.avatar img')].every((image) => image.complete && image.naturalWidth > 0),
+    const images = [...document.querySelectorAll('.panel-regions .avatar img')];
+    return { regions, overlaps, images: images.length === 4 && images.every((image) => image.complete && image.naturalWidth > 0),
       quotaCount: document.querySelectorAll('[role="progressbar"]').length };
   });
   assert.equal(layout.regions.length, 5);
@@ -58,21 +65,26 @@ try {
   for (const region of layout.regions.slice(2)) assert.ok(Math.abs(region.height - layout.regions[1].height) < 1);
   assert.equal(layout.images, true);
   assert.ok(layout.overlaps.every((value) => value === false));
-  assert.ok(layout.quotaCount >= 7);
+  assert.ok(layout.quotaCount >= 5);
+  assert.equal(await page.locator('.provider-card').last().getByRole('progressbar').count(), 0);
   if (!live) {
-    assert.equal(layout.quotaCount, 10);
+    assert.equal(layout.quotaCount, 8);
     assert.equal(await page.locator('.quota-unknown').count(), 1);
     assert.equal(await page.locator('.quota-pagination').innerText(), '1/5');
+    assert.equal(await page.locator('.balance-total strong').innerText(), '13.57');
+    assert.equal(await page.locator('.currency-switch').innerText(), 'CNY ↔');
   }
   const output = live ? '.local/qa/live-panel.png' : 'docs/screenshots/panel.png';
   await mkdir(path.dirname(output), { recursive: true });
   await page.screenshot({ path: output, animations: 'disabled' });
   const status = await page.evaluate(async () => {
     const snapshot = await window.panel.getStatus();
-    return ['codex', 'antigravity'].map(id => ({ provider: id, source: snapshot[id].source,
-      connection: snapshot[id].connection, activity: snapshot[id].activity, quotaRows: snapshot[id].quotas.length }));
+    return ['codex', 'antigravity', 'deepseek'].map(id => ({ provider: id, source: snapshot[id].source,
+      connection: snapshot[id].connection, activity: snapshot[id].activity, quotaRows: snapshot[id].quotas.length,
+      walletCount: snapshot[id].balance?.wallets.length }));
   });
-  assert.equal(layout.quotaCount, 5 + status.reduce((total, provider) => total + Math.max(1, Math.min(3, provider.quotaRows)), 0));
+  assert.equal(layout.quotaCount, 3 + status.filter(provider => provider.provider !== 'deepseek')
+    .reduce((total, provider) => total + Math.max(1, Math.min(3, provider.quotaRows)), 0));
   console.log(JSON.stringify({ result: 'passed', data: live ? 'local adapters' : 'synthetic fixture',
     logicalSize: `${native.bounds.width}×${native.bounds.height}`, scaleFactor: native.scaleFactor,
     regions: 5, quotaRows: layout.quotaCount, images: '4 loaded', overflow: 'none', isolation: 'enabled', status }, null, 2));
