@@ -14,6 +14,9 @@ try {
   await page.getByRole('heading', { name: 'AI WATCH', exact: true }).waitFor();
   // Wait on committed DOM state; an asynchronous predicate can resolve before rendering.
   await page.waitForFunction(() => Boolean(document.querySelector('main')?.getAttribute('data-sampled-at')));
+  // Keep the historical four-card layout acceptance; six-card overflow has a dedicated suite.
+  await page.evaluate(() => window.panel.setEnabled(['claude', 'codex', 'antigravity', 'deepseek']));
+  await page.waitForFunction(() => document.querySelectorAll('.provider-card').length === 4);
   const expected = await page.evaluate(() => window.panel.getStatus());
   await page.waitForFunction((snapshot) => {
     const cards = document.querySelectorAll('.provider-card');
@@ -45,7 +48,7 @@ try {
   assert.equal(native.contextIsolation, true);
   assert.equal(native.sandbox, true);
   const layout = await page.evaluate(() => {
-    const regions = [...document.querySelector('.panel-regions').children].map((element) => {
+    const regions = [document.querySelector('.control-region'), ...document.querySelectorAll('.provider-viewport > .provider-card')].map((element) => {
       const rect = element.getBoundingClientRect();
       return { height: rect.height, overflowX: element.scrollWidth > element.clientWidth,
         overflowY: element.scrollHeight > element.clientHeight };

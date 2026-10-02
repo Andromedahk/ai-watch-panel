@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
 import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
-import { providers } from './data';
+import { providers, providerIds } from './data';
+import { useVisibleCards } from './useVisibleCards';
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
@@ -10,7 +11,7 @@ import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provide
 const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
   desktop: false, platform: 'browser', scaleFactor: window.devicePixelRatio,
-  providerOrder: readOrder(),
+  providerOrder: readOrder(), enabledProviders: readEnabled(),
   theme: window.panel ? 'system' : readTheme(),
   resolvedTheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
 };
@@ -22,8 +23,15 @@ function readOrder(): ProviderId[] {
   const fallback = providers.map(provider => provider.id);
   try {
     const value = JSON.parse(localStorage.getItem('ai-watch:provider-order') || 'null');
-    return Array.isArray(value) && value.length === 4 && new Set(value).size === 4 && value.every(id => fallback.includes(id)) ? value : fallback;
+    return Array.isArray(value) && new Set(value).size === value.length && value.every(id => fallback.includes(id))
+      ? [...value, ...fallback.filter(id => !value.includes(id))] : fallback;
   } catch { return fallback; }
+}
+function readEnabled(): ProviderId[] {
+  try {
+    const value = JSON.parse(localStorage.getItem('ai-watch:enabled-providers') || 'null');
+    return Array.isArray(value) && new Set(value).size === value.length && value.every(id => providerIds.includes(id)) ? value : [...providerIds];
+  } catch { return [...providerIds]; }
 }
 function readImages(): Partial<Record<ProviderId, string>> {
   try { return JSON.parse(localStorage.getItem('ai-watch:images') ?? '{}'); }
@@ -34,7 +42,7 @@ function Avatar({ provider, image, monitor = false }: { provider: Provider; imag
   useEffect(() => setFailed(false), [image]);
   const attention = provider.id === 'codex' && (provider.local?.activity === 'waiting' || (provider.local?.waitingTasks || 0) > 0);
   const glow = monitor ? attention ? 'attention' : provider.running ? 'running' : 'off' : 'off';
-  return <div className="avatar" data-provider={provider.id} data-glow={glow}>
+  return <div className="avatar" data-provider={provider.id} data-glow={glow} data-default-image={!image}>
     <div className="avatar-face">
     {failed ? <span>{provider.name.slice(0, 1)}</span> : <img src={image || `./${provider.image}`} alt={`${provider.name} 助手图片`} onError={() => setFailed(true)} />}
     </div>
@@ -74,7 +82,7 @@ function ProviderCard({ provider, index, image, testing = false, sortProps, drag
   const local = provider.local;
   const isBalance = local?.id === 'deepseek';
   const source = testing ? '测试数据' : !local ? '演示' : local.connection === 'offline' ? '未运行'
-    : local.connection === 'auth-required' ? '待登录' : local.source === 'account' ? '账号余额'
+    : local.connection === 'auth-required' ? '待登录' : local.source === 'account' ? isBalance ? '账号余额' : '账号额度'
     : local.source === 'local-api' ? '本地服务' : local.source === 'cache' ? isBalance ? '历史记录' : '本地记录' : '未连接';
   const phase = !local ? provider.running ? '演示运行' : '演示待机'
     : { running: '运行中', idle: '待机', waiting: local.id === 'codex' ? local.waitingReason === 'input' ? '待回答' : local.waitingReason === 'approval' ? '待授权' : '待处理' : '待确认', unknown: '未知', offline: '离线' }[local.activity];
@@ -129,12 +137,16 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [orderSaving, setOrderSaving] = useState(false);
   const [themeSaving, setThemeSaving] = useState(false);
+  const [modulesSaving, setModulesSaving] = useState(false);
+  const viewport = useRef<HTMLDivElement>(null);
+  const enabledOrder = state.providerOrder.filter(id => state.enabledProviders.includes(id));
+  const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode);
   const resolvedTheme = state.theme === 'system' ? state.resolvedTheme : state.theme;
   const [draft, setDraft] = useState<Preferences>(previewState);
   const modal = useRef<HTMLDialogElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const targetImage = useRef<ProviderId>('claude');
-  const visibleProviders = state.providerOrder.map(id => providers.find(provider => provider.id === id)!).map((provider) => {
+  const visibleProviders = enabledOrder.map(id => providers.find(provider => provider.id === id)!).map((provider) => {
     if (!state.desktop && !testMode) return provider;
     const local = displayStatus?.[provider.id];
     return { ...provider, running: local?.activity === 'running', task: local?.task || '正在读取本地状态',
@@ -142,9 +154,30 @@ export default function App() {
         connection: 'unavailable' as const, activity: 'unknown' as const, activeTasks: 0,
         task: '正在读取本地状态', quotas: [], observedAt: null, sampledAt: null, detail: '等待首次读取' } };
   });
-  const activeTasks = providers.reduce((total, provider) => total + (displayStatus?.[provider.id].activeTasks || 0), 0);
+  const activeTasks = visibleProviders.reduce((total, provider) => total + (displayStatus?.[provider.id]?.activeTasks || 0), 0);
   const refreshTime = displayStatus?.sampledAt ? new Date(displayStatus.sampledAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '读取中';
-  const sorting = useCardSort(state.providerOrder, order => { void saveOrder(order); }, settingsOpen || state.collapsed || orderSaving);
+  const sorting = useCardSort(enabledOrder, order => { void saveVisibleOrder(order); }, settingsOpen || state.collapsed || orderSaving || modulesSaving);
+  const hiddenActive = visibleProviders.filter(provider => !visibleCards.has(provider.id)
+    && (provider.running || provider.local?.activity === 'waiting'));
+  function revealProvider(id: ProviderId) {
+    viewport.current?.querySelector<HTMLElement>(`[data-provider="${id}"]`)?.scrollIntoView({
+      behavior: state.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'instant', block: 'nearest',
+    });
+  }
+  function saveVisibleOrder(order: ProviderId[]) {
+    let index = 0;
+    return saveOrder(state.providerOrder.map(id => state.enabledProviders.includes(id) ? order[index++] : id));
+  }
+  async function changeEnabled(id: ProviderId, enabled: boolean) {
+    if (modulesSaving) return;
+    const next = state.providerOrder.filter(value => value === id ? enabled : state.enabledProviders.includes(value));
+    setModulesSaving(true);
+    try {
+      if (window.panel) setState(await window.panel.setEnabled(next));
+      else { localStorage.setItem('ai-watch:enabled-providers', JSON.stringify(next)); setState(current => ({ ...current, enabledProviders: next })); }
+    } catch { setNotice('模块选择保存失败，请重试'); }
+    finally { setModulesSaving(false); }
+  }
 
   async function saveOrder(order: ProviderId[]) {
     if (orderSaving) return;
@@ -192,6 +225,10 @@ export default function App() {
     return () => { stateListener(); statusListener(); };
   }, []);
   useLayoutEffect(() => { document.documentElement.dataset.theme = resolvedTheme; }, [resolvedTheme]);
+  useEffect(() => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused.matches('.provider-card')) focused.scrollIntoView({ block: 'nearest' });
+  }, [state.providerOrder]);
   useEffect(() => {
     if (window.panel) return;
     const media = matchMedia('(prefers-color-scheme: dark)');
@@ -305,13 +342,23 @@ export default function App() {
           <button aria-label="打开配置" title="配置面板" onClick={openSettings}><Settings2 /></button>
         </nav>
       </header>
+      <div ref={viewport} className="provider-viewport" aria-label="工具模块列表" aria-busy={orderSaving || modulesSaving} tabIndex={0}>
+      {!visibleProviders.length && <div className="empty-providers"><p>尚未启用模块</p><button onClick={openSettings}>选择监看模块</button></div>}
       {visibleProviders.map((provider, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${provider.id}`} provider={provider} index={index} image={images[provider.id]} testing={Boolean(displayStatus?.isTestData)} dragging={sorting.activeId === provider.id}
         sortProps={{ style: sorting.style(provider.id), onPointerDown: event => sorting.start(event, provider.id), onKeyDown: event => {
           if (event.target !== event.currentTarget || !event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key) || sorting.sorting) return;
           event.preventDefault();
-          const next = [...state.providerOrder], target = Math.max(0, Math.min(3, index + (event.key === 'ArrowUp' ? -1 : 1)));
-          if (target !== index) { next.splice(index, 1); next.splice(target, 0, provider.id); void saveOrder(next); }
+          const next = [...enabledOrder], target = Math.max(0, Math.min(enabledOrder.length - 1, index + (event.key === 'ArrowUp' ? -1 : 1)));
+          if (target !== index) { next.splice(index, 1); next.splice(target, 0, provider.id); void saveVisibleOrder(next); }
         } }} />)}
+      </div>
+    </div>}
+    {!state.collapsed && !settingsOpen && !sorting.sorting && hiddenActive.length > 0 && <div className="hidden-activity" aria-label="屏幕外模块活动">
+      {hiddenActive.map(provider => <button key={provider.id} className="hidden-activity-light" data-provider={provider.id}
+        data-glow={provider.id === 'codex' && provider.local?.activity === 'waiting' ? 'attention' : 'running'}
+        aria-label={`${provider.name} ${provider.local?.activity === 'waiting' ? '等待处理' : '正在运行'}，点击查看`}
+        title={`${provider.name} · ${provider.local?.activity === 'waiting' ? '等待处理' : '正在运行'} · 点击查看`}
+        onClick={() => revealProvider(provider.id)}><span className="sr-only">{provider.name}</span></button>)}
     </div>}
     <span id="card-sort-help" className="sr-only">长按卡片约半秒后上下拖动，松开保存顺序；Escape 取消。键盘聚焦卡片后可按 Alt 加上下方向键排序。</span>
     {sorting.sorting && <div className="sort-hint" role="status">拖动排序 · 第 {(sorting.target ?? 0) + 1} 位 · 松开保存</div>}
@@ -321,6 +368,14 @@ export default function App() {
         <TestControls enabled={testMode} config={testConfig} onToggle={toggleTestMode} onChange={changeTestSelection}
           onPreset={preset => { setTestConfig(current => applyTestPreset(current, preset)); setTestSampledAt(new Date().toISOString()); }}
           onView={() => setSettingsOpen(false)} />
+        <fieldset className="module-settings"><legend>监看模块 · 已启用 {state.enabledProviders.length} / {providers.length}</legend>
+          <p className="appearance-hint">即时保存；超过四个可上下滚动。底边彩灯提示滚出视野的活动，点击可定位。</p>
+          <div className="module-options">{state.providerOrder.map(id => {
+            const provider = providers.find(item => item.id === id)!;
+            return <label key={id} className="module-option"><input type="checkbox" aria-label={`启用 ${provider.name}`} checked={state.enabledProviders.includes(id)} disabled={modulesSaving} onChange={event => void changeEnabled(id, event.target.checked)} /><span>{provider.name}</span></label>;
+          })}</div>
+          <p className="appearance-hint">取消勾选的模块不显示、不提醒；顺序仍保留。</p>
+        </fieldset>
         <fieldset className="appearance-settings"><legend>外观</legend>
           <label className="switch-row"><span>跟随系统<small>自动切换浅色和深色外观</small></span><input aria-label="跟随系统" type="checkbox" checked={state.theme === 'system'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'system' : resolvedTheme)} /></label>
           <label className="switch-row"><span>暗夜模式<small>{state.theme === 'system' ? '手动切换后停止跟随系统' : '已手动指定外观'}</small></span><input aria-label="暗夜模式" type="checkbox" checked={resolvedTheme === 'dark'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'dark' : 'light')} /></label>
@@ -336,8 +391,8 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.8</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
-          {displayStatus && <>{(['claude', 'codex', 'antigravity', 'deepseek'] as const).map((id) => <p key={id}><b>{id === 'claude' ? 'Claude Code' : id === 'codex' ? 'Codex' : id === 'deepseek' ? 'DeepSeek Harness' : 'Antigravity'}</b><br />{displayStatus[id].detail}<br />{displayStatus[id].activityDetail && <>{displayStatus[id].activityDetail}<br /></>}{displayStatus[id].observedAt ? `记录时间：${new Date(displayStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
+        <div className="settings-note"><span className="note-title">本地状态 · v0.9</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+          {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{displayStatus[id]?.detail}<br />{displayStatus[id]?.activityDetail && <>{displayStatus[id]?.activityDetail}<br /></>}{displayStatus[id]?.observedAt ? `记录时间：${new Date(displayStatus[id]?.observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>
       <div className="settings-footer"><button className="save-button" onClick={saveSettings}><Check size={15} />保存配置</button>{state.desktop && <button className="quit-button" onClick={() => window.panel?.quit()}>退出面板</button>}</div>

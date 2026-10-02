@@ -1,6 +1,15 @@
 const RATIO = 4.5;
 const COLLAPSED_WIDTH = 46;
-const PROVIDER_ORDER = ['claude', 'codex', 'antigravity', 'deepseek'];
+const PROVIDER_ORDER = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi'];
+function isEnabledProviders(value) {
+  return Array.isArray(value) && new Set(value).size === value.length && value.every(id => PROVIDER_ORDER.includes(id));
+}
+function migrateOrder(value) {
+  if (isProviderOrder(value)) return [...value];
+  const legacy = PROVIDER_ORDER.slice(0, 4);
+  return Array.isArray(value) && value.length === 4 && new Set(value).size === 4 && value.every(id => legacy.includes(id))
+    ? [...value, 'zcode', 'kimi'] : [...PROVIDER_ORDER];
+}
 const isTheme = value => ['system', 'light', 'dark'].includes(value);
 function isProviderOrder(value) {
   return Array.isArray(value) && value.length === PROVIDER_ORDER.length
@@ -29,8 +38,9 @@ function validPreferences(value) {
     locked: value?.locked === true,
     animate: value?.animate !== false,
     theme: isTheme(value?.theme) ? value.theme : 'system',
-    providerOrder: isProviderOrder(value?.providerOrder) ? [...value.providerOrder] : [...PROVIDER_ORDER],
+    providerOrder: migrateOrder(value?.providerOrder),
+    enabledProviders: isEnabledProviders(value?.enabledProviders) ? [...value.enabledProviders] : [...PROVIDER_ORDER],
   };
 }
 
-module.exports = { panelBounds, clampBounds, validPreferences, isTheme, isProviderOrder, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };
+module.exports = { panelBounds, clampBounds, validPreferences, isTheme, isProviderOrder, isEnabledProviders, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };

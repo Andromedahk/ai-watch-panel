@@ -1,4 +1,5 @@
 import type { LocalProviderStatus, LocalStatus, ProviderId, Quota } from './types';
+import { providerIds } from './data';
 
 export type TestActivity = 'running' | 'idle' | 'waiting' | 'input' | 'approval' | 'mixed' | 'unknown' | 'offline';
 export type TestData = 'normal' | 'low' | 'zero' | 'full' | 'unknown' | 'stale' | 'free' | 'tiny' | 'signed-out' | 'error';
@@ -10,6 +11,7 @@ export function defaultTestConfig(): TestConfig {
   return {
     claude: { activity: 'running', data: 'normal' }, codex: { activity: 'running', data: 'normal' },
     antigravity: { activity: 'running', data: 'normal' }, deepseek: { activity: 'running', data: 'normal' },
+    zcode: { activity: 'running', data: 'normal' }, kimi: { activity: 'running', data: 'normal' },
   };
 }
 export function applyTestPreset(config: TestConfig, preset: TestPreset): TestConfig {
@@ -39,7 +41,7 @@ function testQuotas(id: ProviderId, data: TestData, at: string): Quota[] {
   if (id === 'deepseek' || data === 'free') return [];
   const models = id === 'antigravity'
     ? ['Gemini 测试模型（高）', 'Gemini 测试模型（思考）', 'Gemini 测试模型（中）', 'Claude 测试模型（高）', 'Claude 测试模型（低）', '测试模型 · 较长名称与额度分页显示', '其他测试模型']
-    : id === 'claude' ? ['Claude', 'Sonnet', 'Opus'] : ['短时额度', 'Codex'];
+    : id === 'claude' ? ['Claude', 'Sonnet', 'Opus'] : ['短时额度', id === 'kimi' ? 'Kimi Code' : id === 'zcode' ? 'ZCode' : 'Codex'];
   return models.map((model, index) => ({
     model, period: id === 'antigravity' ? '测试窗口' : index === 0 ? '5 小时' : '1 周',
     remaining: data === 'unknown' ? null : data === 'zero' ? 0 : data === 'full' ? 100 : data === 'low' ? 12.5 : [78.4, 56.2, 99.7][index % 3],
@@ -50,7 +52,7 @@ function testQuotas(id: ProviderId, data: TestData, at: string): Quota[] {
 // UI-only data: never mutate adapter snapshots, account state, or saved preferences.
 export function makeTestStatus(config: TestConfig, at: string): LocalStatus {
   const result = { sampledAt: at, isTestData: true } as LocalStatus;
-  for (const id of ['claude', 'codex', 'antigravity', 'deepseek'] as const) {
+  for (const id of providerIds) {
     const { activity, data } = config[id];
     const waiting = ['waiting', 'input', 'approval', 'mixed'].includes(activity);
     const status: LocalProviderStatus = {

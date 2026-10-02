@@ -1,9 +1,10 @@
-export type ProviderId = 'claude' | 'codex' | 'antigravity' | 'deepseek';
+export type ProviderId = 'claude' | 'codex' | 'antigravity' | 'deepseek' | 'zcode' | 'kimi';
 export type Theme = 'system' | 'light' | 'dark';
 export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: boolean };
 export type PanelState = Preferences & {
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
   providerOrder: ProviderId[];
+  enabledProviders: ProviderId[];
   theme: Theme; resolvedTheme: 'light' | 'dark';
   bounds?: { x: number; y: number; width: number; height: number };
 };
@@ -19,7 +20,7 @@ export type LocalProviderStatus = {
   surfaces?: { desktop: string; terminal: string };
   balance?: { wallets: Wallet[]; stale: boolean };
 };
-export type LocalStatus = { sampledAt: string | null; claude: LocalProviderStatus; codex: LocalProviderStatus; antigravity: LocalProviderStatus; deepseek: LocalProviderStatus; isTestData?: boolean };
+export type LocalStatus = Record<ProviderId, LocalProviderStatus> & { sampledAt: string | null; isTestData?: boolean };
 export type Provider = {
   id: ProviderId; name: string; subtitle: string; color: string; running: boolean;
   task: string; quotas: Quota[]; image: string; local?: LocalProviderStatus;
@@ -35,6 +36,7 @@ declare global {
       setCollapsed(collapsed: boolean): Promise<PanelState>;
       configure(preferences: Preferences): Promise<PanelState>;
       setOrder(order: ProviderId[]): Promise<PanelState>;
+      setEnabled(ids: ProviderId[]): Promise<PanelState>;
       setTheme(theme: Theme): Promise<PanelState>;
       dock(): Promise<PanelState>;
       chooseImage(provider: ProviderId): Promise<string | null>;

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { panelBounds, clampBounds, validPreferences, isProviderOrder, PROVIDER_ORDER } = require('../electron/window-policy.cjs');
+const { panelBounds, clampBounds, validPreferences, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('../electron/window-policy.cjs');
 
 test('right docking uses the full available height with the requested ratio', () => {
   const result = panelBounds({ x: 0, y: 25, width: 1920, height: 1080 });
@@ -22,7 +22,7 @@ test('restore clamps a moved rail into the available display area', () => {
   assert.deepEqual(clampBounds({ x: 1500, y: 100, width: 200, height: 900 }, { x: 0, y: 25, width: 1600, height: 900 }), { x: 1400, y: 25, width: 200, height: 900 });
 });
 test('unknown configuration values fall back without broadening capabilities', () => {
-  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, theme: 'system', providerOrder: PROVIDER_ORDER });
+  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER });
 });
 test('provider order rejects missing, duplicate and unknown cards and migrates old preferences', () => {
   for (const value of [null, 'codex', [], ['codex', 'codex', 'claude', 'deepseek'], ['claude', 'codex', 'antigravity', 'other']]) {
@@ -32,7 +32,7 @@ test('provider order rejects missing, duplicate and unknown cards and migrates o
   const reversed = [...PROVIDER_ORDER].reverse();
   assert.equal(isProviderOrder(reversed), true);
   const settings = validPreferences({ side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed });
-  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed });
+  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER });
   reversed.reverse();
   assert.notDeepEqual(settings.providerOrder, reversed);
 });
@@ -40,4 +40,17 @@ test('provider order rejects missing, duplicate and unknown cards and migrates o
 test('theme defaults to system for older settings and accepts only known modes', () => {
   for (const theme of [undefined, null, '', 'auto', 1, {}, ['dark']]) assert.equal(validPreferences({ theme }).theme, 'system');
   for (const theme of ['system', 'dark', 'light']) assert.equal(validPreferences({ theme }).theme, theme);
+});
+test('legacy four-card order survives migration and module selection accepts zero through six', () => {
+  const legacy = ['codex', 'deepseek', 'claude', 'antigravity'];
+  assert.deepEqual(validPreferences({ providerOrder: legacy }).providerOrder, [...legacy, 'zcode', 'kimi']);
+  for (let length = 0; length <= 6; length++) {
+    const enabled = PROVIDER_ORDER.slice(0, length);
+    assert.equal(isEnabledProviders(enabled), true);
+    assert.deepEqual(validPreferences({ enabledProviders: enabled }).enabledProviders, enabled);
+  }
+  for (const enabledProviders of [null, 'kimi', ['kimi', 'kimi'], ['unknown']]) {
+    assert.equal(isEnabledProviders(enabledProviders), false);
+    assert.deepEqual(validPreferences({ enabledProviders }).enabledProviders, PROVIDER_ORDER);
+  }
 });

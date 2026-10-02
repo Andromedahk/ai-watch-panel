@@ -24,4 +24,14 @@ export const providers: Provider[] = [
       { model: 'DeepSeek', period: '可用额度', remaining: 95, reset: '自定义额度示例' },
       { model: '任务预算', period: '本次', remaining: 100, reset: '暂无运行任务' },
     ] },
+  { id: 'zcode', name: 'ZCode', subtitle: 'Z.AI', color: '#b190dc', running: true,
+    task: '演示 · 正在处理任务', image: 'Zcode.svg', quotas: [
+      { model: '套餐额度', period: '测试窗口', remaining: 68, reset: '' },
+    ] },
+  { id: 'kimi', name: 'Kimi Code', subtitle: 'MOONSHOT AI', color: '#8de8ee', running: true,
+    task: '演示 · 正在处理任务', image: 'Kimi.png', quotas: [
+      { model: '短时额度', period: '5 小时', remaining: 82, reset: '' },
+      { model: '周额度', period: '1 周', remaining: 73, reset: '' },
+    ] },
 ];
+export const providerIds = providers.map(provider => provider.id);

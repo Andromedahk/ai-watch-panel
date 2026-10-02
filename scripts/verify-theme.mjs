@@ -66,6 +66,8 @@ try {
         return { overflow: card.scrollWidth > card.clientWidth || card.scrollHeight > card.clientHeight, contrasts };
       });
     });
+    assert.equal(metrics.length, 6);
+    assert.equal(await page.locator('.provider-viewport img').evaluateAll(images => images.length === 6 && images.every(image => image.complete && image.naturalWidth > 0)), true);
     assert.ok(metrics.every(item => !item.overflow), 'Theme must preserve card layout');
     assert.ok(metrics.every(item => item.contrasts.every(value => value >= 4.5)), JSON.stringify({ appearance, metrics }));
     await expect(page.locator('.provider-card[data-provider="codex"] .avatar')).toHaveAttribute('data-glow', 'attention');

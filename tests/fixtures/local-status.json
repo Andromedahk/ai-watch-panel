@@ -184,5 +184,45 @@
       "desktop": "桌面已打开 · 无 Code 运行记录",
       "terminal": "终端无运行会话"
     }
+  },
+  "zcode": {
+    "id": "zcode",
+    "source": "cache",
+    "connection": "ready",
+    "activity": "running",
+    "activeTasks": 1,
+    "task": "合成测试 · 任务运行中",
+    "quotas": [
+      {
+        "model": "ZCode",
+        "period": "测试窗口",
+        "remaining": 78.4,
+        "reset": ""
+      }
+    ],
+    "observedAt": "2026-10-02T00:00:00Z",
+    "sampledAt": "2026-10-02T00:00:00Z",
+    "detail": "合成测试记录，不是账户数据。",
+    "activityDetail": "合成测试活动，不代表真实运行。"
+  },
+  "kimi": {
+    "id": "kimi",
+    "source": "cache",
+    "connection": "ready",
+    "activity": "running",
+    "activeTasks": 1,
+    "task": "合成测试 · 任务运行中",
+    "quotas": [
+      {
+        "model": "Kimi Code",
+        "period": "测试窗口",
+        "remaining": 78.4,
+        "reset": ""
+      }
+    ],
+    "observedAt": "2026-10-02T00:00:00Z",
+    "sampledAt": "2026-10-02T00:00:00Z",
+    "detail": "合成测试记录，不是账户数据。",
+    "activityDetail": "合成测试活动，不代表真实运行。"
   }
 }

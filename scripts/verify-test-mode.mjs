@@ -10,6 +10,8 @@ try {
   const page = await app.firstWindow();
   const main = page.locator('main');
   await page.waitForFunction(() => Boolean(document.querySelector('main')?.getAttribute('data-sampled-at')));
+  await page.evaluate(() => window.panel.setEnabled(['claude', 'codex', 'antigravity', 'deepseek']));
+  await expect(page.locator('.provider-card')).toHaveCount(4);
   const original = await page.evaluate(() => window.panel.getStatus());
   const card = id => page.getByRole('region', { name: `${id} 面板`, exact: true });
   const configure = () => page.getByRole('button', { name: '打开配置', exact: true }).click();
@@ -23,7 +25,7 @@ try {
     assert.equal(await target.evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag');
   }
   await page.getByRole('checkbox', { name: '测试模式', exact: true }).check();
-  await expect(page.getByRole('combobox')).toHaveCount(8);
+  await expect(page.getByRole('combobox')).toHaveCount(12);
   await expect(page.getByRole('status')).toBeHidden();
   assert.equal(await page.locator('.settings-content').evaluate(el => el.scrollWidth > el.clientWidth), false);
   await mkdir('docs/screenshots', { recursive: true });

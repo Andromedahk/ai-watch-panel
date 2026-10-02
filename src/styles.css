@@ -9,7 +9,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 button:disabled { cursor: wait; }
 button, input, select, textarea, label, summary { -webkit-app-region: no-drag; }
 .panel { height: 100%; overflow: hidden; position: relative; background: var(--surface); }
-.panel-regions { height: 100%; display: grid; grid-template-rows: .5fr repeat(4, 1fr); gap: 8px; padding-bottom: 8px; }
+.panel-regions { height: 100%; display: flex; flex-direction: column; gap: 8px; }
+.panel-regions > .control-region { flex: 0 0 calc((100% - 40px) / 9); }
+.provider-viewport { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; overscroll-behavior: contain; scroll-padding-block: 8px; }
+.provider-viewport::-webkit-scrollbar { display: none; }
+.provider-viewport > .provider-card { flex: 0 0 calc((100% - 24px) / 4); }
+.provider-viewport:focus-visible { outline: 1px solid var(--focus); outline-offset: -1px; }
 .control-region { min-height: 0; display: flex; flex-direction: column; justify-content: center; padding: 9px var(--gutter); gap: 8px; border-bottom: 1px solid var(--line); background: var(--header); -webkit-app-region: drag; }
 .brand-line { display: flex; align-items: center; justify-content: space-between; }
 .brand { display: flex; align-items: center; gap: 7px; color: var(--brand); }
@@ -206,3 +211,22 @@ legend { margin-bottom: 10px; color: var(--label); font-size: 12px; }
 .appearance-hint { color: var(--muted); font-size: 9px; line-height: 1.7; margin: 10px 0 0; }
 .switch-row input:disabled { cursor: wait; opacity: .6; }
 :root[data-theme="light"] .provider-card, :root[data-theme="light"] .rail-providers > div, :root[data-theme="light"] .image-option { --accent-ink: color-mix(in srgb, var(--accent) 42%, #102b3b); }
+
+.avatar[data-provider="zcode"], .hidden-activity-light[data-provider="zcode"] { --halo-color: #6f35b5; }
+:root:not([data-theme="light"]) .avatar[data-provider="zcode"][data-default-image="true"] img { filter: invert(1); }
+.avatar[data-provider="kimi"], .hidden-activity-light[data-provider="kimi"] { --halo-color: #8de8ee; }
+.hidden-activity { position: absolute; z-index: 6; left: 8px; right: 8px; bottom: 0; height: 24px; display: flex; gap: 5px; pointer-events: none; }
+.hidden-activity-light { position: relative; flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; pointer-events: auto; --halo-color: #d97757; }
+.hidden-activity-light[data-provider="codex"] { --halo-color: #c5d494; }
+.hidden-activity-light[data-provider="deepseek"] { --halo-color: #4d6bfe; }
+.hidden-activity-light[data-glow="attention"] { --halo-color: #ff555f; }
+.hidden-activity-light::before { content: ''; position: absolute; inset: 0; border-radius: 6px 6px 0 0; background: linear-gradient(to top, var(--halo-color), color-mix(in srgb, var(--halo-color) 35%, transparent) 25%, transparent); animation: logo-breathe 5s ease-in-out infinite; pointer-events: none; }
+.hidden-activity-light[data-provider="antigravity"]::before { background: linear-gradient(90deg, #4285f4, #a142f4, #ea4335, #fbbc05, #34a853, #4285f4); mask-image: linear-gradient(to top, #000, #0006 25%, transparent); animation: logo-breathe 5s ease-in-out infinite, bottom-spectrum 10s linear infinite; background-size: 200% 100%; }
+@keyframes bottom-spectrum { to { background-position: 200% 0; } }
+.hidden-activity-light:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.module-settings { border-bottom: 1px solid var(--line); padding-bottom: 15px; }
+.module-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin-top: 14px; }
+.module-option { display: flex; align-items: center; gap: 6px; font-size: 10px; cursor: pointer; }
+.module-option input { margin: 0; accent-color: var(--green); cursor: pointer; }
+.empty-providers { color: var(--muted); padding: 30px 12px; text-align: center; font-size: 12px; }
+.empty-providers button { padding: 9px; color: var(--control-text); background: var(--control-bg); border: 1px solid var(--control-border); border-radius: 6px; }

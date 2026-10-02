@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, screen, dialog, Menu, nativeTheme } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, validPreferences, isTheme, isProviderOrder } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, validPreferences, isTheme, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
 const statusReader = new LocalStatusReader();
 let statusTimer;
@@ -13,7 +13,7 @@ async function refreshLocalStatus(force = false) {
     ? JSON.parse(await fs.promises.readFile(path.join(__dirname, '../tests/fixtures/local-status.json'), 'utf8'))
     : await statusReader.poll(force);
   if (fixtureMode && fixtureVariant?.startsWith('glow-')) {
-    for (const id of ['claude', 'codex', 'antigravity', 'deepseek']) Object.assign(statusSnapshot[id], { activity: 'running', activeTasks: 1, task: '合成测试 · 任务运行中' });
+    for (const id of PROVIDER_ORDER) Object.assign(statusSnapshot[id], { activity: 'running', activeTasks: 1, task: '合成测试 · 任务运行中' });
     if (fixtureVariant === 'glow-attention') Object.assign(statusSnapshot.codex, { activity: 'waiting', activeTasks: 1, waitingTasks: 1, waitingReason: 'both', task: '合成测试 · 待回答 / 待授权' });
   }
   if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
@@ -26,7 +26,7 @@ let collapsed = false;
 let expandedBounds;
 let lastDisplayId;
 let repositioning = false;
-const providerIds = ['claude', 'codex', 'antigravity', 'deepseek'];
+const providerIds = PROVIDER_ORDER;
 const devUrl = process.env.AI_WATCH_DEV_URL;
 // A separate profile lets the acceptance script exercise preferences safely.
 if (process.env.AI_WATCH_TEST_PROFILE) app.setPath('userData', process.env.AI_WATCH_TEST_PROFILE);
@@ -160,7 +160,7 @@ else {
       setCollapsed(value); return currentState();
     });
     handle('panel:configure', (value) => {
-      const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder });
+      const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -173,6 +173,13 @@ else {
       try { savePreferences(); } catch (error) { preferences.theme = previous; throw error; }
       nativeTheme.themeSource = value;
       updateAppearance(); return currentState();
+    });
+    handle('panel:enabled', (value) => {
+      if (!isEnabledProviders(value)) throw new Error('Invalid enabled providers');
+      const previous = preferences.enabledProviders;
+      preferences.enabledProviders = [...value];
+      try { savePreferences(); } catch (error) { preferences.enabledProviders = previous; throw error; }
+      emitState(); return currentState();
     });
     handle('panel:order', (value) => {
       if (!isProviderOrder(value)) throw new Error('Invalid provider order');
