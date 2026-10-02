@@ -224,5 +224,91 @@
     "sampledAt": "2026-10-02T00:00:00Z",
     "detail": "合成测试记录，不是账户数据。",
     "activityDetail": "合成测试活动，不代表真实运行。"
+  },
+  "qwen": {
+    "id": "qwen",
+    "source": "account",
+    "connection": "ready",
+    "activity": "running",
+    "activeTasks": 1,
+    "task": "合成测试 · 任务运行中",
+    "quotas": [],
+    "sampledAt": "2026-10-02T00:00:00Z",
+    "observedAt": "2026-10-02T00:00:00Z",
+    "detail": "合成测试 · 套餐和积分只用于验收",
+    "plan": {
+      "name": "示例套餐 Pro",
+      "status": "测试"
+    },
+    "credits": {
+      "items": [
+        {
+          "label": "套餐积分",
+          "remaining": "1234.5",
+          "total": "2000",
+          "unit": "积分"
+        },
+        {
+          "label": "赠送积分",
+          "remaining": "36",
+          "unit": "积分"
+        },
+        {
+          "label": "专项积分",
+          "remaining": "200",
+          "unit": "积分"
+        },
+        {
+          "label": "每日任务次数",
+          "remaining": "8",
+          "total": "20",
+          "unit": "次"
+        }
+      ],
+      "stale": false
+    }
+  },
+  "workbuddy": {
+    "id": "workbuddy",
+    "source": "account",
+    "connection": "ready",
+    "activity": "running",
+    "activeTasks": 1,
+    "task": "合成测试 · 任务运行中",
+    "quotas": [],
+    "sampledAt": "2026-10-02T00:00:00Z",
+    "observedAt": "2026-10-02T00:00:00Z",
+    "detail": "合成测试 · 套餐和积分只用于验收",
+    "plan": {
+      "name": "示例套餐 Pro",
+      "status": "测试"
+    },
+    "credits": {
+      "items": [
+        {
+          "label": "套餐积分",
+          "remaining": "1234.5",
+          "total": "2000",
+          "unit": "积分"
+        },
+        {
+          "label": "赠送积分",
+          "remaining": "36",
+          "unit": "积分"
+        },
+        {
+          "label": "专项积分",
+          "remaining": "200",
+          "unit": "积分"
+        },
+        {
+          "label": "每日任务次数",
+          "remaining": "8",
+          "total": "20",
+          "unit": "次"
+        }
+      ],
+      "stale": false
+    }
   }
 }

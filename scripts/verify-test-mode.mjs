@@ -25,7 +25,7 @@ try {
     assert.equal(await target.evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag');
   }
   await page.getByRole('checkbox', { name: '测试模式', exact: true }).check();
-  await expect(page.getByRole('combobox')).toHaveCount(12);
+  await expect(page.getByRole('combobox')).toHaveCount(16);
   await expect(page.getByRole('status')).toBeHidden();
   assert.equal(await page.locator('.settings-content').evaluate(el => el.scrollWidth > el.clientWidth), false);
   await mkdir('docs/screenshots', { recursive: true });

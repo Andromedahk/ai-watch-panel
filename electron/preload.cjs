@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('panel', {
   configure: (preferences) => ipcRenderer.invoke('panel:configure', preferences),
   setOrder: (order) => ipcRenderer.invoke('panel:order', order),
   setEnabled: (ids) => ipcRenderer.invoke('panel:enabled', ids),
+  setQwenAccess: (allowed) => ipcRenderer.invoke('panel:qwen-access', allowed),
   setTheme: (theme) => ipcRenderer.invoke('panel:theme', theme),
   dock: () => ipcRenderer.invoke('panel:dock'),
   chooseImage: (provider) => ipcRenderer.invoke('panel:image', provider),

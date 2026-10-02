@@ -60,14 +60,14 @@ try {
       };
       return [...document.querySelectorAll('.provider-card')].map(card => {
         const bg = luminance(getComputedStyle(card).backgroundColor);
-        const contrasts = [...card.querySelectorAll('h2, .quota-label strong, .balance-total strong, .task-status')].map(el => {
+        const contrasts = [...card.querySelectorAll('h2, .quota-label strong, .balance-total strong, .credit-value, .plan-name, .task-status')].map(el => {
           const fg = luminance(getComputedStyle(el).color); return (Math.max(bg, fg) + .05) / (Math.min(bg, fg) + .05);
         });
         return { overflow: card.scrollWidth > card.clientWidth || card.scrollHeight > card.clientHeight, contrasts };
       });
     });
-    assert.equal(metrics.length, 6);
-    assert.equal(await page.locator('.provider-viewport img').evaluateAll(images => images.length === 6 && images.every(image => image.complete && image.naturalWidth > 0)), true);
+    assert.equal(metrics.length, 8);
+    assert.equal(await page.locator('.provider-viewport img').evaluateAll(images => images.length === 8 && images.every(image => image.complete && image.naturalWidth > 0)), true);
     assert.ok(metrics.every(item => !item.overflow), 'Theme must preserve card layout');
     assert.ok(metrics.every(item => item.contrasts.every(value => value >= 4.5)), JSON.stringify({ appearance, metrics }));
     await expect(page.locator('.provider-card[data-provider="codex"] .avatar')).toHaveAttribute('data-glow', 'attention');

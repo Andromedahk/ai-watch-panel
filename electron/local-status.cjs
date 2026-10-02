@@ -10,6 +10,8 @@ const { ClaudeStatusReader } = require('./claude-status.cjs');
 const { CodexAttentionReader } = require('./codex-attention.cjs');
 const { ZcodeStatusReader } = require('./zcode-status.cjs');
 const { KimiStatusReader } = require('./kimi-status.cjs');
+const { QwenStatusReader } = require('./qwen-status.cjs');
+const { WorkBuddyStatusReader } = require('./workbuddy-status.cjs');
 const execute = promisify(execFile);
 const { normalizeCodexRates, unknownCodexQuotas, normalizeAntigravityQuotas,
   normalizeCodexActivity, normalizeAntigravityActivity } = require('./status-normalizers.cjs');
@@ -78,7 +80,8 @@ class LocalStatusReader {
   constructor({ home = os.homedir(), codexHome = process.env.CODEX_HOME || path.join(home, '.codex'),
     deepseekReader = new DeepSeekBalanceReader({ home }),
     deepseekActivityReader = new DeepSeekActivityReader({ home }), claudeReader = new ClaudeStatusReader({ home }),
-    zcodeReader = new ZcodeStatusReader({ home }), kimiReader = new KimiStatusReader({ home }) } = {}) {
+    zcodeReader = new ZcodeStatusReader({ home }), kimiReader = new KimiStatusReader({ home }),
+    qwenReader = new QwenStatusReader({ home }), workbuddyReader = new WorkBuddyStatusReader({ home }) } = {}) {
     this.home = home;
     this.codexHome = codexHome;
     this.codexAttention = new CodexAttentionReader({ codexHome });
@@ -89,7 +92,8 @@ class LocalStatusReader {
     this.deepseekActivityReader = deepseekActivityReader;
     this.claudeReader = claudeReader;
     this.zcodeReader = zcodeReader; this.kimiReader = kimiReader;
-    this.current = { sampledAt: null, claude: unavailable('claude'), codex: unavailable('codex'), antigravity: unavailable('antigravity'), deepseek: unavailable('deepseek'), zcode: unavailable('zcode'), kimi: unavailable('kimi') };
+    this.qwenReader = qwenReader; this.workbuddyReader = workbuddyReader;
+    this.current = { sampledAt: null, claude: unavailable('claude'), codex: unavailable('codex'), antigravity: unavailable('antigravity'), deepseek: unavailable('deepseek'), zcode: unavailable('zcode'), kimi: unavailable('kimi'), qwen: unavailable('qwen'), workbuddy: unavailable('workbuddy') };
     this.pending = null;
   }
   async poll(force = false) {
@@ -100,10 +104,10 @@ class LocalStatusReader {
   async collect(force) {
     let list;
     try { list = await processes(); } catch { list = null; }
-    const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseek(list, force), this.claudeReader.poll(list), this.zcodeReader.poll(list), this.kimiReader.poll(list)]);
+    const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseek(list, force), this.claudeReader.poll(list), this.zcodeReader.poll(list), this.kimiReader.poll(list), this.qwenReader.poll(list, force), this.workbuddyReader.poll(list, force)]);
     const sampledAt = new Date().toISOString();
     const next = { sampledAt };
-    for (const [index, id] of ['codex', 'antigravity', 'deepseek', 'claude', 'zcode', 'kimi'].entries()) {
+    for (const [index, id] of ['codex', 'antigravity', 'deepseek', 'claude', 'zcode', 'kimi', 'qwen', 'workbuddy'].entries()) {
       const result = results[index];
       next[id] = result.status === 'fulfilled' ? result.value : {
         ...unavailable(id), task: '本地状态暂不可读', detail: '读取失败，稍后自动重试', connection: 'error' };

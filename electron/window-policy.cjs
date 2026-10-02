@@ -1,14 +1,24 @@
 const RATIO = 4.5;
 const COLLAPSED_WIDTH = 46;
-const PROVIDER_ORDER = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi'];
+const PROVIDER_ORDER = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi', 'qwen', 'workbuddy'];
 function isEnabledProviders(value) {
   return Array.isArray(value) && new Set(value).size === value.length && value.every(id => PROVIDER_ORDER.includes(id));
 }
+function legacyOrder(value) {
+  return Array.isArray(value) && [4, 6].includes(value.length) && new Set(value).size === value.length
+    && value.every(id => PROVIDER_ORDER.slice(0, value.length).includes(id));
+}
 function migrateOrder(value) {
   if (isProviderOrder(value)) return [...value];
-  const legacy = PROVIDER_ORDER.slice(0, 4);
-  return Array.isArray(value) && value.length === 4 && new Set(value).size === 4 && value.every(id => legacy.includes(id))
-    ? [...value, 'zcode', 'kimi'] : [...PROVIDER_ORDER];
+  return legacyOrder(value) ? [...value, ...PROVIDER_ORDER.filter(id => !value.includes(id))] : [...PROVIDER_ORDER];
+}
+function migrateEnabled(value) {
+  if (!isEnabledProviders(value?.enabledProviders)) return [...PROVIDER_ORDER];
+  const enabled = [...value.enabledProviders];
+  if (enabled.length && legacyOrder(value.providerOrder)) {
+    for (const id of PROVIDER_ORDER) if (!value.providerOrder.includes(id) && !enabled.includes(id)) enabled.push(id);
+  }
+  return enabled;
 }
 const isTheme = value => ['system', 'light', 'dark'].includes(value);
 function isProviderOrder(value) {
@@ -38,8 +48,9 @@ function validPreferences(value) {
     locked: value?.locked === true,
     animate: value?.animate !== false,
     theme: isTheme(value?.theme) ? value.theme : 'system',
+    qwenKeychainAllowed: value?.qwenKeychainAllowed === true,
     providerOrder: migrateOrder(value?.providerOrder),
-    enabledProviders: isEnabledProviders(value?.enabledProviders) ? [...value.enabledProviders] : [...PROVIDER_ORDER],
+    enabledProviders: migrateEnabled(value),
   };
 }
 

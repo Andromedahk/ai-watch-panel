@@ -12,6 +12,7 @@ const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
   desktop: false, platform: 'browser', scaleFactor: window.devicePixelRatio,
   providerOrder: readOrder(), enabledProviders: readEnabled(),
+  qwenKeychainAllowed: false,
   theme: window.panel ? 'system' : readTheme(),
   resolvedTheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
 };
@@ -30,7 +31,16 @@ function readOrder(): ProviderId[] {
 function readEnabled(): ProviderId[] {
   try {
     const value = JSON.parse(localStorage.getItem('ai-watch:enabled-providers') || 'null');
-    return Array.isArray(value) && new Set(value).size === value.length && value.every(id => providerIds.includes(id)) ? value : [...providerIds];
+    if (!Array.isArray(value) || new Set(value).size !== value.length || !value.every(id => providerIds.includes(id))) return [...providerIds];
+    const previousOrder = JSON.parse(localStorage.getItem('ai-watch:provider-order') || 'null');
+    const legacy = Array.isArray(previousOrder) && [4, 6].includes(previousOrder.length)
+      && new Set(previousOrder).size === previousOrder.length && previousOrder.every(id => providerIds.slice(0, previousOrder.length).includes(id));
+    const enabled = value.length && legacy ? [...value, ...providerIds.filter(id => !previousOrder.includes(id) && !value.includes(id))] : value;
+    if (legacy) {
+      localStorage.setItem('ai-watch:provider-order', JSON.stringify(readOrder()));
+      localStorage.setItem('ai-watch:enabled-providers', JSON.stringify(enabled));
+    }
+    return enabled;
   } catch { return [...providerIds]; }
 }
 function readImages(): Partial<Record<ProviderId, string>> {
@@ -70,19 +80,49 @@ function BalanceCard({ local }: { local: LocalProviderStatus }) {
     </> : <div className="balance-empty"><strong>{local.connection === 'auth-required' ? '等待 Harness 登录' : local.connection === 'ready' ? '暂无钱包记录' : '余额暂不可用'}</strong><p>{local.detail}</p></div>}
   </div>;
 }
+function creditNumber(value: string) {
+  try {
+    const number = new Big(value);
+    if (number.gt(0) && number.lt('0.01')) return '<0.01';
+    return number.toFixed(2).replace(/\.?0+$/, '').replace(/^$/, '0');
+  } catch { return '—'; }
+}
+function EntitlementCard({ provider, page }: { provider: Provider; page: number }) {
+  const local = provider.local;
+  const plan = local?.plan;
+  const credits = local?.credits;
+  const items = local ? credits?.items || [] : [{ label: '示例积分', remaining: '1234.5', unit: '积分', total: '2000' }];
+  const expired = Boolean(plan?.expiresAt && Date.parse(plan.expiresAt) <= Date.now());
+  const planLabel = plan?.name || (local ? '套餐未知' : '示例套餐');
+  const statusLabel = ({ free: '免费', member: '会员', unknown: '待确认' } as Record<string, string>)[plan?.status || ''] || plan?.status || '套餐';
+  return <div className="entitlement-content">
+    <div className={`plan-summary ${plan?.stale ? 'is-stale' : ''}`} title={[planLabel, plan?.status, plan?.expiresAt ? `${expired ? '到期于' : '有效期至'} ${new Date(plan.expiresAt).toLocaleString('zh-CN')}` : '', plan?.stale ? '历史记录' : ''].filter(Boolean).join(' · ')}>
+      <span className="plan-name">{planLabel}</span><span className="plan-status">{plan?.stale ? '历史套餐' : expired ? '已到期' : statusLabel}</span>
+    </div>
+    <div className="credits-list" aria-label={`${provider.name} 剩余积分`}>
+      {items.length ? items.slice(page * 2, page * 2 + 2).map((item, index) => <div className={`credit-item ${credits?.stale ? 'is-stale' : ''}`} key={`${item.label}:${index}`}
+        title={[item.label, item.remaining === null ? '剩余未知' : `剩余 ${item.remaining} ${item.unit}`, item.total != null ? `总量 ${item.total} ${item.unit}` : '', item.reset ? `重置 / 到期时间 ${new Date(item.reset).toLocaleString('zh-CN')}` : '', credits?.stale ? '历史快照，当前值待更新' : ''].filter(Boolean).join(' · ')}>
+        <div className="credit-label">{item.label}</div>
+        <div className="credit-amount"><span>{credits?.stale ? '历史' : item.remaining === null ? '未知' : '剩余'}</span><strong className="credit-value">{item.remaining === null ? '—' : creditNumber(item.remaining)}</strong><small>{item.unit}</small></div>
+      </div>) : <div className="credits-empty"><strong>{local?.accessRequired ? '等待登录读取授权' : local?.connection === 'auth-required' ? '等待客户端登录' : local?.connection === 'error' ? '积分读取失败' : '积分 / 额度未知'}</strong><span>—</span><p title={local?.detail}>{local?.detail || '等待首次读取'}</p></div>}
+    </div>
+  </div>;
+}
 function ProviderCard({ provider, index, image, testing = false, sortProps, dragging = false }: {
   provider: Provider; index: number; image?: string; testing?: boolean; sortProps?: HTMLAttributes<HTMLElement>; dragging?: boolean;
 }) {
   const [page, setPage] = useState(0);
-  const pages = Math.max(1, Math.ceil(provider.quotas.length / 3));
+  const local = provider.local;
+  const isEntitlement = provider.id === 'qwen' || provider.id === 'workbuddy';
+  const itemCount = isEntitlement ? local?.credits?.items.length || 0 : provider.quotas.length;
+  const pages = Math.max(1, Math.ceil(itemCount / (isEntitlement ? 2 : 3)));
   const currentPage = Math.min(page, pages - 1);
   useEffect(() => setPage((old) => Math.min(old, pages - 1)), [pages]);
   const quotas = provider.quotas.length ? provider.quotas.slice(currentPage * 3, currentPage * 3 + 3)
     : [{ model: '模型额度', period: '尚未读取', remaining: null, reset: '' }];
-  const local = provider.local;
   const isBalance = local?.id === 'deepseek';
   const source = testing ? '测试数据' : !local ? '演示' : local.connection === 'offline' ? '未运行'
-    : local.connection === 'auth-required' ? '待登录' : local.source === 'account' ? isBalance ? '账号余额' : '账号额度'
+    : local.accessRequired ? '待授权' : local.connection === 'auth-required' ? '待登录' : local.source === 'account' ? isBalance ? '账号余额' : '账号额度'
     : local.source === 'local-api' ? '本地服务' : local.source === 'cache' ? isBalance ? '历史记录' : '本地记录' : '未连接';
   const phase = !local ? provider.running ? '演示运行' : '演示待机'
     : { running: '运行中', idle: '待机', waiting: local.id === 'codex' ? local.waitingReason === 'input' ? '待回答' : local.waitingReason === 'approval' ? '待授权' : '待处理' : '待确认', unknown: '未知', offline: '离线' }[local.activity];
@@ -103,11 +143,11 @@ function ProviderCard({ provider, index, image, testing = false, sortProps, drag
         <span className={`source-tag ${local ? 'local' : ''}`} title={local ? `${local.detail}${local.observedAt ? ` 额度记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}` : '仅用于布局的演示数据'}>{source}</span>
         {!isBalance && pages > 1 ? <div className="quota-pagination" aria-label={`${provider.name} 额度分页`}>
           <button aria-label={`${provider.name} 上一页额度`} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={11} /></button>
-          <span title={`共 ${provider.quotas.length} 个模型额度`}>{currentPage + 1}/{pages}</span>
+          <span title={`共 ${itemCount} 项${isEntitlement ? '积分 / 次数' : '模型额度'}`}>{currentPage + 1}/{pages}</span>
           <button aria-label={`${provider.name} 下一页额度`} disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight size={11} /></button>
         </div> : <span className="quota-time" title={local?.observedAt ? `记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}>{local ? local.id === 'claude' && !local.quotas.length ? '未提供 Code 额度' : time ? `记录 ${time}` : isBalance ? '自动识别登录态' : '额度未知' : '示例额度'}</span>}
       </div>
-      {isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>Code 额度暂不可用</strong><p>Free 账号不包含 Code 权限</p><small>{local.surfaces?.desktop}<br />{local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={`${testing ? '测试' : local ? '本地' : '演示'}剩余额度`}>
+      {isEntitlement ? <EntitlementCard provider={provider} page={currentPage} /> : isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>Code 额度暂不可用</strong><p>Free 账号不包含 Code 权限</p><small>{local.surfaces?.desktop}<br />{local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={`${testing ? '测试' : local ? '本地' : '演示'}剩余额度`}>
         {quotas.map((quota, row) => {
           const known = quota.remaining !== null && !quota.stale;
           return <div className={`quota ${known ? '' : 'quota-unknown'}`} key={`${quota.model}:${quota.period}:${row}`} title={quotaTitle(quota)}>
@@ -138,6 +178,7 @@ export default function App() {
   const [orderSaving, setOrderSaving] = useState(false);
   const [themeSaving, setThemeSaving] = useState(false);
   const [modulesSaving, setModulesSaving] = useState(false);
+  const [qwenAccessSaving, setQwenAccessSaving] = useState(false);
   const viewport = useRef<HTMLDivElement>(null);
   const enabledOrder = state.providerOrder.filter(id => state.enabledProviders.includes(id));
   const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode);
@@ -177,6 +218,15 @@ export default function App() {
       else { localStorage.setItem('ai-watch:enabled-providers', JSON.stringify(next)); setState(current => ({ ...current, enabledProviders: next })); }
     } catch { setNotice('模块选择保存失败，请重试'); }
     finally { setModulesSaving(false); }
+  }
+  async function changeQwenAccess(allowed: boolean) {
+    if (qwenAccessSaving || !window.panel) return;
+    setQwenAccessSaving(true);
+    try {
+      setState(await window.panel.setQwenAccess(allowed));
+      setNotice(allowed ? '已允许读取千问登录；如系统弹出授权，请在系统窗口处理' : '已关闭千问登录读取，套餐和积分记录已清除');
+    } catch { setNotice('千问登录读取设置保存失败，请重试'); }
+    finally { setQwenAccessSaving(false); }
   }
 
   async function saveOrder(order: ProviderId[]) {
@@ -376,6 +426,10 @@ export default function App() {
           })}</div>
           <p className="appearance-hint">取消勾选的模块不显示、不提醒；顺序仍保留。</p>
         </fieldset>
+        <fieldset className="appearance-settings"><legend>千问登录读取</legend>
+          <label className="switch-row"><span>读取千问登录状态<small>仅查询套餐和积分</small></span><input aria-label="读取千问登录状态" type="checkbox" checked={state.qwenKeychainAllowed} disabled={!state.desktop || qwenAccessSaving} onChange={event => void changeQwenAccess(event.target.checked)} /></label>
+          <p className="appearance-hint">仅访问千问专属的系统钥匙串记录，可能需要系统授权。登录信息不保存到面板；关闭会清除已读取的套餐和积分。拒绝授权后不会自动反复弹窗，可处理授权后手动刷新。</p>
+        </fieldset>
         <fieldset className="appearance-settings"><legend>外观</legend>
           <label className="switch-row"><span>跟随系统<small>自动切换浅色和深色外观</small></span><input aria-label="跟随系统" type="checkbox" checked={state.theme === 'system'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'system' : resolvedTheme)} /></label>
           <label className="switch-row"><span>暗夜模式<small>{state.theme === 'system' ? '手动切换后停止跟随系统' : '已手动指定外观'}</small></span><input aria-label="暗夜模式" type="checkbox" checked={resolvedTheme === 'dark'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'dark' : 'light')} /></label>
@@ -391,7 +445,7 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.9</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+        <div className="settings-note"><span className="note-title">本地状态 · v0.10</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
           {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{displayStatus[id]?.detail}<br />{displayStatus[id]?.activityDetail && <>{displayStatus[id]?.activityDetail}<br /></>}{displayStatus[id]?.observedAt ? `记录时间：${new Date(displayStatus[id]?.observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>

@@ -33,5 +33,9 @@ export const providers: Provider[] = [
       { model: '短时额度', period: '5 小时', remaining: 82, reset: '' },
       { model: '周额度', period: '1 周', remaining: 73, reset: '' },
     ] },
+  { id: 'qwen', name: 'Qwen（千问）', subtitle: 'ALIBABA', color: '#8d9cff', running: false,
+    task: '演示 · 等待新任务', image: 'Qwen.svg', quotas: [] },
+  { id: 'workbuddy', name: 'WorkBuddy', subtitle: 'TENCENT', color: '#71d9c1', running: false,
+    task: '演示 · 等待新任务', image: 'WorkBuddy.png', quotas: [] },
 ];
 export const providerIds = providers.map(provider => provider.id);

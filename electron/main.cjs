@@ -105,6 +105,7 @@ else {
   app.on('second-instance', () => { window?.show(); window?.focus(); });
   app.whenReady().then(() => {
     preferences = readPreferences();
+    statusReader.qwenReader.setKeychainAllowed(!fixtureMode && preferences.qwenKeychainAllowed);
     nativeTheme.themeSource = preferences.theme;
     const display = screen.getPrimaryDisplay();
     lastDisplayId = display.id;
@@ -160,7 +161,7 @@ else {
       setCollapsed(value); return currentState();
     });
     handle('panel:configure', (value) => {
-      const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders });
+      const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -180,6 +181,25 @@ else {
       preferences.enabledProviders = [...value];
       try { savePreferences(); } catch (error) { preferences.enabledProviders = previous; throw error; }
       emitState(); return currentState();
+    });
+    handle('panel:qwen-access', (value) => {
+      if (typeof value !== 'boolean') throw new Error('Invalid Qwen access setting');
+      const previous = preferences.qwenKeychainAllowed;
+      preferences.qwenKeychainAllowed = value;
+      try { savePreferences(); } catch (error) { preferences.qwenKeychainAllowed = previous; throw error; }
+      // Fixture profiles must never prompt the real keychain, even when testing this control.
+      statusReader.qwenReader.setKeychainAllowed(!fixtureMode && value);
+      if (!fixtureMode && !value) {
+        statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), qwen: {
+          ...statusSnapshot.qwen, source: 'unavailable', connection: 'auth-required', accessRequired: true, plan: { name: null },
+          credits: { items: [], stale: false }, quotas: [], observedAt: null,
+          detail: '千问登录读取已关闭；本地智能体活动仍可监看。',
+        } };
+        window.webContents.send('panel:status-changed', statusSnapshot);
+      }
+      emitState();
+      if (!fixtureMode) void refreshLocalStatus().catch(() => {});
+      return currentState();
     });
     handle('panel:order', (value) => {
       if (!isProviderOrder(value)) throw new Error('Invalid provider order');

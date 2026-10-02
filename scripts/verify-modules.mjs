@@ -4,8 +4,8 @@ import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-const all = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi'];
-const names = { claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity', deepseek: 'DeepSeek Harness', zcode: 'ZCode', kimi: 'Kimi Code' };
+const all = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi', 'qwen', 'workbuddy'];
+const names = { claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity', deepseek: 'DeepSeek Harness', zcode: 'ZCode', kimi: 'Kimi Code', qwen: 'Qwen（千问）', workbuddy: 'WorkBuddy' };
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-modules-'));
 const launch = () => electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: 'fixture' } });
 let app = await launch();
@@ -57,19 +57,19 @@ try {
   const firstHeight = (await card('claude').boundingBox()).height;
   assert.ok(Math.abs(header.height * 2 - firstHeight) < 1);
   const layout = await viewport().evaluate(el => ({ overflowX: el.scrollWidth > el.clientWidth, overflowY: el.scrollHeight > el.clientHeight, childCount: el.children.length }));
-  assert.deepEqual(layout, { overflowX: false, overflowY: true, childCount: 6 });
-  assert.equal(await page.locator('.provider-viewport .avatar img').evaluateAll(images => images.length === 6 && images.every(image => image.complete && image.naturalWidth > 0)), true);
+  assert.deepEqual(layout, { overflowX: false, overflowY: true, childCount: 8 });
+  assert.equal(await page.locator('.provider-viewport .avatar img').evaluateAll(images => images.length === 8 && images.every(image => image.complete && image.naturalWidth > 0)), true);
   const spaces = await page.locator('.provider-card').evaluateAll(cards => cards.map(el => {
     const rect = el.getBoundingClientRect();
     return { left: rect.left, right: innerWidth - rect.right, top: rect.top, bottom: rect.bottom, radius: getComputedStyle(el).borderRadius };
   }));
   for (const item of spaces) { assert.equal(item.left, 8); assert.equal(item.right, 8); assert.equal(item.radius, '14px'); }
   for (let i = 1; i < spaces.length; i++) assert.ok(Math.abs(spaces[i].top - spaces[i - 1].bottom - 8) < 1);
-  console.log('Module geometry and six image assets passed.');
+  console.log('Module geometry and eight image assets passed.');
 
-  // Zero, one, four, and six modules are all selectable without changing native geometry.
+  // Every enabled count keeps the same native geometry and four-card viewport.
   await open();
-  for (const ids of [[], ['kimi'], all.slice(0, 4), all]) {
+  for (const ids of Array.from({ length: all.length + 1 }, (_, length) => all.slice(0, length))) {
     await selectEnabled(ids); await close();
     await expect.poll(order).toEqual(ids);
     assert.deepEqual((await state()).bounds, bounds);
@@ -85,9 +85,9 @@ try {
       await open();
     }
   }
-  console.log('Module selection passed for 0, 1, 4 and 6 cards.');
+  console.log('Module selection passed for every count from 0 through 8.');
   await page.getByRole('checkbox', { name: '测试模式', exact: true }).check();
-  await expect(page.getByRole('combobox')).toHaveCount(12);
+  await expect(page.getByRole('combobox')).toHaveCount(16);
   await page.getByRole('button', { name: '全部待机', exact: true }).click();
   await activity('zcode', 'running'); await activity('kimi', 'running');
   await close(); await scroll('top');
@@ -166,33 +166,33 @@ try {
   console.log('Hidden-activity animation preference and both themes passed.');
 
   // Keyboard moves cross the viewport boundary, while the fixed toolbar stays put.
-  for (let position = 5; position > 0; position--) {
-    await card('kimi').focus(); await page.keyboard.press('Alt+ArrowUp');
-    await expect.poll(async () => (await order()).indexOf('kimi')).toBe(position - 1);
-    await expect.poll(async () => (await state()).providerOrder.indexOf('kimi')).toBe(position - 1);
+  for (let position = all.length - 1; position > 0; position--) {
+    await card('workbuddy').focus(); await page.keyboard.press('Alt+ArrowUp');
+    await expect.poll(async () => (await order()).indexOf('workbuddy')).toBe(position - 1);
+    await expect.poll(async () => (await state()).providerOrder.indexOf('workbuddy')).toBe(position - 1);
     await expect(viewport()).toHaveAttribute('aria-busy', 'false');
   }
-  await expect.poll(order).toEqual(['kimi', ...all.slice(0, 5)]);
+  await expect.poll(order).toEqual(['workbuddy', ...all.slice(0, -1)]);
   assert.deepEqual(await page.locator('.control-region').boundingBox(), header);
   await scroll('top');
-  // A held card at the bottom edge auto-scrolls far enough to reach the sixth slot.
-  const box = await card('kimi').boundingBox(), view = await viewport().boundingBox();
+  // A held card at the bottom edge auto-scrolls far enough to reach the eighth slot.
+  const box = await card('workbuddy').boundingBox(), view = await viewport().boundingBox();
   await page.mouse.move(box.x + 30, box.y + 35); await page.mouse.down();
-  await expect(card('kimi')).toHaveClass(/is-dragging/);
+  await expect(card('workbuddy')).toHaveClass(/is-dragging/);
   await page.mouse.move(box.x + 30, view.y + view.height - 12, { steps: 12 });
   await expect.poll(() => viewport().evaluate(el => el.scrollTop), { timeout: 10000 }).toBeGreaterThan(firstHeight);
-  await expect(page.locator('.sort-hint')).toContainText('第 6 位', { timeout: 10000 });
+  await expect(page.locator('.sort-hint')).toContainText('第 8 位', { timeout: 10000 });
   await page.mouse.up(); await expect.poll(order).toEqual(all);
   await expect.poll(async () => (await state()).providerOrder).toEqual(all);
   assert.deepEqual((await state()).bounds, bounds);
-  console.log('Six-card keyboard sorting and edge auto-scroll dragging passed.');
+  console.log('Eight-card keyboard sorting and edge auto-scroll dragging passed.');
   // Hidden module positions survive rearranging just the enabled subset.
   await open(); await selectEnabled(['claude', 'kimi']); await close();
   await card('kimi').focus(); await page.keyboard.press('Alt+ArrowUp');
   await expect.poll(order).toEqual(['kimi', 'claude']);
   await expect.poll(async () => (await state()).providerOrder.filter(id => ['claude', 'kimi'].includes(id))).toEqual(['kimi', 'claude']);
   const savedOrder = (await state()).providerOrder;
-  assert.equal(savedOrder.length, 6); assert.equal(new Set(savedOrder).size, 6);
+  assert.equal(savedOrder.length, 8); assert.equal(new Set(savedOrder).size, 8);
   assert.deepEqual(savedOrder.filter(id => !['claude', 'kimi'].includes(id)), all.filter(id => !['claude', 'kimi'].includes(id)));
 
   for (const invalid of [['kimi', 'kimi'], ['invalid'], null, all.concat('claude')]) {
@@ -211,7 +211,7 @@ try {
   await expect.poll(order).toEqual(['kimi', 'claude']);
   assert.deepEqual((await state()).enabledProviders, savedEnabled); assert.deepEqual((await state()).providerOrder, savedOrder);
   await expect(page.locator('main')).toHaveAttribute('data-test-mode', 'false');
-  console.log('Module checks passed: six logos, 8px geometry, 0/1/4/6 UI selection, fixed header, scroll, colored hidden activity, Codex red precedence, waiting/idle/disabled clearing, reveal button, animation/theme compatibility, cross-screen keyboard and auto-scroll drag, subset sorting, validated IPC, saved selection and cold restart.');
+  console.log('Module checks passed: eight logos, 8px geometry, all enabled counts from 0 through 8, fixed header, scroll, colored hidden activity, Codex red precedence, waiting/idle/disabled clearing, reveal button, animation/theme compatibility, cross-screen keyboard and auto-scroll drag, subset sorting, validated IPC, saved selection and cold restart.');
 } finally {
   await app.close(); await rm(profile, { recursive: true, force: true });
 }

@@ -12,6 +12,7 @@ export function defaultTestConfig(): TestConfig {
     claude: { activity: 'running', data: 'normal' }, codex: { activity: 'running', data: 'normal' },
     antigravity: { activity: 'running', data: 'normal' }, deepseek: { activity: 'running', data: 'normal' },
     zcode: { activity: 'running', data: 'normal' }, kimi: { activity: 'running', data: 'normal' },
+    qwen: { activity: 'running', data: 'normal' }, workbuddy: { activity: 'running', data: 'normal' },
   };
 }
 export function applyTestPreset(config: TestConfig, preset: TestPreset): TestConfig {
@@ -27,6 +28,10 @@ export function activityOptions(id: ProviderId): [TestActivity, string][] {
   ];
 }
 export function dataOptions(id: ProviderId): [TestData, string][] {
+  if (id === 'qwen' || id === 'workbuddy') return [
+    ['normal', '正常套餐 / 积分 · 2 页'], ['low', '低积分 12.5'], ['zero', '积分耗尽 0'], ['full', '积分 100'],
+    ['unknown', '套餐 / 积分未知'], ['stale', '历史套餐 / 积分'], ['signed-out', '未登录'], ['error', '读取失败'],
+  ];
   if (id === 'deepseek') return [
     ['normal', '正常余额 · 双币种'], ['zero', '零余额'], ['tiny', '小于 0.01'], ['stale', '历史余额'],
     ['signed-out', '未登录'], ['unknown', '余额未知'], ['error', '读取失败'],
@@ -38,7 +43,7 @@ export function dataOptions(id: ProviderId): [TestData, string][] {
   ];
 }
 function testQuotas(id: ProviderId, data: TestData, at: string): Quota[] {
-  if (id === 'deepseek' || data === 'free') return [];
+  if (['deepseek', 'qwen', 'workbuddy'].includes(id) || data === 'free') return [];
   const models = id === 'antigravity'
     ? ['Gemini 测试模型（高）', 'Gemini 测试模型（思考）', 'Gemini 测试模型（中）', 'Claude 测试模型（高）', 'Claude 测试模型（低）', '测试模型 · 较长名称与额度分页显示', '其他测试模型']
     : id === 'claude' ? ['Claude', 'Sonnet', 'Opus'] : ['短时额度', id === 'kimi' ? 'Kimi Code' : id === 'zcode' ? 'ZCode' : 'Codex'];
@@ -69,6 +74,18 @@ export function makeTestStatus(config: TestConfig, at: string): LocalStatus {
       waitingReason: activity === 'input' ? 'input' : activity === 'approval' ? 'approval' : 'both', attentionAvailable: true,
     });
     if (id === 'claude') status.surfaces = { desktop: '测试 · 桌面版状态', terminal: '测试 · 终端版状态' };
+    if (id === 'qwen' || id === 'workbuddy') {
+      const empty = ['signed-out', 'unknown', 'error'].includes(data);
+      status.plan = { name: empty ? null : '示例套餐 Pro', status: '测试', stale: data === 'stale', expiresAt: new Date(Date.parse(at) + 86400000 * 7).toISOString() };
+      status.credits = { stale: data === 'stale', items: empty ? [] : ['套餐积分', '赠送积分', '专项积分', '每日任务次数'].map((label, index) => ({
+        label, unit: index === 3 ? '次' : '积分', total: index === 3 ? '20' : '2000',
+        remaining: data === 'zero' ? '0' : data === 'low' ? '12.5' : data === 'full' ? '100' : ['1234.5', '36', '200', '8'][index],
+      })) };
+      if (empty) {
+        status.connection = data === 'signed-out' ? 'auth-required' : data === 'error' ? 'error' : 'unavailable';
+        status.detail = `测试 · ${data === 'signed-out' ? '尚未登录客户端' : data === 'error' ? '积分读取失败，请稍后重试' : '暂无可用套餐或积分记录'}`;
+      }
+    }
     if (id === 'deepseek') {
       const empty = ['signed-out', 'unknown', 'error'].includes(data);
       status.balance = { stale: data === 'stale', wallets: empty ? [] : [

@@ -82,7 +82,7 @@ try {
   const invalidRejected = await page.evaluate(async () => {
     try { await window.panel.setOrder(['claude', 'claude', 'codex', 'deepseek']); return false; } catch { return true; }
   });
-  assert.equal(invalidRejected, true); assert.deepEqual((await page.evaluate(() => window.panel.getState())).providerOrder, [...finalOrder, 'zcode', 'kimi']);
+  assert.equal(invalidRejected, true); assert.deepEqual((await page.evaluate(() => window.panel.getState())).providerOrder, [...finalOrder, 'zcode', 'kimi', 'qwen', 'workbuddy']);
   await page.getByRole('button', { name: '收起面板' }).click();
   await expect.poll(() => page.locator('.rail-providers .avatar').evaluateAll(els => els.map(el => el.dataset.provider))).toEqual(finalOrder);
   await page.getByRole('button', { name: '展开面板' }).click();
@@ -92,6 +92,6 @@ try {
   await expect.poll(order).toEqual(finalOrder);
   await app.close(); app = await launch(); page = await app.firstWindow(); await ready();
   await expect.poll(order).toEqual(finalOrder);
-  assert.deepEqual((await page.evaluate(() => window.panel.getState())).providerOrder, [...finalOrder, 'zcode', 'kimi']);
+  assert.deepEqual((await page.evaluate(() => window.panel.getState())).providerOrder, [...finalOrder, 'zcode', 'kimi', 'qwen', 'workbuddy']);
   console.log('Card sorting passed: 8px spacing, rounded cards, hold gesture, quick-move cancellation, Escape, keyboard, control clicks, state preservation, fixed header/window, collapsed order, IPC validation, cold restart.');
 } finally { await app.close(); await rm(profile, { recursive: true, force: true }); }
