@@ -5,6 +5,8 @@ const http = require('node:http');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { DeepSeekBalanceReader } = require('./deepseek-status.cjs');
+const { DeepSeekActivityReader } = require('./deepseek-activity.cjs');
+const { ClaudeStatusReader } = require('./claude-status.cjs');
 const execute = promisify(execFile);
 const { normalizeCodexRates, unknownCodexQuotas, normalizeAntigravityQuotas,
   normalizeCodexActivity, normalizeAntigravityActivity } = require('./status-normalizers.cjs');
@@ -71,14 +73,17 @@ function unavailable(id) {
 }
 class LocalStatusReader {
   constructor({ home = os.homedir(), codexHome = process.env.CODEX_HOME || path.join(home, '.codex'),
-    deepseekReader = new DeepSeekBalanceReader({ home }) } = {}) {
+    deepseekReader = new DeepSeekBalanceReader({ home }),
+    deepseekActivityReader = new DeepSeekActivityReader({ home }), claudeReader = new ClaudeStatusReader({ home }) } = {}) {
     this.home = home;
     this.codexHome = codexHome;
     this.antigravityHome = path.join(home, '.gemini', 'antigravity');
     this.codexRateCache = null;
     this.antigravityRateCache = null;
     this.deepseekReader = deepseekReader;
-    this.current = { sampledAt: null, codex: unavailable('codex'), antigravity: unavailable('antigravity'), deepseek: unavailable('deepseek') };
+    this.deepseekActivityReader = deepseekActivityReader;
+    this.claudeReader = claudeReader;
+    this.current = { sampledAt: null, claude: unavailable('claude'), codex: unavailable('codex'), antigravity: unavailable('antigravity'), deepseek: unavailable('deepseek') };
     this.pending = null;
   }
   async poll(force = false) {
@@ -89,10 +94,10 @@ class LocalStatusReader {
   async collect(force) {
     let list;
     try { list = await processes(); } catch { list = null; }
-    const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseekReader.poll(force)]);
+    const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseek(list, force), this.claudeReader.poll(list)]);
     const sampledAt = new Date().toISOString();
     const next = { sampledAt };
-    for (const [index, id] of ['codex', 'antigravity', 'deepseek'].entries()) {
+    for (const [index, id] of ['codex', 'antigravity', 'deepseek', 'claude'].entries()) {
       const result = results[index];
       next[id] = result.status === 'fulfilled' ? result.value : {
         ...unavailable(id), task: '本地状态暂不可读', detail: '读取失败，稍后自动重试', connection: 'error' };
@@ -100,6 +105,12 @@ class LocalStatusReader {
     }
     this.current = next;
     return next;
+  }
+  async deepseek(list, force) {
+    const [balance, activity] = await Promise.allSettled([this.deepseekReader.poll(force), this.deepseekActivityReader.poll(list)]);
+    // Task discovery and network balance errors must not hide each other's successful data.
+    return { ...(balance.status === 'fulfilled' ? balance.value : { ...unavailable('deepseek'), connection: 'error', detail: '余额暂不可读' }),
+      ...(activity.status === 'fulfilled' ? activity.value : { activity: 'unknown', activeTasks: 0, task: '任务记录暂不可读', activityDetail: '稍后自动重试' }) };
   }
   async codex(list, force) {
     const now = Date.now();

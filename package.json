@@ -1,6 +1,6 @@
 {
   "name": "ai-watch-panel",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A cross-platform vertical AI activity and quota panel",
   "private": true,
   "type": "module",

@@ -15,10 +15,10 @@ try {
   const expected = await page.evaluate(() => window.panel.getStatus());
   await page.waitForFunction((snapshot) => {
     const cards = document.querySelectorAll('.provider-card');
-    const quotasReady = ['codex', 'antigravity'].every((id, index) => {
-      const card = cards[index + 1];
+    const quotasReady = ['claude', 'codex', 'antigravity'].every((id, index) => {
+      const card = cards[index];
       return card?.querySelector('.task-line > span:nth-child(2)')?.textContent === snapshot[id].task
-        && card.querySelectorAll('.quota').length === Math.max(1, Math.min(3, snapshot[id].quotas.length));
+        && card.querySelectorAll('.quota').length === (id === 'claude' && !snapshot[id].quotas.length ? 0 : Math.max(1, Math.min(3, snapshot[id].quotas.length)));
     });
     const balanceReady = cards[3]?.querySelector('.balance-content')
       && cards[3].querySelector('.task-line > span:nth-child(2)')?.textContent === snapshot.deepseek.task;
@@ -50,8 +50,8 @@ try {
     });
     const overlaps = [...document.querySelectorAll('.provider-card')].map((card) => {
       const header = card.querySelector('.card-heading').getBoundingClientRect();
-      const first = card.querySelector('.quota, .balance-content').getBoundingClientRect();
-      const last = card.querySelector('.quota:last-child, .balance-content').getBoundingClientRect();
+      const first = card.querySelector('.quota, .balance-content, .claude-empty').getBoundingClientRect();
+      const last = card.querySelector('.quota:last-child, .balance-content, .claude-empty').getBoundingClientRect();
       const footer = card.querySelector('.task-line').getBoundingClientRect();
       return header.bottom > first.top || last.bottom > footer.top;
     });
@@ -65,10 +65,12 @@ try {
   for (const region of layout.regions.slice(2)) assert.ok(Math.abs(region.height - layout.regions[1].height) < 1);
   assert.equal(layout.images, true);
   assert.ok(layout.overlaps.every((value) => value === false));
-  assert.ok(layout.quotaCount >= 5);
+  assert.ok(layout.quotaCount >= 3);
   assert.equal(await page.locator('.provider-card').last().getByRole('progressbar').count(), 0);
   if (!live) {
-    assert.equal(layout.quotaCount, 8);
+    assert.equal(layout.quotaCount, 5);
+    assert.equal(await page.locator('.claude-empty strong').innerText(), 'Code 额度暂不可用');
+    assert.equal(await page.locator('.task-line .status-dot.waiting').count(), 1);
     assert.equal(await page.locator('.quota-unknown').count(), 1);
     assert.equal(await page.locator('.quota-pagination').innerText(), '1/5');
     assert.equal(await page.locator('.balance-total strong').innerText(), '13.57');
@@ -79,12 +81,12 @@ try {
   await page.screenshot({ path: output, animations: 'disabled' });
   const status = await page.evaluate(async () => {
     const snapshot = await window.panel.getStatus();
-    return ['codex', 'antigravity', 'deepseek'].map(id => ({ provider: id, source: snapshot[id].source,
+    return ['claude', 'codex', 'antigravity', 'deepseek'].map(id => ({ provider: id, source: snapshot[id].source,
       connection: snapshot[id].connection, activity: snapshot[id].activity, quotaRows: snapshot[id].quotas.length,
       walletCount: snapshot[id].balance?.wallets.length }));
   });
-  assert.equal(layout.quotaCount, 3 + status.filter(provider => provider.provider !== 'deepseek')
-    .reduce((total, provider) => total + Math.max(1, Math.min(3, provider.quotaRows)), 0));
+  assert.equal(layout.quotaCount, status.filter(provider => provider.provider !== 'deepseek')
+    .reduce((total, provider) => total + (provider.provider === 'claude' && !provider.quotaRows ? 0 : Math.max(1, Math.min(3, provider.quotaRows))), 0));
   console.log(JSON.stringify({ result: 'passed', data: live ? 'local adapters' : 'synthetic fixture',
     logicalSize: `${native.bounds.width}×${native.bounds.height}`, scaleFactor: native.scaleFactor,
     regions: 5, quotaRows: layout.quotaCount, images: '4 loaded', overflow: 'none', isolation: 'enabled', status }, null, 2));

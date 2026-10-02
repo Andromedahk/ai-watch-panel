@@ -143,9 +143,9 @@
     "id": "deepseek",
     "source": "account",
     "connection": "ready",
-    "activity": "unknown",
+    "activity": "waiting",
     "activeTasks": 0,
-    "task": "任务状态尚未接入",
+    "task": "1 项任务等待确认",
     "quotas": [],
     "balance": {
       "wallets": [
@@ -166,6 +166,23 @@
     },
     "observedAt": "2026-10-02T00:00:00Z",
     "sampledAt": "2026-10-02T00:00:00Z",
-    "detail": "用于余额布局检查的合成记录，不是账户数据。"
+    "detail": "用于余额布局检查的合成记录，不是账户数据。",
+    "activityDetail": "合成任务确认事件，不是正在运行的实际任务。"
+  },
+  "claude": {
+    "id": "claude",
+    "source": "cache",
+    "connection": "ready",
+    "activity": "unknown",
+    "activeTasks": 0,
+    "task": "桌面已打开 · 暂无 Code 状态",
+    "quotas": [],
+    "observedAt": null,
+    "sampledAt": "2026-10-02T00:00:00Z",
+    "detail": "合成测试：本地未提供 Code 额度，Free 账号不包含 Code 权限。",
+    "surfaces": {
+      "desktop": "桌面已打开 · 无 Code 运行记录",
+      "terminal": "终端无运行会话"
+    }
   }
 }

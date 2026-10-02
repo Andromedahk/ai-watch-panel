@@ -54,7 +54,7 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
     : local.connection === 'auth-required' ? '待登录' : local.source === 'account' ? '账号余额'
     : local.source === 'local-api' ? '本地服务' : local.source === 'cache' ? isBalance ? '历史记录' : '本地记录' : '未连接';
   const phase = !local ? provider.running ? '演示运行' : '演示待机'
-    : { running: '运行中', idle: '待机', unknown: '未知', offline: '离线' }[local.activity];
+    : { running: '运行中', idle: '待机', waiting: '待确认', unknown: '未知', offline: '离线' }[local.activity];
   const time = local?.observedAt ? new Date(local.observedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
   function quotaTitle(quota: Quota) {
     const reset = quota.reset && local ? `重置时间 ${new Date(quota.reset).toLocaleString('zh-CN')}` : quota.reset;
@@ -63,7 +63,7 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
   return <section className={`provider-card ${provider.running ? 'is-running' : ''}`} style={{ '--accent': provider.color } as CSSProperties} aria-label={`${provider.name} 面板`}>
     <div className="card-heading">
       <Avatar provider={provider} image={image} />
-      <div className="identity"><span className="eyebrow">{provider.subtitle}</span><h2>{provider.name}</h2></div>
+      <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? '桌面版 · 终端版' : provider.subtitle}</span><h2>{provider.name}</h2></div>
       <span className="card-index">0{index + 1}</span>
     </div>
     <div className="quota-area">
@@ -73,9 +73,9 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
           <button aria-label={`${provider.name} 上一页额度`} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={11} /></button>
           <span title={`共 ${provider.quotas.length} 个模型额度`}>{currentPage + 1}/{pages}</span>
           <button aria-label={`${provider.name} 下一页额度`} disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight size={11} /></button>
-        </div> : <span className="quota-time" title={local?.observedAt ? `记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}>{local ? time ? `记录 ${time}` : isBalance ? '自动识别登录态' : '额度未知' : '示例额度'}</span>}
+        </div> : <span className="quota-time" title={local?.observedAt ? `记录于 ${new Date(local.observedAt).toLocaleString('zh-CN')}` : ''}>{local ? local.id === 'claude' && !local.quotas.length ? '未提供 Code 额度' : time ? `记录 ${time}` : isBalance ? '自动识别登录态' : '额度未知' : '示例额度'}</span>}
       </div>
-      {isBalance ? <BalanceCard local={local} /> : <div className="quota-list" aria-label={`${local ? '本地' : '演示'}剩余额度`}>
+      {isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>Code 额度暂不可用</strong><p>Free 账号不包含 Code 权限</p><small>{local.surfaces?.desktop}<br />{local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={`${local ? '本地' : '演示'}剩余额度`}>
         {quotas.map((quota, row) => {
           const known = quota.remaining !== null && !quota.stale;
           return <div className={`quota ${known ? '' : 'quota-unknown'}`} key={`${quota.model}:${quota.period}:${row}`} title={quotaTitle(quota)}>
@@ -87,7 +87,7 @@ function ProviderCard({ provider, index, image }: { provider: Provider; index: n
         })}
       </div>}
     </div>
-    <div className="task-line" title={local?.detail}><span className={`status-dot ${provider.running ? 'active' : ''} ${local?.activity === 'unknown' ? 'unknown' : ''}`} /><span>{provider.task}</span><span className="task-status">{phase}</span></div>
+    <div className="task-line" title={local?.activityDetail || local?.detail}><span className={`status-dot ${provider.running ? 'active' : ''} ${local?.activity === 'unknown' ? 'unknown' : local?.activity === 'waiting' ? 'waiting' : ''}`} /><span>{provider.task}</span><span className="task-status">{phase}</span></div>
   </section>;
 }
 
@@ -103,14 +103,14 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const targetImage = useRef<ProviderId>('claude');
   const visibleProviders = providers.map((provider) => {
-    if (!state.desktop || provider.id === 'claude') return provider;
+    if (!state.desktop) return provider;
     const local = localStatus?.[provider.id];
     return { ...provider, running: local?.activity === 'running', task: local?.task || '正在读取本地状态',
       quotas: local?.quotas || [], local: local || { id: provider.id, source: 'unavailable' as const,
         connection: 'unavailable' as const, activity: 'unknown' as const, activeTasks: 0,
         task: '正在读取本地状态', quotas: [], observedAt: null, sampledAt: null, detail: '等待首次读取' } };
   });
-  const activeTasks = (localStatus?.codex.activeTasks || 0) + (localStatus?.antigravity.activeTasks || 0);
+  const activeTasks = providers.reduce((total, provider) => total + (localStatus?.[provider.id].activeTasks || 0), 0);
   const refreshTime = localStatus?.sampledAt ? new Date(localStatus.sampledAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '读取中';
 
   useEffect(() => {
@@ -212,7 +212,7 @@ export default function App() {
       <button className="rail-expand" title="展开面板" aria-label="展开面板" onClick={() => collapse(false)}>{state.side === 'right' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}</button>
       <span className="rail-brand">AI</span>
       <div className="rail-providers">{visibleProviders.map((provider) => <div key={provider.id} title={`${provider.name} · ${provider.local?.task || (provider.running ? '演示运行中' : '演示待机')}`} style={{ '--accent': provider.color } as CSSProperties}>
-        <Avatar provider={provider} image={images[provider.id]} /><span className={`status-dot ${provider.running ? 'active' : ''}`} />
+        <Avatar provider={provider} image={images[provider.id]} /><span className={`status-dot ${provider.running ? 'active' : provider.local?.activity === 'waiting' ? 'waiting' : provider.local?.activity === 'unknown' ? 'unknown' : ''}`} />
       </div>)}</div>
       <button className={`rail-lock ${state.locked ? 'selected' : ''}`} title="锁定窗口" aria-label="锁定窗口" aria-pressed={state.locked} onClick={toggleLock}>{state.locked ? <LockKeyhole size={15} /> : <UnlockKeyhole size={15} />}</button>
       <span className="rail-demo">{state.desktop ? '本地' : '演示'}</span>
@@ -242,8 +242,8 @@ export default function App() {
         <div className="settings-section"><h3>助手图片</h3><p>透明图片效果更好</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
           <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={`替换 ${provider.name} 图片`}>替换</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.3</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude Code 仍为演示数据，DeepSeek 任务状态尚未接入。顶部运行数只统计已接入任务。浏览器预览全部使用示例。</p>
-          {localStatus && <>{(['codex', 'antigravity', 'deepseek'] as const).map((id) => <p key={id}><b>{id === 'codex' ? 'Codex' : id === 'deepseek' ? 'DeepSeek Harness' : 'Antigravity'}</b><br />{localStatus[id].detail}<br />{localStatus[id].observedAt ? `记录时间：${new Date(localStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
+        <div className="settings-note"><span className="note-title">本地状态 · v0.4</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+          {localStatus && <>{(['claude', 'codex', 'antigravity', 'deepseek'] as const).map((id) => <p key={id}><b>{id === 'claude' ? 'Claude Code' : id === 'codex' ? 'Codex' : id === 'deepseek' ? 'DeepSeek Harness' : 'Antigravity'}</b><br />{localStatus[id].detail}<br />{localStatus[id].activityDetail && <>{localStatus[id].activityDetail}<br /></>}{localStatus[id].observedAt ? `记录时间：${new Date(localStatus[id].observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>
       <div className="settings-footer"><button className="save-button" onClick={saveSettings}><Check size={15} />保存配置</button>{state.desktop && <button className="quit-button" onClick={() => window.panel?.quit()}>退出面板</button>}</div>

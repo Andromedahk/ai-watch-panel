@@ -7,13 +7,15 @@ export type PanelState = Preferences & {
 export type Quota = { model: string; period: string; remaining: number | null; reset: string; stale?: boolean };
 export type Wallet = { currency: 'CNY' | 'USD'; total: string; paid: string; bonus: string };
 export type LocalProviderStatus = {
-  id: 'codex' | 'antigravity' | 'deepseek'; source: 'local-api' | 'account' | 'cache' | 'unavailable';
+  id: ProviderId; source: 'local-api' | 'account' | 'cache' | 'unavailable';
   connection: 'ready' | 'offline' | 'unavailable' | 'error' | 'auth-required';
-  activity: 'running' | 'idle' | 'unknown' | 'offline'; activeTasks: number;
+  activity: 'running' | 'waiting' | 'idle' | 'unknown' | 'offline'; activeTasks: number;
   task: string; quotas: Quota[]; observedAt: string | null; sampledAt: string | null; detail: string;
+  activityDetail?: string; activityObservedAt?: string | null;
+  surfaces?: { desktop: string; terminal: string };
   balance?: { wallets: Wallet[]; stale: boolean };
 };
-export type LocalStatus = { sampledAt: string | null; codex: LocalProviderStatus; antigravity: LocalProviderStatus; deepseek: LocalProviderStatus; isTestData?: boolean };
+export type LocalStatus = { sampledAt: string | null; claude: LocalProviderStatus; codex: LocalProviderStatus; antigravity: LocalProviderStatus; deepseek: LocalProviderStatus; isTestData?: boolean };
 export type Provider = {
   id: ProviderId; name: string; subtitle: string; color: string; running: boolean;
   task: string; quotas: Quota[]; image: string; local?: LocalProviderStatus;

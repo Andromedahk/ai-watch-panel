@@ -149,3 +149,9 @@ legend { margin-bottom: 10px; color: #b7c3ce; font-size: 12px; }
   .task-line { padding-top: 4px; gap: 4px; font-size: clamp(7px, 3.3vw, 9px); line-height: 1.3; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+.status-dot.waiting { background: #edc16c; box-shadow: 0 0 5px #edc16c44; }
+.claude-empty { padding: 8px 0; color: #8996a2; font-size: clamp(7px, 3.6vw, 11px); line-height: 1.6; }
+.claude-empty strong { color: #c6cfd7; font-weight: 500; }
+.claude-empty p { margin: 4px 0 8px; }
+.claude-empty small { font-size: .85em; color: #73828f; }

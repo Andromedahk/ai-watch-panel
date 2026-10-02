@@ -67,7 +67,7 @@ function requestBalance(token, { transport = https, timeoutMs = 10000 } = {}) {
     // Fixed HTTPS destination. Node does not follow redirects; no cookies or disk cache.
     const request = transport.request({ protocol: 'https:', hostname: 'platform.deepseek.com',
       path: '/api/v0/users/get_user_summary', method: 'GET', agent: false,
-      headers: { Accept: 'application/json', 'x-dsh-auth-token': token, 'User-Agent': 'AIWatch/0.3.0' } }, (response) => {
+      headers: { Accept: 'application/json', 'x-dsh-auth-token': token, 'User-Agent': 'AIWatch/0.4.0' } }, (response) => {
       const chunks = []; let bytes = 0;
       response.on('error', () => reject(new BalanceError('network')));
       if ([401, 403].includes(response.statusCode)) { response.destroy(); reject(new BalanceError('login')); return; }
