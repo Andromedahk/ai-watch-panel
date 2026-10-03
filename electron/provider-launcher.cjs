@@ -57,7 +57,7 @@ async function discoverMacApp(id, options = {}) {
   requireProvider(id);
   const io = options.io || fs.promises;
   const plist = options.plist || readPlist;
-  const identities = MAC_BUNDLE_IDS[id];
+  const identities = id === 'kimi' && options.kimiSource === 'work' ? ['com.moonshot.kimichat'] : MAC_BUNDLE_IDS[id];
   if (!identities.length) return null;
   const roots = options.roots || ['/Applications', path.join(os.homedir(), 'Applications')];
   // Scan only the two conventional application folders and one category level.
@@ -110,43 +110,48 @@ class ProviderLauncher {
   constructor(options = {}) {
     this.platform = options.platform || process.platform;
     this.fixtureMode = options.fixtureMode === true;
-    this.discover = options.discover || (id => discoverMacApp(id));
+    this.discover = options.discover || ((id, source) => discoverMacApp(id, { kimiSource: source }));
     this.validate = options.validate || (file => validateExecutable(file, this.platform));
     this.open = options.open || (file => openExecutable(file, this.platform));
     this.now = options.now || Date.now;
     this.pending = new Map();
     this.recent = new Map();
   }
-  async launch(id, customPath) {
+  async launch(id, customPath, kimiSource = 'code') {
     requireProvider(id);
-    if (this.fixtureMode) return { status: 'test', message: `测试模式：已模拟打开 ${LABELS[id]}。` };
+    if (!['code', 'work'].includes(kimiSource)) throw new Error('Invalid Kimi source');
+    const label = id === 'kimi' && kimiSource === 'work' ? 'Kimi Work' : LABELS[id];
+    const key = id === 'kimi' ? `${id}:${kimiSource}` : id;
+    if (this.fixtureMode) return { status: 'test', message: `测试模式：已模拟打开 ${label}。` };
     if (!['darwin', 'win32', 'linux'].includes(this.platform)) return { status: 'unsupported', message: '当前系统暂不支持打开应用。' };
-    if (this.pending.has(id)) return this.pending.get(id);
-    const previous = this.recent.get(id);
+    if (this.pending.has(key)) return this.pending.get(key);
+    const previous = this.recent.get(key);
     if (previous && previous.path === customPath && this.now() - previous.at < 2000) return previous.result;
     const attempt = (async () => {
       try {
         // An explicitly selected app always wins. Missing selections are not replaced silently.
-        const file = customPath ? await this.validate(customPath) : (this.platform === 'darwin' ? await this.discover(id) : null);
+        const file = customPath ? await this.validate(customPath) : (this.platform === 'darwin' ? await this.discover(id, kimiSource) : null);
         if (!file) return { status: 'missing', message: MISSING_MESSAGE };
         await this.open(file);
-        return { status: 'opened', message: `已请求打开 ${LABELS[id]}。` };
+        return { status: 'opened', message: `已请求打开 ${label}。` };
       } catch { return { status: 'error', message: '应用未能打开，请检查安装状态或重新选择启动应用。' }; }
     })();
-    this.pending.set(id, attempt);
+    this.pending.set(key, attempt);
     try {
       const result = await attempt;
-      if (result.status === 'opened') this.recent.set(id, { at: this.now(), path: customPath, result });
+      if (result.status === 'opened') this.recent.set(key, { at: this.now(), path: customPath, result });
       return result;
-    } finally { this.pending.delete(id); }
+    } finally { this.pending.delete(key); }
   }
-  async choose(id, showDialog, save) {
+  async choose(id, showDialog, save, kimiSource = 'code') {
     requireProvider(id);
-    if (this.fixtureMode) return { status: 'selected', message: `测试模式：已模拟选择 ${LABELS[id]} 的启动应用。` };
+    if (!['code', 'work'].includes(kimiSource)) throw new Error('Invalid Kimi source');
+    const label = id === 'kimi' && kimiSource === 'work' ? 'Kimi Work' : LABELS[id];
+    if (this.fixtureMode) return { status: 'selected', message: `测试模式：已模拟选择 ${label} 的启动应用。` };
     if (!['darwin', 'win32', 'linux'].includes(this.platform)) return { status: 'error', message: '当前系统暂不支持选择启动应用。' };
     try {
       const result = await showDialog({
-        title: `选择 ${LABELS[id]} 的启动应用`, properties: ['openFile'],
+        title: `选择 ${label} 的启动应用`, properties: ['openFile'],
         ...(this.platform === 'darwin' ? { filters: [{ name: '应用', extensions: ['app'] }] }
           : this.platform === 'win32' ? { filters: [{ name: '应用', extensions: ['exe'] }] } : {}),
       });
@@ -156,7 +161,8 @@ class ProviderLauncher {
       if (!valid) return { status: 'error', message: this.platform === 'linux' ? '请选择可执行的应用程序或 AppImage。' : '请选择有效的已安装应用。' };
       await save(id, valid);
       this.recent.delete(id);
-      return { status: 'selected', message: `已设置 ${LABELS[id]} 的启动应用。` };
+      this.recent.delete(`${id}:${kimiSource}`);
+      return { status: 'selected', message: `已设置 ${label} 的启动应用。` };
     } catch { return { status: 'error', message: '无法保存启动应用，请重试。' }; }
   }
 }

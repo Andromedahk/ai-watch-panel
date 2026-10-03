@@ -9,7 +9,9 @@ const PROCESS = [{ pid: 100, command: '/Applications/ZCode.app/Contents/MacOS/ZC
 const turn = (overrides = {}) => ({ session_id: 'session-test', turn_id: 'turn-test', status: 'running',
   started_at: NOW - 2000, first_model_start_at: NOW - 1000, first_token_at: null, completed_at: null,
   model_request_count: 1, tool_call_count: 0, input_tokens: 0, output_tokens: 0, reasoning_tokens: 0, ...overrides });
-function mock(rows) { return new ZcodeStatusReader({ home: '/fixture', env: {}, readTurns: async () => rows }); }
+const unknownAccount = { poll: async () => ({ source: 'unavailable', connection: 'unavailable',
+  plan: { name: null }, quotas: [], observedAt: null, detail: '套餐来源未知' }) };
+function mock(rows) { return new ZcodeStatusReader({ home: '/fixture', env: {}, readTurns: async () => rows, accountReader: unknownAccount }); }
 
 test('ZCode discovers portable defaults and explicit official environment paths', () => {
   assert.equal(resolveZcodePaths({ home: '/fixture', env: {} })[0].file, '/fixture/.zcode/cli/db/db.sqlite');
@@ -72,7 +74,7 @@ test('ZCode deduplicates sessions and ignores superseded unfinished turns', asyn
 });
 test('ZCode missing, incompatible, or oversized records are safe and never disclose exception text', async () => {
   for (const failure of [Object.assign(new Error('secret fixture path'), { code: 'ENOENT' }), new Error('secret fixture token')]) {
-    const reader = new ZcodeStatusReader({ home: '/fixture', env: {}, readTurns: async () => { throw failure; } });
+    const reader = new ZcodeStatusReader({ home: '/fixture', env: {}, readTurns: async () => { throw failure; }, accountReader: unknownAccount });
     const result = await reader.poll(PROCESS, NOW);
     assert.equal(result.activity, 'unknown'); assert.equal(result.source, 'unavailable');
     assert.doesNotMatch(JSON.stringify(result), /secret|fixture/);
@@ -111,4 +113,17 @@ test('ZCode telemetry and product-like user fields never imply a current subscri
     assert.deepEqual(result.plan, { name: null });
     assert.doesNotMatch(JSON.stringify(result), /PRIVATE_PRODUCT/);
   }
+});
+
+test('ZCode verified account quotas remain independent of task telemetry and forward manual refresh', async () => {
+  const calls = [];
+  const accountReader = { poll: async (...args) => { calls.push(args); return { source: 'account', connection: 'ready',
+    plan: { name: 'Pro', stale: false }, quotas: [{ model: '共享额度', period: '5 小时', remaining: 25, reset: '' }],
+    observedAt: new Date(NOW).toISOString(), detail: '合成已验证账号' }; } };
+  const reader = new ZcodeStatusReader({ home: '/fixture', env: {}, readTurns: async () => [turn()], accountReader });
+  const result = await reader.poll(PROCESS, NOW, true);
+  assert.equal(result.source, 'account'); assert.equal(result.connection, 'ready');
+  assert.equal(result.plan.name, 'Pro'); assert.equal(result.quotas[0].remaining, 25);
+  assert.equal(result.activity, 'unknown'); assert.equal(result.activeTasks, 0);
+  assert.deepEqual(calls[0], [PROCESS, NOW, true]);
 });

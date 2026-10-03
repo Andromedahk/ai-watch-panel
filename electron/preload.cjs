@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('panel', {
   setOrder: (order) => ipcRenderer.invoke('panel:order', order),
   setEnabled: (ids) => ipcRenderer.invoke('panel:enabled', ids),
   setQwenAccess: (allowed) => ipcRenderer.invoke('panel:qwen-access', allowed),
+  setKimiSource: (source) => ipcRenderer.invoke('panel:kimi-source', source),
   setAnimeMode: (enabled) => ipcRenderer.invoke('panel:anime-mode', enabled),
   openProvider: (provider) => ipcRenderer.invoke('panel:open-provider', provider),
   chooseProviderApp: (provider) => ipcRenderer.invoke('panel:choose-provider-app', provider),

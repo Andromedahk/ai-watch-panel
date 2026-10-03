@@ -1,18 +1,20 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
 import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
-import { providers, providerIds, animeImages as defaultAnimeImages } from './data';
+import { providers as baseProviders, providerIds, animeImages as defaultAnimeImages } from './data';
 import { useVisibleCards } from './useVisibleCards';
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
 import Big from 'big.js';
-import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provider, ProviderId, Quota, Theme } from './types';
+import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provider, ProviderId, Quota, Theme, KimiSource } from './types';
+const providers = baseProviders;
 
 const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
   desktop: false, platform: 'browser', scaleFactor: window.devicePixelRatio,
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
+  kimiSource: 'code',
   animeMode: readAnimeMode(),
   theme: window.panel ? 'system' : readTheme(),
   resolvedTheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
@@ -145,7 +147,7 @@ function ProviderCard({ provider, index, image, anime = false, onOpen, launchBus
     : { running: '运行中', idle: '待机', waiting: local.id === 'codex' ? local.waitingReason === 'input' ? '待回答' : local.waitingReason === 'approval' ? '待授权' : '待处理' : '待确认', unknown: '未知', offline: '离线' }[local.activity];
   const time = local?.observedAt ? new Date(local.observedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
   function quotaTitle(quota: Quota) {
-    const reset = quota.reset && local ? `重置时间 ${new Date(quota.reset).toLocaleString('zh-CN')}` : quota.reset;
+    const reset = quota.reset && local ? `${quota.resetKind === 'expiry' ? '到期时间' : '重置时间'} ${new Date(quota.reset).toLocaleString('zh-CN')}` : quota.reset;
     return `${quota.model} · ${quota.period}${reset ? ` · ${reset}` : ''}${quota.variants?.length ? ` · 合并：${quota.variants.join('、')}；剩余额度取较低值` : ''}${quota.stale ? ` · 已过时，历史剩余 ${quota.remaining ?? '未知'}%` : ''}`;
   }
   return <section {...sortProps} className={`provider-card ${provider.running ? 'is-running' : ''} ${dragging ? 'is-dragging' : ''}`} style={{ '--accent': provider.color, ...sortProps?.style } as CSSProperties}
@@ -202,6 +204,9 @@ export default function App() {
   const [themeSaving, setThemeSaving] = useState(false);
   const [modulesSaving, setModulesSaving] = useState(false);
   const [qwenAccessSaving, setQwenAccessSaving] = useState(false);
+  const [kimiSourceSaving, setKimiSourceSaving] = useState(false);
+  const providers = baseProviders.map(provider => provider.id === 'kimi' && state.kimiSource === 'work'
+    ? { ...provider, name: 'Kimi Work', subtitle: 'MOONSHOT AI · WORK' } : provider);
   const viewport = useRef<HTMLDivElement>(null);
   const enabledOrder = state.providerOrder.filter(id => state.enabledProviders.includes(id));
   const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode);
@@ -212,7 +217,12 @@ export default function App() {
   const targetImage = useRef<{ provider: ProviderId; anime: boolean }>({ provider: 'claude', anime: false });
   const visibleProviders = enabledOrder.map(id => providers.find(provider => provider.id === id)!).map((provider) => {
     if (!state.desktop && !testMode) return provider;
-    const local = displayStatus?.[provider.id];
+    let local = displayStatus?.[provider.id];
+    if (provider.id === 'kimi' && state.kimiSource === 'work' && testMode && local) {
+      local = { ...local, kimiSource: 'work', activity: 'unknown', activeTasks: 0, task: '测试数据 · Work 活动未知',
+        quotas: local.quotas.slice(0, 2).map((quota, index) => ({ ...quota, model: '共享积分',
+          period: index ? '赠送额度' : '订阅额度', resetKind: 'expiry' })) };
+    } else if (provider.id === 'kimi' && local && (local.kimiSource || 'code') !== state.kimiSource) local = undefined;
     return { ...provider, running: local?.activity === 'running', task: local?.task || '正在读取本地状态',
       quotas: local?.quotas || [], local: local || { id: provider.id, source: 'unavailable' as const,
         connection: 'unavailable' as const, activity: 'unknown' as const, activeTasks: 0,
@@ -292,6 +302,13 @@ export default function App() {
       setNotice('模块顺序已保存');
     } catch { setState(current => ({ ...current, providerOrder: previous })); setNotice('顺序保存失败，已恢复原顺序'); }
     finally { setOrderSaving(false); }
+  }
+  async function changeKimiSource(source: KimiSource) {
+    if (kimiSourceSaving || !window.panel) return;
+    setKimiSourceSaving(true);
+    try { setState(await window.panel.setKimiSource(source)); setNotice('Kimi 来源已保存'); }
+    catch { setNotice('Kimi 来源保存失败，请重试'); }
+    finally { setKimiSourceSaving(false); }
   }
 
   function openSettings() { setDraft({ side: state.side, locked: state.locked, animate: state.animate }); setSettingsOpen(true); }
@@ -479,6 +496,10 @@ export default function App() {
             return <label key={id} className="module-option"><input type="checkbox" aria-label={`启用 ${provider.name}`} checked={state.enabledProviders.includes(id)} disabled={modulesSaving} onChange={event => void changeEnabled(id, event.target.checked)} /><span>{provider.name}</span></label>;
           })}</div>
           <p className="appearance-hint">取消勾选的模块不显示、不提醒；顺序仍保留。</p>
+        </fieldset>
+        <fieldset className="appearance-settings"><legend>Kimi 数据来源</legend>
+          <div className="segmented" aria-label="Kimi 数据来源">{(['code', 'work'] as const).map(source => <button key={source} className={state.kimiSource === source ? 'selected' : ''} aria-pressed={state.kimiSource === source} aria-label={`选择 Kimi ${source === 'work' ? 'Work' : 'Code'} 来源`} disabled={!state.desktop || kimiSourceSaving} onClick={() => void changeKimiSource(source)}>Kimi {source === 'work' ? 'Work' : 'Code'}</button>)}</div>
+          <p className="appearance-hint">Work 读取正在运行的桌面客户端账号及会员共享积分，活动状态暂为未知。Code 读取独立 CLI 的额度与本机服务。来源失败时保留所选客户端。</p>
         </fieldset>
         <fieldset className="appearance-settings"><legend>千问登录读取</legend>
           <label className="switch-row"><span>读取千问登录状态<small>仅查询套餐和积分</small></span><input aria-label="读取千问登录状态" type="checkbox" checked={state.qwenKeychainAllowed} disabled={!state.desktop || qwenAccessSaving} onChange={event => void changeQwenAccess(event.target.checked)} /></label>

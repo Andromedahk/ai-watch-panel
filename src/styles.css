@@ -31,7 +31,7 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .toolbar svg { width: clamp(12px, 5.6vw, 16px); height: clamp(12px, 5.6vw, 16px); stroke-width: 1.6; }
 .toolbar button:hover, .icon-button:hover { color: var(--hover-text); background: var(--hover-bg); }
 .toolbar button.selected, .rail-lock.selected { background: var(--selected-bg); color: var(--selected-text); border-color: var(--selected-border); }
-.provider-card { min-height: 0; min-width: 0; position: relative; overflow: hidden; margin-inline: 8px; padding: clamp(9px, 1.5vh, 22px) max(10px, calc(var(--gutter) - 6px)); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; gap: clamp(9px, 1.55vh, 20px); background: radial-gradient(ellipse at 0 0, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%), var(--card); box-shadow: 0 2px 5px #0002; cursor: grab; touch-action: none; user-select: none; -webkit-app-region: no-drag; }
+.provider-card { min-height: 0; min-width: 0; position: relative; overflow: hidden; margin-inline: 8px; padding: clamp(9px, 1vh, 16px) max(10px, calc(var(--gutter) - 6px)); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; gap: clamp(6px, .8vh, 12px); background: radial-gradient(ellipse at 0 0, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%), var(--card); box-shadow: 0 2px 5px #0002; cursor: grab; touch-action: none; user-select: none; -webkit-app-region: no-drag; }
 .provider-card:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
 .is-sorting .provider-card { transition: transform .16s ease; }
 .is-sorting .provider-card.is-dragging { transition: none; z-index: 4; cursor: grabbing; border-color: var(--accent-ink, var(--accent)); box-shadow: 0 8px 24px #0009, 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
@@ -68,14 +68,14 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .provider-card[data-provider="deepseek"] .identity h2 { font-size: clamp(9px, 5.1vw, 16px); }
 .card-index { position: absolute; right: -3px; top: -10px; display: flex; align-items: center; gap: 2px; font: 8px ui-monospace, monospace; color: var(--ordinal); }
 .quota-area { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 7px; }
-.quota-tools { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 16px; font-size: 9px; color: var(--secondary); }
+.quota-tools { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 16px; font-size: 9px; color: var(--secondary); }
 .source-tag { font-size: 8px; border: 1px solid var(--tag-border); border-radius: 3px; padding: 1px 4px; white-space: nowrap; }
 .source-tag.local { color: var(--local-text); border-color: var(--local-border); }
 .quota-time { font-size: 8px; }
 .quota-pagination { display: flex; align-items: center; gap: 3px; font: 8px ui-monospace, monospace; }
 .quota-pagination button { width: 19px; height: 16px; display: grid; place-items: center; padding: 0; background: var(--page-bg); border: 1px solid var(--page-border); border-radius: 3px; color: var(--page-text); }
 .quota-pagination button:disabled { opacity: .3; cursor: default; }
-.quota-list { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: clamp(6px, 1.1vh, 14px); min-height: 0; }
+.quota-list { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: clamp(4px, .5vh, 8px); min-height: 0; }
 .balance-content { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: clamp(4px, .8vh, 10px); }
 .balance-caption { display: flex; justify-content: space-between; align-items: center; color: var(--caption); font-size: clamp(8px, 3.6vw, 11px); }
 .currency-switch { color: var(--link); background: transparent; border: 1px solid var(--link-border); border-radius: 3px; font-size: 8px; padding: 1px 3px; }

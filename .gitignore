@@ -9,4 +9,5 @@ release/
 test-results/
 playwright-report/
 coverage/
+electron/native/bin/
 .local/

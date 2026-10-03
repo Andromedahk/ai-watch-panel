@@ -22,7 +22,7 @@ test('restore clamps a moved rail into the available display area', () => {
   assert.deepEqual(clampBounds({ x: 1500, y: 100, width: 200, height: 900 }, { x: 0, y: 25, width: 1600, height: 900 }), { x: 1400, y: 25, width: 200, height: 900 });
 });
 test('unknown configuration values fall back without broadening capabilities', () => {
-  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, animeMode: false, providerApps: {} });
+  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', kimiWorkApp: null, animeMode: false, providerApps: {} });
 });
 test('provider order rejects missing, duplicate and unknown cards and migrates old preferences', () => {
   for (const value of [null, 'codex', [], ['codex', 'codex', 'claude', 'deepseek'], ['claude', 'codex', 'antigravity', 'other']]) {
@@ -32,7 +32,7 @@ test('provider order rejects missing, duplicate and unknown cards and migrates o
   const reversed = [...PROVIDER_ORDER].reverse();
   assert.equal(isProviderOrder(reversed), true);
   const settings = validPreferences({ side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed });
-  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, animeMode: false, providerApps: {} });
+  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', kimiWorkApp: null, animeMode: false, providerApps: {} });
   reversed.reverse();
   assert.notDeepEqual(settings.providerOrder, reversed);
 });
@@ -99,4 +99,14 @@ test('launch preferences retain only known provider absolute local paths', () =>
   assert.deepEqual(validPreferences({ providerApps: null }).providerApps, {});
   original.claude = 'changed';
   assert.equal(validPreferences({ providerApps: { codex: file } }).providerApps.codex, file);
+});
+
+
+test('Kimi source stays explicit and launch selections remain separate', () => {
+  for (const kimiSource of [undefined, null, false, 'auto', 'Work', {}]) assert.equal(validPreferences({ kimiSource }).kimiSource, 'code');
+  assert.equal(validPreferences({ kimiSource: 'work' }).kimiSource, 'work');
+  const path = require('node:path'); const codeApp = path.resolve('Code.app'), workApp = path.resolve('Work.app');
+  const settings = validPreferences({ kimiSource: 'work', providerApps: { kimi: codeApp }, kimiWorkApp: workApp });
+  assert.equal(settings.providerApps.kimi, codeApp); assert.equal(settings.kimiWorkApp, workApp);
+  assert.equal(validPreferences({ kimiWorkApp: 'https://example.invalid' }).kimiWorkApp, null);
 });

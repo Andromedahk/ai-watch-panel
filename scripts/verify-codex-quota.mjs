@@ -26,52 +26,76 @@ try {
   const merged = ['Gemini Pro', 'Gemini Flash', 'Claude Sonnet', 'Claude Opus', 'GPT-OSS'].map(model => ({ model,
     period: '模型额度', remaining: 60, reset: '2099-10-09T00:00:00Z', stale: false,
     variants: [`${model} (High)`, `${model} (Low)`] }));
-  for (const animeMode of [false, true]) {
-    await page.evaluate(value => window.panel.setAnimeMode(value), animeMode);
-    for (const appearance of ['light', 'dark']) {
-      await page.evaluate(value => window.panel.setTheme(value), appearance);
-      await send({ codex: { source: 'account', connection: 'ready', activity: 'offline', activeTasks: 0,
-        plan: { name: 'Pro', status: '官方查询' }, quotas: [weekly] }, antigravity: { quotas: merged } });
-      await expect(card('codex').locator('.quota')).toHaveCount(1);
-      await expect(card('codex').locator('.quota-label')).toContainText('1 周');
-      await expect(card('codex').locator('.quota-label')).toContainText('72.5');
-      await expect(card('codex').locator('.source-tag')).toHaveText('账号额度');
-      await expect(card('codex').locator('.task-status')).toHaveText('离线');
-      await expect(card('codex').getByRole('progressbar')).toHaveAttribute('aria-valuenow', '72.5');
-      const labels = await card('antigravity').locator('.model-name').allTextContents();
-      assert.equal(labels.some(label => /High|Low|Medium|Thinking/.test(label)), false);
-      await expect(card('antigravity').locator('.quota').first()).toHaveAttribute('title', /合并.*High.*Low/);
-      await card('antigravity').getByRole('button', { name: 'Antigravity 下一页额度', exact: true }).click();
-      const next = await card('antigravity').locator('.model-name').allTextContents();
-      assert.equal(new Set([...labels, ...next]).size, animeMode ? 4 : 5);
-      await card('antigravity').getByRole('button', { name: 'Antigravity 上一页额度', exact: true }).click();
-      const overflow = await card('codex').evaluate(element => element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1);
-      assert.equal(overflow, false);
-      await send({ codex: { source: 'cache', connection: 'error', task: '合成测试 · 历史额度展示', plan: { name: 'Pro', status: '官方查询缓存', stale: true },
-        quotas: [{ ...weekly, stale: true }] } });
-      await expect(card('codex').locator('.source-tag')).toHaveText('查询缓存');
-      await expect(card('codex').locator('.quota-label')).toContainText('历史72.5%');
-      await expect(card('codex').locator('.quota-fill')).toHaveCount(0);
-      await expect(card('codex').getByRole('progressbar')).toHaveAttribute('aria-valuetext', '历史剩余 72.5%，当前额度待更新');
-      await expect(card('codex').getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
-      if (animeMode && appearance === 'dark') {
-        await send({ codex: { source: 'cache', connection: 'error', task: '合成测试 · 历史额度展示', plan: { name: 'Pro', status: '官方查询缓存', stale: true }, quotas: [{ ...weekly, stale: true }] } }, true);
-        await mkdir('docs/screenshots', { recursive: true });
-        await card('codex').screenshot({ path: 'docs/screenshots/codex-quota-history.png' });
-      }
-      await send({ codex: { source: 'unavailable', connection: 'auth-required', plan: { name: null },
-        quotas: [{ ...weekly, remaining: null }] } });
-      await expect(card('codex').locator('.quota-label')).not.toContainText('72.5');
-      await expect(card('codex').locator('.source-tag')).toHaveText('待登录');
+  const zcode = ['5 小时', '1 周', '1 月'].map((period, index) => ({
+    model: index === 2 ? '工具调用' : '共享额度', period, remaining: 80 - index * 10, reset: '', stale: false,
+  }));
+  async function quotaGeometry(id) {
+    const geometry = await card(id).evaluate(element => {
+      const bounds = node => { const box = node.getBoundingClientRect(); return { top: box.top, bottom: box.bottom }; };
+      return { tools: bounds(element.querySelector('.quota-tools')), list: bounds(element.querySelector('.quota-list')),
+        footer: bounds(element.querySelector('.task-line')), rows: [...element.querySelectorAll('.quota')].map(bounds) };
+    });
+    const context = JSON.stringify({ id, viewport: page.viewportSize(), geometry });
+    assert.ok(geometry.tools.bottom <= geometry.list.top + 1, context);
+    assert.ok(geometry.list.bottom <= geometry.footer.top + 1, context);
+    for (const row of geometry.rows) {
+      assert.ok(row.top >= geometry.list.top - 1 && row.bottom <= geometry.list.bottom + 1, context);
     }
   }
+  // Include both sides of the compact breakpoint and the failing native size.
+  for (const size of [{ width: 200, height: 900 }, { width: 222, height: 999 }, { width: 223, height: 1001 },
+    { width: 223, height: 1005 }, { width: 245, height: 1101 }, { width: 320, height: 1440 }]) {
+    await page.setViewportSize(size);
+    for (const animeMode of [false, true]) {
+      await page.evaluate(value => window.panel.setAnimeMode(value), animeMode);
+      for (const appearance of ['light', 'dark']) {
+        await page.evaluate(value => window.panel.setTheme(value), appearance);
+        await send({ codex: { source: 'account', connection: 'ready', activity: 'offline', activeTasks: 0,
+          plan: { name: 'Pro', status: '官方查询' }, quotas: [weekly] }, antigravity: { quotas: merged },
+          zcode: { source: 'account', connection: 'ready', plan: { name: 'Pro' }, quotas: zcode } });
+        await quotaGeometry('antigravity'); await quotaGeometry('zcode');
+        await expect(card('codex').locator('.quota')).toHaveCount(1);
+        await expect(card('codex').locator('.quota-label')).toContainText('1 周');
+        await expect(card('codex').locator('.quota-label')).toContainText('72.5');
+        await expect(card('codex').locator('.source-tag')).toHaveText('账号额度');
+        await expect(card('codex').locator('.task-status')).toHaveText('离线');
+        await expect(card('codex').getByRole('progressbar')).toHaveAttribute('aria-valuenow', '72.5');
+        const labels = await card('antigravity').locator('.model-name').allTextContents();
+        assert.equal(labels.some(label => /High|Low|Medium|Thinking/.test(label)), false);
+        await expect(card('antigravity').locator('.quota').first()).toHaveAttribute('title', /合并.*High.*Low/);
+        await card('antigravity').getByRole('button', { name: 'Antigravity 下一页额度', exact: true }).click();
+        const next = await card('antigravity').locator('.model-name').allTextContents();
+        assert.equal(new Set([...labels, ...next]).size, animeMode ? 4 : 5);
+        await card('antigravity').getByRole('button', { name: 'Antigravity 上一页额度', exact: true }).click();
+        const overflow = await card('codex').evaluate(element => element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1);
+        assert.equal(overflow, false);
+        await send({ codex: { source: 'cache', connection: 'error', task: '合成测试 · 历史额度展示', plan: { name: 'Pro', status: '官方查询缓存', stale: true },
+          quotas: [{ ...weekly, stale: true }] } });
+        await expect(card('codex').locator('.source-tag')).toHaveText('查询缓存');
+        await expect(card('codex').locator('.quota-label')).toContainText('历史72.5%');
+        await expect(card('codex').locator('.quota-fill')).toHaveCount(0);
+        await expect(card('codex').getByRole('progressbar')).toHaveAttribute('aria-valuetext', '历史剩余 72.5%，当前额度待更新');
+        await expect(card('codex').getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
+        if (animeMode && appearance === 'dark') {
+          await send({ codex: { source: 'cache', connection: 'error', task: '合成测试 · 历史额度展示', plan: { name: 'Pro', status: '官方查询缓存', stale: true }, quotas: [{ ...weekly, stale: true }] } }, true);
+          await mkdir('docs/screenshots', { recursive: true });
+          await card('codex').screenshot({ path: 'docs/screenshots/codex-quota-history.png' });
+        }
+        await send({ codex: { source: 'unavailable', connection: 'auth-required', plan: { name: null },
+          quotas: [{ ...weekly, remaining: null }] } });
+        await expect(card('codex').locator('.quota-label')).not.toContainText('72.5');
+        await expect(card('codex').locator('.source-tag')).toHaveText('待登录');
+      }
+    }
+  }
+  await page.setViewportSize({ width: 223, height: 1005 });
   // Capture synthetic live-query/merged models with the global test indicator visible.
   await send({ codex: { source: 'account', connection: 'ready', plan: { name: 'Pro', status: '官方查询' }, quotas: [weekly] },
     antigravity: { quotas: merged } }, true);
   await page.locator('.provider-viewport').evaluate(element => element.scrollTo({ top: 0, behavior: 'instant' }));
   await page.screenshot({ path: 'docs/screenshots/quotas-online-merged.png' });
   assert.equal((await page.evaluate(() => window.panel.getState())).qwenKeychainAllowed, false);
-  console.log('Quota UI checks passed: official weekly-only display, no invented five-hour window, allowances with app closed, historical numbers without current progress, cleared login, merged model names/hover/pagination, both themes and logo modes. All samples synthetic.');
+  console.log('Quota UI checks passed: official weekly-only display, no invented five-hour window, allowances with app closed, historical numbers without current progress, cleared login, merged model names/hover/pagination, both themes and logo modes at six viewport sizes, and three-row ZCode boundaries. All samples synthetic.');
 } finally {
   await app.close();
   await rm(profile, { recursive: true, force: true });
