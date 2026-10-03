@@ -26,7 +26,7 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .tiny-dot.active { background: var(--green); }
 .demo-tag { color: var(--tag-text); font-size: 8px; padding: 1px 4px; border: 1px solid var(--tag-border); border-radius: 3px; }
 .overview time { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.toolbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.toolbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 .toolbar button { border: 1px solid var(--control-border); border-radius: 6px; background: var(--control-bg); height: clamp(22px, 3.5vh, 35px); display: grid; place-items: center; color: var(--control-text); transition: background .15s, color .15s; }
 .toolbar svg { width: clamp(12px, 5.6vw, 16px); height: clamp(12px, 5.6vw, 16px); stroke-width: 1.6; }
 .toolbar button:hover, .icon-button:hover { color: var(--hover-text); background: var(--hover-bg); }
@@ -115,8 +115,9 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .no-animation *, .no-animation *::before, .no-animation *::after { animation: none !important; transition: none !important; }
 .collapsed-rail { width: 46px; height: 100%; display: flex; flex-direction: column; align-items: center; padding: 15px 0; border-left: 1px solid var(--line); -webkit-app-region: drag; }
 .rail-grip { color: var(--faint); margin-bottom: 15px; }
-.rail-expand, .rail-lock { background: transparent; border: 0; display: grid; place-items: center; width: 30px; height: 32px; color: var(--control-text); border-radius: 6px; }
-.rail-expand:hover, .rail-lock:hover { background: var(--rail-hover); }
+.rail-expand, .rail-lock, .rail-store { background: transparent; border: 0; display: grid; place-items: center; width: 30px; height: 32px; color: var(--control-text); border-radius: 6px; }
+.rail-expand:hover, .rail-lock:hover, .rail-store:hover { background: var(--rail-hover); }
+.toolbar button:disabled, .rail-store:disabled { opacity: .4; cursor: default; }
 .rail-brand { font-size: 10px; letter-spacing: 2px; margin: 15px 0 30px; color: var(--brand); }
 .rail-providers { display: flex; flex-direction: column; gap: 24px; }
 .rail-providers > div { position: relative; }

@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('panel', {
   },
   setLocked: (locked) => ipcRenderer.invoke('panel:lock', locked),
   setCollapsed: (collapsed) => ipcRenderer.invoke('panel:collapse', collapsed),
+  store: () => ipcRenderer.invoke('panel:store'),
   configure: (preferences) => ipcRenderer.invoke('panel:configure', preferences),
   setOrder: (order) => ipcRenderer.invoke('panel:order', order),
   setEnabled: (ids) => ipcRenderer.invoke('panel:enabled', ids),

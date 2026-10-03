@@ -2,7 +2,7 @@
 
 macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vite**，预留 Windows、Linux 的构建入口。
 
-> v0.14.1 修正套餐标签的垂直居中。v0.14.0 重做二次元模式的卡片界面：统一字号与间距，方形角色画框、浅色主题色顶部区、套餐标签、内嵌数据面板和状态胶囊，明暗主题与大小窗口保持一致。v0.13.0 新增 Codex 官方额度自动查询与本地记录后备，Antigravity 同一模型的思考等级合并显示。支持点击图标打开对应桌面应用；二次元角色图约占卡片四分之一，普通 LOGO 与二次元图片独立保存。内置七张已批准同步的角色图，WorkBuddy 暂用占位图；保留套餐、额度、呼吸灯、排序与本地状态接入。
+> v0.15.0 新增菜单栏 / 托盘收纳，隐藏窗口时继续监看；加入 Kimi Work 来源和 ZCode BigModel 个人套餐额度。保留侧边窄条、二次元模式、套餐、额度、呼吸灯、排序及本地状态接入。
 
 <img src="docs/screenshots/panel.png" width="220" alt="AI Watch 固定顶部与四卡首屏预览" />
 
@@ -164,9 +164,12 @@ npm start
 - **手动移动**：拖动顶部标题与概览区域；控制按钮不参与拖动。
 - **锁定**：macOS 上启用置顶、所有 Spaces 可见和全屏工作区可见。解锁恢复普通窗口行为。当前使用原生窗口 API，无需申请辅助功能权限。
 - **收起**：缩为 46 个逻辑像素宽的状态条，显示所有已启用助手和工作状态灯；点击箭头恢复。
+- **收纳**：顶部第三个按钮完全隐藏窗口；窄条中也有收纳按钮。macOS 收到顶部菜单栏并隐藏 Dock 图标，Windows 收到通知区域并移除普通任务栏按钮；后台继续查询本地状态。菜单栏图标适配明暗主题与 HiDPI，Windows 使用多分辨率 ICO。
+- **恢复**：macOS 点击菜单栏图标，选择“显示面板”；Windows 左键点击通知区域图标，右键打开操作菜单。恢复保留窗口位置、展开 / 窄条状态、卡片顺序和分页。再次打开应用也会恢复当前面板。收纳状态只保留到本次运行结束，重新启动正常显示面板。
+- **关闭与退出**：关闭窗口会收纳；要完全停止后台监看，在图标菜单选择“退出 AI Watch”、在配置中选择“退出面板”，或在 macOS 按 `⌘Q`。托盘创建失败时不隐藏窗口，收纳按钮不可用；Windows 图标可能被系统放在隐藏图标区域。
 - **刷新**：重新查询已接入工具。后台每 5 秒检查任务及 Harness 登录变化，Codex 额度文件每 15 秒检查一次，Antigravity 模型额度每 30 秒读取一次，DeepSeek 余额每 60 秒查询一次。Kimi 官方额度每分钟最多查询一次，本机任务随后台采样读取；ZCode 读取本地遥测变化。手动刷新重新检查，并遵守各服务的最短间隔及限流等待时间。
 - **配置**：选择左侧或右侧停靠，切换锁定与呼吸动画，替换助手图片，重新贴边或退出。
-- **快捷键**：macOS 使用 `⌘⇧B` 展开或收起，`⌘Q` 退出。
+- **快捷键**：macOS 使用 `⌘⇧B` 展开或收起，`⌘⇧H` 收纳到菜单栏，`⌘Q` 退出。
 
 首次启动贴到主显示器边缘。手动移动到其他显示器后会按新显示器重新计算尺寸。分辨率、缩放或显示器连接变化会重新贴边。窗口位置在本次运行中保留；重启后恢复配置中的默认边缘。锁定、停靠方向、动画和自选图片保存在本机应用数据中。
 
@@ -297,7 +300,7 @@ npm run dist:linux  # 在 Linux 环境生成 AppImage
 
 Windows、Linux 尚未完成平台验收。Windows 原生置顶可用，但 Electron 的所有工作区 API 不处理 Windows 虚拟桌面，需要后续平台适配；Linux 的置顶与跨工作区行为受桌面环境影响，尤其 Wayland 下的窗口定位和置顶存在限制。
 
-窗口行为参考 Electron 官方 [BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window) 和 [screen](https://www.electronjs.org/docs/latest/api/screen) 文档。
+窗口行为参考 Electron 官方 [BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window) 和 [screen](https://www.electronjs.org/docs/latest/api/screen) 文档。菜单栏 / 通知区域入口使用主进程的 [Tray](https://www.electronjs.org/docs/latest/api/tray)，图标遵循 [nativeImage](https://www.electronjs.org/docs/latest/api/native-image) 的模板图片与 DPI 约定。Windows 托盘与任务栏恢复逻辑已准备，仍需 Windows 实机验证；Linux 托盘是否可用取决于桌面环境，尚未验收。
 
 ## 验证
 
@@ -305,6 +308,7 @@ Windows、Linux 尚未完成平台验收。Windows 原生置顶可用，但 Elec
 npm test
 npm run build
 npm run test:desktop
+npm run test:tray  # 收纳、关闭窗口、恢复、后台刷新、退出及窄窗口按钮布局
 npm run test:ui  # 手动测试选项与恢复本地状态的自动检查
 npm run test:sort  # 长按排序、取消、留边与重启保存检查
 npm run test:theme  # 系统外观事件、手动切换、保存恢复与两种主题检查
@@ -330,7 +334,12 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 
 ## 更新记录
 
-### 开发中
+### 0.15.0 · 2026-10-04
+
+- 新增独立收纳按钮：macOS 隐藏到菜单栏，Windows 隐藏到通知区域；保留原有侧边窄条功能和五区比例。
+- 托盘菜单提供显示面板、收纳、刷新本地状态和退出；关闭窗口改为收纳，正常退出释放图标和后台读取。再次打开应用恢复现有窗口。
+- 收纳保持本地监看、当前窗口与页面状态；macOS 适配明暗菜单栏及 HiDPI，Windows 提供多分辨率 ICO 与任务栏按钮恢复。增加托盘失败和快速收纳 / 恢复的保护。
+- 已通过 235 项单元检查、macOS 收纳专项、五区比例 / 溢出检查及 Kimi 来源切换检查；收纳专项验证隐藏时继续刷新、恢复位置 / 锁定 / 滚动 / 分页、窄条收纳、关闭收纳、明暗两种图标模式下八组按钮布局、隐藏后退出。macOS 0.15.0 已重新打包并启动，本地数据正常显示；实际菜单栏图标点击路径仍需手动确认。Windows / Linux 仅完成实现准备，平台行为待实机验收。
 
 - 新增 Kimi Work 来源选择、当前账号只读验证及会员订阅 / 赠送额度；保留 Code 来源与独立启动目标。
 - 新增 ZCode BigModel 个人套餐与真实额度读取，仅使用当前账号已有的套餐 Key；缺失时不创建 Key 或修改登录。

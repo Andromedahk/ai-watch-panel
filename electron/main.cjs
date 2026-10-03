@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, screen, dialog, Menu, nativeTheme, net } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net } = require('electron');
+const { PanelTray } = require('./panel-tray.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -39,6 +40,7 @@ async function refreshLocalStatus(force = false) {
 }
 
 let window;
+let panelTray;
 let preferences;
 let collapsed = false;
 let expandedBounds;
@@ -62,6 +64,7 @@ function currentState() {
   const display = screen.getDisplayMatching(window.getBounds());
   const { providerApps: _privateLaunchPaths, kimiWorkApp: _privateWorkPath, ...publicPreferences } = preferences;
   return { ...publicPreferences, collapsed, desktop: true, platform: process.platform,
+    trayAvailable: panelTray?.available === true, stored: panelTray?.stored === true,
     resolvedTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
 }
@@ -121,7 +124,7 @@ function handle(channel, callback) {
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', () => { window?.show(); window?.focus(); });
+  app.on('second-instance', () => { void panelTray?.restore(); });
   app.whenReady().then(() => {
     preferences = readPreferences();
     statusReader.setKimiSource(preferences.kimiSource);
@@ -138,11 +141,16 @@ else {
         contextIsolation: true, nodeIntegration: false, sandbox: true,
       },
     });
+    if (process.platform === 'win32') app.setAppUserModelId('app.aiwatch.panel');
+    panelTray = new PanelTray({ app, window, Tray, Menu, nativeImage,
+      onChange: emitState, onRefresh: () => refreshLocalStatus(true) });
+    window.on('close', event => panelTray.handleClose(event));
     nativeTheme.on('updated', updateAppearance);
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       ...(process.platform === 'darwin' ? [{ label: 'AI Watch', submenu: [
         { role: 'about' }, { type: 'separator' },
         { label: '展开 / 收起', accelerator: 'CommandOrControl+Shift+B', click: () => setCollapsed(!collapsed) },
+        { label: '收纳到菜单栏', accelerator: 'CommandOrControl+Shift+H', enabled: panelTray.available, click: () => panelTray.store() },
         { label: '重新贴边', click: dock }, { type: 'separator' }, { role: 'quit' },
       ] }] : []),
       { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
@@ -168,7 +176,13 @@ else {
       if (!collapsed) expandedBounds = window.getBounds();
       emitState();
     });
-    for (const event of ['display-metrics-changed', 'display-removed']) screen.on(event, dock);
+    screen.on('display-metrics-changed', (_event, _display, metrics) => {
+      // Dock visibility changes the work area too. It must not undo a manually
+      // placed panel when storing/restoring; real resolution/scale changes still dock.
+      if (metrics.every(metric => metric === 'workArea') && (panelTray.stored || panelTray.dockTransition)) return;
+      dock();
+    });
+    screen.on('display-removed', dock);
     handle('panel:state', currentState);
     handle('panel:status', () => statusSnapshot);
     handle('panel:refresh', () => refreshLocalStatus(true));
@@ -179,6 +193,10 @@ else {
     handle('panel:collapse', (value) => {
       if (typeof value !== 'boolean') throw new Error('Invalid collapse state');
       setCollapsed(value); return currentState();
+    });
+    handle('panel:store', () => {
+      if (!panelTray.store()) throw new Error('System tray unavailable');
+      return currentState();
     });
     handle('panel:configure', (value) => {
       const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
@@ -285,8 +303,8 @@ else {
     handle('panel:quit', () => app.quit());
     void refreshLocalStatus().catch(() => {});
     statusTimer = setInterval(() => { void refreshLocalStatus().catch(() => {}); }, 5000);
-    app.on('activate', () => window.show());
+    app.on('activate', () => { void panelTray.restore(); });
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance); statusReader.codexAttention.close(); statusReader.codexQuotaReader.close(); });
+  app.on('before-quit', () => { panelTray?.dispose(); clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance); statusReader.codexAttention.close(); statusReader.codexQuotaReader.close(); });
 }

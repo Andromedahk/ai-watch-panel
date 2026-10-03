@@ -4,6 +4,7 @@ export type KimiSource = 'code' | 'work';
 export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: boolean };
 export type PanelState = Preferences & {
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
+  trayAvailable: boolean; stored: boolean;
   providerOrder: ProviderId[];
   enabledProviders: ProviderId[];
   qwenKeychainAllowed: boolean;
@@ -43,6 +44,7 @@ declare global {
       onStatus(callback: (status: LocalStatus) => void): () => void;
       setLocked(locked: boolean): Promise<PanelState>;
       setCollapsed(collapsed: boolean): Promise<PanelState>;
+      store(): Promise<PanelState>;
       configure(preferences: Preferences): Promise<PanelState>;
       setOrder(order: ProviderId[]): Promise<PanelState>;
       setEnabled(ids: ProviderId[]): Promise<PanelState>;

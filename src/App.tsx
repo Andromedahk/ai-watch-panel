@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
-import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
+import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, PanelTopClose, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
 import { providers as baseProviders, providerIds, animeImages as defaultAnimeImages } from './data';
 import { useVisibleCards } from './useVisibleCards';
 import { TestControls } from './TestControls';
@@ -12,6 +12,7 @@ const providers = baseProviders;
 const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
   desktop: false, platform: 'browser', scaleFactor: window.devicePixelRatio,
+  trayAvailable: false, stored: false,
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
   kimiSource: 'code',
@@ -205,6 +206,8 @@ export default function App() {
   const [modulesSaving, setModulesSaving] = useState(false);
   const [qwenAccessSaving, setQwenAccessSaving] = useState(false);
   const [kimiSourceSaving, setKimiSourceSaving] = useState(false);
+  const storeLabel = state.platform === 'darwin' ? '收纳到菜单栏' : '收纳到托盘';
+  const storeHint = state.trayAvailable ? `${storeLabel}，后台继续监看` : state.desktop ? '系统托盘暂不可用' : '桌面版支持菜单栏与托盘收纳';
   const providers = baseProviders.map(provider => provider.id === 'kimi' && state.kimiSource === 'work'
     ? { ...provider, name: 'Kimi Work', subtitle: 'MOONSHOT AI · WORK' } : provider);
   const viewport = useRef<HTMLDivElement>(null);
@@ -387,6 +390,10 @@ export default function App() {
       else setState({ ...state, collapsed: value });
     } catch { setNotice('窗口收起失败，请重试'); }
   }
+  async function storePanel() {
+    try { if (window.panel) setState(await window.panel.store()); }
+    catch { setNotice('收纳失败，面板保持打开，请重试'); }
+  }
   async function refresh() {
     if (refreshing) return;
     setRefreshing(true);
@@ -450,6 +457,7 @@ export default function App() {
       <div className="rail-providers">{visibleProviders.map((provider) => <div key={provider.id} title={`${provider.name} · ${provider.local?.task || (provider.running ? '演示运行中' : '演示待机')}`} style={{ '--accent': provider.color } as CSSProperties}>
         <LaunchAvatar provider={provider} image={(state.animeMode ? animeImages : images)[provider.id]} anime={state.animeMode} onOpen={() => void openProvider(provider)} busy={launching === provider.id} /><span className={`status-dot ${provider.running ? 'active' : provider.local?.activity === 'waiting' ? 'waiting' : provider.local?.activity === 'unknown' ? 'unknown' : ''}`} />
       </div>)}</div>
+      <button className="rail-store" aria-label={storeLabel} title={storeHint} disabled={!state.trayAvailable} onClick={storePanel}><PanelTopClose size={15} /></button>
       <button className={`rail-lock ${state.locked ? 'selected' : ''}`} title="锁定窗口" aria-label="锁定窗口" aria-pressed={state.locked} onClick={toggleLock}>{state.locked ? <LockKeyhole size={15} /> : <UnlockKeyhole size={15} />}</button>
       {testMode ? <button className="rail-demo test-badge" aria-label="测试模式设置" onClick={async () => { await collapse(false); openSettings(); }}>测试</button> : <span className="rail-demo">{state.desktop ? '本地' : '演示'}</span>}
     </aside> : <div className={`panel-regions ${sorting.sorting ? 'is-sorting' : ''}`}>
@@ -459,6 +467,7 @@ export default function App() {
         <nav className="toolbar" aria-label="面板控制">
           <button className={state.locked ? 'selected' : ''} aria-label="锁定窗口" aria-pressed={state.locked} title={state.locked ? '解除跨桌面锁定' : '锁定：置顶并显示在所有桌面'} onClick={toggleLock}>{state.locked ? <LockKeyhole /> : <UnlockKeyhole />}</button>
           <button aria-label="收起面板" title="收起为状态窄条" onClick={() => collapse(true)}>{state.side === 'right' ? <ArrowRightToLine /> : <ArrowLeftToLine />}</button>
+          <button aria-label={storeLabel} title={storeHint} disabled={!state.trayAvailable} onClick={storePanel}><PanelTopClose /></button>
           <button aria-label="刷新面板" title={testMode ? '刷新测试画面' : '重新读取本地额度与任务状态'} disabled={refreshing} onClick={refresh}><RefreshCw className={refreshing ? 'spinning' : ''} /></button>
           <button aria-label="打开配置" title="配置面板" onClick={openSettings}><Settings2 /></button>
         </nav>
@@ -528,7 +537,7 @@ export default function App() {
         <div className="settings-section"><h3>启动应用</h3><p>点击卡片或收起栏图标打开应用；未找到时可手动选择安装位置。</p>{providers.map(provider => <div className="app-option" key={provider.id}>
           <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={`选择 ${provider.name} 启动应用`}>选择应用</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.14.1</span><p>Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+        <div className="settings-note"><span className="note-title">本地状态 · v0.15.0</span><p>Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
           {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{displayStatus[id]?.detail}<br />{displayStatus[id]?.activityDetail && <>{displayStatus[id]?.activityDetail}<br /></>}{displayStatus[id]?.observedAt ? `记录时间：${new Date(displayStatus[id]?.observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>
