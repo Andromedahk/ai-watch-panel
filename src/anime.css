@@ -88,8 +88,8 @@
   border: 1px solid var(--a-tint-border); background: var(--a-tint);
   font-size: var(--a-caption); line-height: 1.35; color: var(--strong);
 }
-.anime-mode .plan-summary::before {
-  content: '套餐'; flex: none; padding: 0 4px; border-radius: 4px;
+.anime-mode .plan-kind {
+  flex: none; padding: 0 4px; border-radius: 4px;
   background: var(--a-ink); color: var(--card); font-size: .9em; font-weight: 600; letter-spacing: .5px;
 }
 .anime-mode .plan-name {
@@ -98,11 +98,11 @@
 }
 .anime-mode .plan-status { font-size: .9em; color: var(--muted); }
 .anime-mode .plan-summary.is-stale { color: var(--secondary); }
-.anime-mode .plan-summary.is-stale::before { background: var(--secondary); }
+.anime-mode .plan-summary.is-stale .plan-kind { background: var(--secondary); }
 
 /* Ordinal badge sits in the hero's top-right corner. */
 .anime-mode .card-index {
-  top: 0; right: 0; gap: 2px; padding: 1px 5px; border-radius: 999px;
+  top: 0; inset-inline-end: 0; gap: 2px; padding: 1px 5px; border-radius: 999px;
   font: 600 var(--a-caption) ui-monospace, 'SF Mono', monospace; letter-spacing: .5px;
   color: var(--ordinal); background: var(--a-panel); border: 1px solid var(--a-panel-border);
 }
@@ -141,7 +141,7 @@
   font-size: var(--a-caption); color: var(--period); background: var(--a-tint);
 }
 .anime-mode .quota-label strong { font-size: var(--a-number); font-weight: 600; line-height: 1; letter-spacing: -.3px; }
-.anime-mode .remaining-label { font-size: var(--a-caption); margin-right: 4px; font-weight: 400; letter-spacing: 0; }
+.anime-mode .remaining-label { font-size: var(--a-caption); margin-inline-end: 4px; font-weight: 400; letter-spacing: 0; }
 .anime-mode .quota-track { height: clamp(3px, 1.25vw, 5px); border-radius: 999px; }
 .anime-mode .quota-fill {
   opacity: 1; border-radius: 999px;

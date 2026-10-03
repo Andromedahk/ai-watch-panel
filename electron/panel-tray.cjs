@@ -1,11 +1,12 @@
 const path = require('node:path');
+const { createI18n } = require('./i18n.cjs');
 
 // Hiding preserves the renderer and readers. Without a tray, never hide the app.
 class PanelTray {
   constructor({ app, window, Tray, Menu, nativeImage, platform = process.platform,
-    onChange = () => {}, onRefresh = () => {}, getSummary = () => ({ rows: [], isTestData: false }), now = Date.now,
+    onChange = () => {}, onRefresh = () => {}, getSummary = () => ({ rows: [], isTestData: false }), getLanguage = () => 'zh-CN', now = Date.now,
     schedule = setTimeout, cancel = clearTimeout }) {
-    Object.assign(this, { app, window, platform, onChange, now, schedule, cancel, getSummary, Menu, onRefresh });
+    Object.assign(this, { app, window, platform, onChange, now, schedule, cancel, getSummary, getLanguage, Menu, onRefresh });
     this.stored = false;
     this.quitting = false;
     this.revision = 0;
@@ -38,23 +39,26 @@ class PanelTray {
   updateMenu() {
     if (!this.available) return;
     const { rows, isTestData } = this.getSummary();
-    const signature = JSON.stringify({ rows, isTestData, stored: this.stored });
+    const i18n = createI18n(this.getLanguage());
+    const { t } = i18n;
+    const nativeLabel = value => i18n.dir === 'rtl' ? '\u200f' + value : value;
+    const signature = JSON.stringify({ language: i18n.language, rows, isTestData, stored: this.stored });
     if (signature !== this.menuSignature) {
       this.menu = this.Menu.buildFromTemplate([
-        { label: isTestData ? '额度速览 · 测试数据' : '额度速览 · 每个模块一项', enabled: false },
-        ...(rows.length ? rows.map(row => ({ id: `quota-${row.id}`, label: row.label, enabled: false }))
-          : [{ label: '尚未启用监看模块', enabled: false }]),
+        { label: nativeLabel(t('额度速览') + ' · ' + t(isTestData ? '测试数据' : '每个模块一项')), enabled: false },
+        ...(rows.length ? rows.map(row => ({ id: `quota-${row.id}`, label: nativeLabel(row.label), enabled: false }))
+          : [{ label: nativeLabel(t('尚未启用监看模块')), enabled: false }]),
         { type: 'separator' },
-        { id: 'show-panel', label: '显示面板', click: () => { void this.restore(); } },
-        { id: 'store-panel', label: this.platform === 'darwin' ? '收纳到菜单栏' : '收纳到托盘', enabled: !this.stored, click: () => this.store() },
-        { label: '刷新本地状态', click: () => { void Promise.resolve().then(this.onRefresh).catch(() => {}); } },
+        { id: 'show-panel', label: nativeLabel(t('显示面板')), click: () => { void this.restore(); } },
+        { id: 'store-panel', label: this.platform === 'darwin' ? nativeLabel(t('收纳到菜单栏')) : nativeLabel(t('收纳到托盘')), enabled: !this.stored, click: () => this.store() },
+        { label: nativeLabel(t('刷新本地状态')), click: () => { void Promise.resolve().then(this.onRefresh).catch(() => {}); } },
         { type: 'separator' },
-        { label: '退出 AI Watch', click: () => this.app.quit() },
+        { label: nativeLabel(t('退出 AI Watch')), click: () => this.app.quit() },
       ]);
       this.tray.setContextMenu(this.menu);
       this.menuSignature = signature;
     }
-    this.tray.setToolTip(this.stored ? 'AI Watch · 已收纳，后台监看中' : 'AI Watch · AI 工具监看面板');
+    this.tray.setToolTip('AI Watch · ' + t(this.stored ? '已收纳，后台监看中' : 'AI 工具监看面板'));
   }
   openMenu() {
     if (!this.available || this.quitting) return;

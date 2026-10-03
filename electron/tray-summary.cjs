@@ -1,9 +1,10 @@
 const Big = require('big.js');
+const { createI18n } = require('./i18n.cjs');
 const { PROVIDER_ORDER } = require('./window-policy.cjs');
 
 const NAMES = { claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity',
   deepseek: 'DeepSeek Harness', zcode: 'ZCode', kimi: 'Kimi Code', qwen: '千问', workbuddy: 'WorkBuddy' };
-const text = value => typeof value === 'string' ? value.replace(/[\x00-\x1f\x7f&]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+const text = value => typeof value === 'string' ? value.replace(/[\x00-\x1f\x7f&\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
 const weekly = value => /^(?:1(?:周|週|w|weeks?)|7(?:天|日|d|days?)|weekly|(?:每|本)?(?:周|週)(?:额度|配额)?)$/i.test(text(value).replace(/\s/g, ''));
 
 function decimal(value) {
@@ -70,15 +71,27 @@ function summarize(id, status) {
   return id === 'claude' ? 'Code 额度暂不可用' : id === 'qwen' || id === 'workbuddy' ? '积分 / 额度未知' : '额度未知';
 }
 
+function translateSummary(value, i18n) {
+  if (i18n.language === 'zh-CN') return value;
+  const { t, label, number, percent, isolate } = i18n;
+  const quota = value.match(/^(.*?) · (历史剩余|剩余) ([\d.]+)%(?:（非实时）)?$/);
+  if (quota) return `${isolate(label(quota[1]))} · ${t(quota[2] === '历史剩余' ? '历史' : '剩余')} ${isolate(percent(Number(quota[3])))}`;
+  const credit = value.match(/^(.*?) · (历史剩余|剩余) ([\d,.]+) (.*?)(?:（非实时）)?$/);
+  if (credit) return `${label(credit[1])} · ${t(credit[2] === '历史剩余' ? '历史' : '剩余')} ${isolate(number(credit[3].replace(/,/g, ''), { maximumFractionDigits: 2 }))} ${label(credit[4])}`;
+  const balance = value.match(/^(历史余额|余额) (<)?([¥$])([\d,.]+) (CNY|USD)(?:（非实时）)?$/);
+  if (balance) return `${t(balance[1] === '历史余额' ? '历史余额' : '账号余额')} ${isolate(`${balance[2] || ''}${balance[3]}${number(balance[4].replace(/,/g, ''), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${balance[5]}`)}`;
+  return value.split(' · ').map(label).join(' · ');
+}
 function traySummary(snapshot, preferences) {
+  const i18n = createI18n(preferences?.language || 'zh-CN');
   const order = Array.isArray(preferences?.providerOrder) ? preferences.providerOrder : PROVIDER_ORDER;
   const enabled = Array.isArray(preferences?.enabledProviders) ? preferences.enabledProviders : PROVIDER_ORDER;
   return [...new Set(order)].filter(id => PROVIDER_ORDER.includes(id) && enabled.includes(id)).map(id => {
     const work = id === 'kimi' && preferences?.kimiSource === 'work';
     let status = snapshot?.[id];
     if (id === 'kimi' && status && (status.kimiSource || 'code') !== (work ? 'work' : 'code')) status = undefined;
-    const name = work ? 'Kimi Work' : NAMES[id];
-    return { id, label: `${name}    ${summarize(id, status)}` };
+    const name = work ? 'Kimi Work' : id === 'qwen' && i18n.language !== 'zh-CN' ? i18n.language.startsWith('zh') ? '千問' : 'Qwen' : NAMES[id];
+    return { id, label: `${i18n.dir === 'rtl' ? i18n.isolate(name) : name}    ${translateSummary(summarize(id, status), i18n)}` };
   });
 }
 module.exports = { traySummary };

@@ -1,4 +1,5 @@
 const path = require('node:path');
+const { isLanguage } = require('./i18n.cjs');
 const RATIO = 4.5;
 const COLLAPSED_WIDTH = 46;
 // Work-area changes from the Dock/menu bar are not monitor geometry changes.
@@ -64,6 +65,7 @@ function validPreferences(value) {
     side: value?.side === 'left' ? 'left' : 'right',
     locked: value?.locked === true,
     animate: value?.animate !== false,
+    language: isLanguage(value?.language) ? value.language : 'zh-CN',
     theme: isTheme(value?.theme) ? value.theme : 'system',
     qwenKeychainAllowed: value?.qwenKeychainAllowed === true,
     kimiSource: isKimiSource(value?.kimiSource) ? value.kimiSource : 'code',
@@ -75,4 +77,4 @@ function validPreferences(value) {
   };
 }
 
-module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isProviderOrder, isEnabledProviders, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };
+module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isProviderOrder, isEnabledProviders, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };

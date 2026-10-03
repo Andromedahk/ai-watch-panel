@@ -1,3 +1,4 @@
+import type { Language } from './i18n';
 export type ProviderId = 'claude' | 'codex' | 'antigravity' | 'deepseek' | 'zcode' | 'kimi' | 'qwen' | 'workbuddy';
 export type Theme = 'system' | 'light' | 'dark';
 export type KimiSource = 'code' | 'work';
@@ -10,6 +11,7 @@ export type PanelState = Preferences & {
   qwenKeychainAllowed: boolean;
   kimiSource: KimiSource;
   animeMode: boolean;
+  language: Language; resolvedLanguage?: Exclude<Language, 'system'>;
   theme: Theme; resolvedTheme: 'light' | 'dark';
   bounds?: { x: number; y: number; width: number; height: number };
 };
@@ -53,6 +55,7 @@ declare global {
       setAnimeMode(enabled: boolean): Promise<PanelState>;
       openProvider(provider: ProviderId): Promise<{ status: 'opened' | 'missing' | 'unsupported' | 'error' | 'test'; message: string }>;
       chooseProviderApp(provider: ProviderId): Promise<{ status: 'selected' | 'cancelled' | 'error'; message: string }>;
+      setLanguage(language: Language): Promise<PanelState>;
       setTheme(theme: Theme): Promise<PanelState>;
       dock(): Promise<PanelState>;
       chooseImage(provider: ProviderId): Promise<string | null>;

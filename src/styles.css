@@ -38,7 +38,7 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .is-sorting { cursor: grabbing; }
 .sort-hint { position: absolute; z-index: 5; bottom: 12px; left: 16px; right: 16px; padding: 8px; border: 1px solid var(--hint-border); border-radius: 6px; background: var(--hint-bg); color: var(--hint-text); font-size: 10px; text-align: center; pointer-events: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
-.provider-card::before { position: absolute; top: 20%; left: 0; height: 24px; width: 2px; background: var(--accent); opacity: .55; content: ''; }
+.provider-card::before { position: absolute; top: 20%; inset-inline-start: 0; height: 24px; width: 2px; background: var(--accent); opacity: .55; content: ''; }
 .card-heading { display: flex; align-items: center; gap: clamp(6px, 2.8vw, 10px); position: relative; }
 .avatar { width: clamp(28px, 16.3vw, 52px); height: clamp(28px, 16.3vw, 52px); flex-shrink: 0; position: relative; isolation: isolate; border-radius: 10px; --halo-color: #d97757; }
 .avatar-face { position: relative; z-index: 1; width: 100%; height: 100%; display: grid; place-items: center; overflow: hidden; border-radius: inherit; border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent); background: color-mix(in srgb, var(--accent) 8%, var(--avatar-bg)); }
@@ -66,7 +66,7 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .eyebrow { display: block; color: var(--muted); font-size: clamp(6px, 3vw, 9px); letter-spacing: 1.45px; line-height: 1.7; }
 .identity h2 { font-size: clamp(10px, 5.9vw, 18px); line-height: 1.3; margin: 1px 0 0; font-weight: 600; letter-spacing: -.35px; }
 .provider-card[data-provider="deepseek"] .identity h2 { font-size: clamp(9px, 5.1vw, 16px); }
-.card-index { position: absolute; right: -3px; top: -10px; display: flex; align-items: center; gap: 2px; font: 8px ui-monospace, monospace; color: var(--ordinal); }
+.card-index { position: absolute; inset-inline-end: -3px; top: -10px; display: flex; align-items: center; gap: 2px; font: 8px ui-monospace, monospace; color: var(--ordinal); }
 .quota-area { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 7px; }
 .quota-tools { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 16px; font-size: 9px; color: var(--secondary); }
 .source-tag { font-size: 8px; border: 1px solid var(--tag-border); border-radius: 3px; padding: 1px 4px; white-space: nowrap; }
@@ -94,8 +94,8 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .quota-label small { font-size: clamp(6px, 3.4vw, 10px); color: var(--period); flex-shrink: 0; }
 .quota-label strong { flex-shrink: 0; color: var(--accent-ink, var(--accent)); font-family: ui-monospace, 'SF Mono', monospace; font-size: clamp(10px, 5.2vw, 17px); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.quota-label em { font-style: normal; font-size: .7em; opacity: .7; margin-left: 2px; }
-.remaining-label { font: 8px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin-right: 5px; color: var(--muted); }
+.quota-label em { font-style: normal; font-size: .7em; opacity: .7; margin-inline-start: 2px; }
+.remaining-label { font: 8px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin-inline-end: 5px; color: var(--muted); }
 .quota-track { height: clamp(3px, .48vh, 6px); border-radius: 2px; background: var(--track); overflow: hidden; }
 .quota-fill { height: 100%; background: var(--accent-ink, var(--accent)); opacity: .83; border-radius: inherit; }
 .quota-fill.is-low { background: var(--low); }
@@ -150,7 +150,7 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .test-view { width: 100%; border-color: var(--test-enabled); color: var(--test-view-text); }
 .test-checklist { font-size: 10px; line-height: 1.7; color: var(--secondary); margin-top: 14px; }
 .test-checklist summary { cursor: pointer; color: var(--label); }
-.test-checklist ul { padding-left: 15px; }
+.test-checklist ul { padding-inline-start: 15px; }
 .test-badge { color: var(--test-badge-text); border: 1px solid var(--test-enabled); background: var(--test-badge-bg); cursor: pointer; -webkit-app-region: no-drag; }
 .rail-demo.test-badge { padding: 3px; border-radius: 4px; }
 fieldset { border: 0; margin: 0 0 22px; padding: 0; }
@@ -161,9 +161,9 @@ legend { margin-bottom: 10px; color: var(--label); font-size: 12px; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; margin: 19px 0; gap: 8px; }
 .switch-row small { display: block; font-size: 9px; line-height: 1.8; color: var(--muted); }
 .switch-row input { appearance: none; flex-shrink: 0; width: 29px; height: 17px; border-radius: 12px; background: var(--switch-off); position: relative; cursor: pointer; }
-.switch-row input::before { content: ''; position: absolute; width: 11px; height: 11px; border-radius: 50%; background: var(--switch-knob); top: 3px; left: 3px; }
+.switch-row input::before { content: ''; position: absolute; width: 11px; height: 11px; border-radius: 50%; background: var(--switch-knob); top: 3px; inset-inline-start: 3px; }
 .switch-row input:checked { background: var(--switch-on); }
-.switch-row input:checked::before { left: 15px; background: #edf3ed; }
+.switch-row input:checked::before { inset-inline-start: 15px; background: #edf3ed; }
 .dock-button { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--control-text); background: transparent; border: 1px solid var(--control-border); border-radius: 6px; padding: 9px 3px; font-size: 10px; }
 .settings-section { margin-top: 26px; }
 .settings-section h3 { font-size: 12px; font-weight: 500; margin: 0; }

@@ -25,7 +25,7 @@ try {
     assert.equal(await target.evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag');
   }
   await page.getByRole('checkbox', { name: '测试模式', exact: true }).check();
-  await expect(page.getByRole('combobox')).toHaveCount(16);
+  await expect(page.locator('.test-controls').getByRole('combobox')).toHaveCount(16);
   await expect(page.getByRole('status')).toBeHidden();
   assert.equal(await page.locator('.settings-content').evaluate(el => el.scrollWidth > el.clientWidth), false);
   await mkdir('docs/screenshots', { recursive: true });
@@ -86,7 +86,9 @@ try {
   // Let the ordinary background sample arrive while manual selections remain in force.
   await expect(page.getByRole('status')).toBeHidden();
   await expect(card('Codex').locator('.task-status')).toHaveText('待处理');
-  assert.deepEqual(await page.evaluate(() => window.panel.getStatus()), original);
+  // Background polling updates timestamps even while UI-only test data is selected.
+  const withoutSampling = value => JSON.parse(JSON.stringify(value, (key, entry) => key === 'sampledAt' ? undefined : entry));
+  assert.deepEqual(withoutSampling(await page.evaluate(() => window.panel.getStatus())), withoutSampling(original));
 
   await configure();
   await page.getByRole('button', { name: '全部运行', exact: true }).click();

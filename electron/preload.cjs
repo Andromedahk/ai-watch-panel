@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('panel', {
   setAnimeMode: (enabled) => ipcRenderer.invoke('panel:anime-mode', enabled),
   openProvider: (provider) => ipcRenderer.invoke('panel:open-provider', provider),
   chooseProviderApp: (provider) => ipcRenderer.invoke('panel:choose-provider-app', provider),
+  setLanguage: (language) => ipcRenderer.invoke('panel:language', language),
   setTheme: (theme) => ipcRenderer.invoke('panel:theme', theme),
   dock: () => ipcRenderer.invoke('panel:dock'),
   chooseImage: (provider) => ipcRenderer.invoke('panel:image', provider),

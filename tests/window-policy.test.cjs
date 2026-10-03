@@ -32,7 +32,7 @@ test('restore clamps a moved rail into the available display area', () => {
   assert.deepEqual(clampBounds({ x: 1500, y: 100, width: 200, height: 900 }, { x: 0, y: 25, width: 1600, height: 900 }), { x: 1400, y: 25, width: 200, height: 900 });
 });
 test('unknown configuration values fall back without broadening capabilities', () => {
-  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', kimiWorkApp: null, animeMode: false, providerApps: {} });
+  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, language: 'zh-CN', theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', kimiWorkApp: null, animeMode: false, providerApps: {} });
 });
 test('provider order rejects missing, duplicate and unknown cards and migrates old preferences', () => {
   for (const value of [null, 'codex', [], ['codex', 'codex', 'claude', 'deepseek'], ['claude', 'codex', 'antigravity', 'other']]) {
@@ -41,8 +41,8 @@ test('provider order rejects missing, duplicate and unknown cards and migrates o
   }
   const reversed = [...PROVIDER_ORDER].reverse();
   assert.equal(isProviderOrder(reversed), true);
-  const settings = validPreferences({ side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed });
-  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', kimiWorkApp: null, animeMode: false, providerApps: {} });
+  const settings = validPreferences({ side: 'left', locked: true, animate: false, language: 'zh-CN', theme: 'system', providerOrder: reversed });
+  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, language: 'zh-CN', theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', kimiWorkApp: null, animeMode: false, providerApps: {} });
   reversed.reverse();
   assert.notDeepEqual(settings.providerOrder, reversed);
 });

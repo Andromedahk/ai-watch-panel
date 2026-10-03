@@ -1,0 +1,30 @@
+/* Direction comes from HTML dir, so flex/grid and native form reading order follow it. */
+.language-settings select { width: 100%; min-height: 34px; padding: 5px 8px; border: 1px solid var(--control-border); border-radius: 6px; color: var(--text); background: var(--control-bg); font: inherit; }
+.plan-kind { display: none; }
+.anime-mode .plan-kind { display: inline-flex; align-items: center; }
+bdi { unicode-bidi: isolate; }
+.identity h2, .credit-label, .plan-name { overflow-wrap: anywhere; }
+:root[dir="rtl"] .quota-pagination svg { transform: scaleX(-1); }
+:root[dir="rtl"] .quota-fill { background-image: linear-gradient(270deg, color-mix(in srgb, var(--accent) 55%, transparent), var(--accent)); }
+:root[dir="rtl"] .eyebrow { letter-spacing: normal; }
+:root[dir="rtl"] .provider-card { background-position: right top; }
+:root[lang="ar"] body, :root[lang="he"] body, :root[lang="hi"] body { line-height: 1.45; }
+:root[dir="rtl"] .plan-summary { padding-inline-start: 2px; padding-inline-end: 6px; }
+/* Keep long translations from covering a neighboring value. Full text remains in the tooltip. */
+.source-tag { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quota-time { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quota-label > span { flex-wrap: wrap; row-gap: 1px; }
+.quota-label .model-name { overflow: hidden; text-overflow: ellipsis; }
+.quota-label .remaining-label { display: inline-block; max-width: 18vw; overflow: hidden; text-overflow: ellipsis; vertical-align: baseline; }
+.overview > span { min-width: 0; }
+.overview .demo-tag { max-width: 24vw; overflow: hidden; text-overflow: ellipsis; }
+.plan-kind { white-space: nowrap; }
+.settings-content { overflow-wrap: anywhere; }
+.settings-content button { white-space: normal; }
+.task-status { max-width: 45%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.balance-parts b { unicode-bidi: isolate; }
+.balance-parts > span { display: inline-flex; align-items: baseline; gap: 4px; }
+:root[dir="rtl"] .balance-total { justify-content: flex-end; }
+.overview > span { flex: 1; }
+.running-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.overview time { flex: none; }

@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net } = require('electron');
+const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
 const { traySummary } = require('./tray-summary.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
@@ -63,11 +64,26 @@ function savePreferences() {
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
   fs.writeFileSync(preferencePath(), JSON.stringify(preferences, null, 2));
 }
+const currentLanguage = () => createI18n(preferences?.language || 'zh-CN', app.getPreferredSystemLanguages());
+function buildApplicationMenu() {
+  const { t } = currentLanguage();
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{ label: 'AI Watch', submenu: [
+      { role: 'about', label: t('关于') + ' AI Watch' }, { type: 'separator' },
+      { label: t('展开 / 收起'), accelerator: 'CommandOrControl+Shift+B', click: () => setCollapsed(!collapsed) },
+      { label: t('收纳到菜单栏'), accelerator: 'CommandOrControl+Shift+H', enabled: panelTray.available, click: () => panelTray.store() },
+      { label: t('额度速览'), accelerator: 'CommandOrControl+Shift+U', enabled: panelTray.available, click: () => panelTray.openMenu() },
+      { label: t('重新贴边'), click: dock }, { type: 'separator' }, { role: 'quit', label: t('退出 AI Watch') },
+    ] }] : []),
+    { label: t('编辑'), submenu: [['undo','撤销'], ['redo','重做'], [null,null], ['cut','剪切'], ['copy','复制'], ['paste','粘贴'], ['selectAll','全选']].map(([role,label]) => role ? { role, label: t(label) } : { type: 'separator' }) },
+  ]));
+}
 function currentState() {
   const display = screen.getDisplayMatching(window.getBounds());
   const { providerApps: _privateLaunchPaths, kimiWorkApp: _privateWorkPath, ...publicPreferences } = preferences;
   return { ...publicPreferences, collapsed, desktop: true, platform: process.platform,
     trayAvailable: panelTray?.available === true, stored: panelTray?.stored === true,
+    resolvedLanguage: currentLanguage().language,
     resolvedTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
 }
@@ -148,20 +164,12 @@ else {
     });
     if (process.platform === 'win32') app.setAppUserModelId('app.aiwatch.panel');
     panelTray = new PanelTray({ app, window, Tray, Menu, nativeImage,
-      getSummary: () => ({ rows: traySummary(statusSnapshot, preferences), isTestData: fixtureMode }),
+      getSummary: () => ({ rows: traySummary(statusSnapshot, { ...preferences, language: currentLanguage().language }), isTestData: fixtureMode }),
+      getLanguage: () => currentLanguage().language,
       onChange: emitState, onRefresh: () => refreshLocalStatus(true) });
     window.on('close', event => panelTray.handleClose(event));
     nativeTheme.on('updated', updateAppearance);
-    Menu.setApplicationMenu(Menu.buildFromTemplate([
-      ...(process.platform === 'darwin' ? [{ label: 'AI Watch', submenu: [
-        { role: 'about' }, { type: 'separator' },
-        { label: '展开 / 收起', accelerator: 'CommandOrControl+Shift+B', click: () => setCollapsed(!collapsed) },
-        { label: '收纳到菜单栏', accelerator: 'CommandOrControl+Shift+H', enabled: panelTray.available, click: () => panelTray.store() },
-        { label: '额度速览', accelerator: 'CommandOrControl+Shift+U', enabled: panelTray.available, click: () => panelTray.openMenu() },
-        { label: '重新贴边', click: dock }, { type: 'separator' }, { role: 'quit' },
-      ] }] : []),
-      { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-    ]));
+    buildApplicationMenu();
     lock();
     window.once('ready-to-show', () => window.show());
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -209,8 +217,14 @@ else {
       if (!panelTray.store()) throw new Error('System tray unavailable');
       return currentState();
     });
+    handle('panel:language', (value) => {
+      if (!isLanguage(value)) throw new Error('Invalid language');
+      const previous = preferences.language; preferences.language = value;
+      try { savePreferences(); } catch (error) { preferences.language = previous; throw error; }
+      buildApplicationMenu(); emitState(); return currentState();
+    });
     handle('panel:configure', (value) => {
-      const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
+      const next = validPreferences({ ...value, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
         kimiSource: preferences.kimiSource, kimiWorkApp: preferences.kimiWorkApp, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
@@ -229,7 +243,7 @@ else {
     handle('panel:choose-provider-app', (id) => {
       const source = preferences.kimiSource;
       return providerLauncher.choose(id,
-      options => dialog.showOpenDialog(window, options),
+      options => dialog.showOpenDialog(window, { ...options, title: currentLanguage().t('选择 {p0} 启动应用', { p0: id === 'kimi' && source === 'work' ? 'Kimi Work' : { claude: 'Claude', codex: 'Codex', antigravity: 'Antigravity', deepseek: 'DeepSeek Harness', zcode: 'ZCode', kimi: 'Kimi Code', qwen: 'Qwen', workbuddy: 'WorkBuddy' }[id] }), filters: options.filters?.map(filter => ({ ...filter, name: currentLanguage().t('应用') })) }),
       (provider, file) => {
         if (provider === 'kimi' && source === 'work') {
           const previous = preferences.kimiWorkApp;
@@ -301,8 +315,8 @@ else {
     handle('panel:image', async (provider) => {
       if (!providerIds.includes(provider)) throw new Error('Invalid provider');
       const result = await dialog.showOpenDialog(window, {
-        title: '选择助手图片', properties: ['openFile'],
-        filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+        title: currentLanguage().t('选择助手图片'), properties: ['openFile'],
+        filters: [{ name: currentLanguage().t('图片'), extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
       });
       if (result.canceled) return null;
       const file = result.filePaths[0];
