@@ -3,14 +3,13 @@ const path = require('node:path');
 // Hiding preserves the renderer and readers. Without a tray, never hide the app.
 class PanelTray {
   constructor({ app, window, Tray, Menu, nativeImage, platform = process.platform,
-    onChange = () => {}, onRefresh = () => {}, now = Date.now,
+    onChange = () => {}, onRefresh = () => {}, getSummary = () => ({ rows: [], isTestData: false }), now = Date.now,
     schedule = setTimeout, cancel = clearTimeout }) {
-    Object.assign(this, { app, window, platform, onChange, now, schedule, cancel });
+    Object.assign(this, { app, window, platform, onChange, now, schedule, cancel, getSummary, Menu, onRefresh });
     this.stored = false;
     this.quitting = false;
     this.revision = 0;
     this.lastDockHide = -Infinity;
-    this.dockTransitionUntil = 0;
     this.dockTimer = null;
     this.tray = null;
     try {
@@ -22,18 +21,12 @@ class PanelTray {
         icon.setTemplateImage(true);
       }
       this.tray = new Tray(icon);
-      this.menu = Menu.buildFromTemplate([
-        { id: 'show-panel', label: '显示面板', click: () => { void this.restore(); } },
-        { id: 'store-panel', label: platform === 'darwin' ? '收纳到菜单栏' : '收纳到托盘', click: () => this.store() },
-        { type: 'separator' },
-        { label: '刷新本地状态', click: () => { void Promise.resolve().then(onRefresh).catch(() => {}); } },
-        { type: 'separator' },
-        { label: '退出 AI Watch', click: () => app.quit() },
-      ]);
       this.updateMenu();
-      if (platform !== 'darwin') {
-        this.tray.on('click', () => { void this.restore(); });
+      if (platform === 'win32') {
+        this.tray.on('click', () => this.openMenu());
         this.tray.on('double-click', () => { void this.restore(); });
+      } else if (platform !== 'darwin') {
+        this.tray.on('click', () => { void this.restore(); });
       }
     } catch {
       this.tray?.destroy();
@@ -41,13 +34,32 @@ class PanelTray {
     }
   }
   get available() { return Boolean(this.tray && !this.tray.isDestroyed()); }
-  get dockTransition() { return this.platform === 'darwin' && this.now() < this.dockTransitionUntil; }
 
   updateMenu() {
     if (!this.available) return;
-    this.menu.getMenuItemById('store-panel').enabled = !this.stored;
-    this.tray.setContextMenu(this.menu);
+    const { rows, isTestData } = this.getSummary();
+    const signature = JSON.stringify({ rows, isTestData, stored: this.stored });
+    if (signature !== this.menuSignature) {
+      this.menu = this.Menu.buildFromTemplate([
+        { label: isTestData ? '额度速览 · 测试数据' : '额度速览 · 每个模块一项', enabled: false },
+        ...(rows.length ? rows.map(row => ({ id: `quota-${row.id}`, label: row.label, enabled: false }))
+          : [{ label: '尚未启用监看模块', enabled: false }]),
+        { type: 'separator' },
+        { id: 'show-panel', label: '显示面板', click: () => { void this.restore(); } },
+        { id: 'store-panel', label: this.platform === 'darwin' ? '收纳到菜单栏' : '收纳到托盘', enabled: !this.stored, click: () => this.store() },
+        { label: '刷新本地状态', click: () => { void Promise.resolve().then(this.onRefresh).catch(() => {}); } },
+        { type: 'separator' },
+        { label: '退出 AI Watch', click: () => this.app.quit() },
+      ]);
+      this.tray.setContextMenu(this.menu);
+      this.menuSignature = signature;
+    }
     this.tray.setToolTip(this.stored ? 'AI Watch · 已收纳，后台监看中' : 'AI Watch · AI 工具监看面板');
+  }
+  openMenu() {
+    if (!this.available || this.quitting) return;
+    this.updateMenu();
+    if (this.platform === 'darwin' || this.platform === 'win32') this.tray.popUpContextMenu(this.menu);
   }
   store() {
     if (!this.available || this.window.isDestroyed() || this.quitting) return false;
@@ -68,7 +80,6 @@ class PanelTray {
       if (!this.stored || this.quitting) return;
       this.app.dock.hide();
       this.lastDockHide = this.now();
-      this.dockTransitionUntil = this.now() + 2000;
     };
     // Electron/macOS can ignore two dock.hide calls less than a second apart.
     if (delay) this.dockTimer = this.schedule(hide, delay);
@@ -81,9 +92,7 @@ class PanelTray {
     if (this.dockTimer !== null) this.cancel(this.dockTimer);
     this.dockTimer = null;
     if (this.platform === 'darwin') {
-      this.dockTransitionUntil = this.now() + 2000;
       try { await this.app.dock.show(); } catch { /* The panel can still be shown. */ }
-      this.dockTransitionUntil = this.now() + 2000;
     }
     // A later store or quit wins over a pending Dock restoration.
     if (revision !== this.revision || this.quitting || this.window.isDestroyed()) return false;

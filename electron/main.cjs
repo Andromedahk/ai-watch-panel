@@ -1,9 +1,10 @@
 const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net } = require('electron');
 const { PanelTray } = require('./panel-tray.cjs');
+const { traySummary } = require('./tray-summary.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, validPreferences, isTheme, isKimiSource, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
 const { requestKimiWorkSubscription } = require('./kimi-work-api.cjs');
 const { requestZcodeJson } = require('./zcode-account-api.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
@@ -36,6 +37,7 @@ async function refreshLocalStatus(force = false) {
     });
   }
   if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
+  panelTray?.updateMenu();
   return statusSnapshot;
 }
 
@@ -45,6 +47,7 @@ let preferences;
 let collapsed = false;
 let expandedBounds;
 let lastDisplayId;
+const displayLayouts = new Map();
 let repositioning = false;
 const providerIds = PROVIDER_ORDER;
 const devUrl = process.env.AI_WATCH_DEV_URL;
@@ -69,6 +72,7 @@ function currentState() {
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
 }
 function emitState() {
+  panelTray?.updateMenu();
   if (window && !window.isDestroyed()) window.webContents.send('panel:changed', currentState());
 }
 function updateAppearance() {
@@ -131,6 +135,7 @@ else {
     statusReader.qwenReader.setKeychainAllowed(!fixtureMode && preferences.qwenKeychainAllowed);
     nativeTheme.themeSource = preferences.theme;
     const display = screen.getPrimaryDisplay();
+    for (const item of screen.getAllDisplays()) displayLayouts.set(item.id, displayGeometry(item));
     lastDisplayId = display.id;
     window = new BrowserWindow({
       ...panelBounds(display.workArea, preferences.side), title: 'AI Watch',
@@ -143,6 +148,7 @@ else {
     });
     if (process.platform === 'win32') app.setAppUserModelId('app.aiwatch.panel');
     panelTray = new PanelTray({ app, window, Tray, Menu, nativeImage,
+      getSummary: () => ({ rows: traySummary(statusSnapshot, preferences), isTestData: fixtureMode }),
       onChange: emitState, onRefresh: () => refreshLocalStatus(true) });
     window.on('close', event => panelTray.handleClose(event));
     nativeTheme.on('updated', updateAppearance);
@@ -151,6 +157,7 @@ else {
         { role: 'about' }, { type: 'separator' },
         { label: '展开 / 收起', accelerator: 'CommandOrControl+Shift+B', click: () => setCollapsed(!collapsed) },
         { label: '收纳到菜单栏', accelerator: 'CommandOrControl+Shift+H', enabled: panelTray.available, click: () => panelTray.store() },
+        { label: '额度速览', accelerator: 'CommandOrControl+Shift+U', enabled: panelTray.available, click: () => panelTray.openMenu() },
         { label: '重新贴边', click: dock }, { type: 'separator' }, { role: 'quit' },
       ] }] : []),
       { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
@@ -176,13 +183,17 @@ else {
       if (!collapsed) expandedBounds = window.getBounds();
       emitState();
     });
-    screen.on('display-metrics-changed', (_event, _display, metrics) => {
-      // Dock visibility changes the work area too. It must not undo a manually
-      // placed panel when storing/restoring; real resolution/scale changes still dock.
-      if (metrics.every(metric => metric === 'workArea') && (panelTray.stored || panelTray.dockTransition)) return;
+    screen.on('display-metrics-changed', (_event, display) => {
+      const geometry = displayGeometry(display);
+      const previous = displayLayouts.get(display.id);
+      displayLayouts.set(display.id, geometry);
+      // Compare actual monitor geometry, not backend metric flags or a timeout:
+      // Dock animations may emit delayed events and must not reset a user position.
+      if (geometry === previous) return;
       dock();
     });
-    screen.on('display-removed', dock);
+    screen.on('display-added', (_event, display) => { displayLayouts.set(display.id, displayGeometry(display)); });
+    screen.on('display-removed', (_event, display) => { displayLayouts.delete(display.id); dock(); });
     handle('panel:state', currentState);
     handle('panel:status', () => statusSnapshot);
     handle('panel:refresh', () => refreshLocalStatus(true));

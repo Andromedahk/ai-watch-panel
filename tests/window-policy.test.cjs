@@ -1,6 +1,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { panelBounds, clampBounds, validPreferences, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('../electron/window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('../electron/window-policy.cjs');
+
+test('Dock work-area changes preserve placement; monitor geometry changes still resize', () => {
+  const original = { bounds: { x: 0, y: 0, width: 2560, height: 1440 }, scaleFactor: 2, rotation: 0,
+    workArea: { x: 0, y: 25, width: 2560, height: 1370 } };
+  assert.equal(displayGeometry(original), displayGeometry({ ...original, workArea: { ...original.workArea, height: 1400 } }));
+  for (const changed of [{ ...original, scaleFactor: 1 }, { ...original, rotation: 90 },
+    { ...original, bounds: { ...original.bounds, x: -2560 } }, { ...original, bounds: { ...original.bounds, height: 2160 } }]) {
+    assert.notEqual(displayGeometry(original), displayGeometry(changed));
+  }
+});
 
 test('right docking uses the full available height with the requested ratio', () => {
   const result = panelBounds({ x: 0, y: 25, width: 1920, height: 1080 });

@@ -9,7 +9,7 @@ const originalPreferences = JSON.stringify({ locked: true, theme: 'dark' });
 await writeFile(path.join(profile, 'preferences.json'), originalPreferences);
 let app;
 try {
-  app = await electron.launch({ args: ['.'], env: { ...process.env,
+  app = await electron.launch({ args: [path.resolve('tests/fixtures/tray-main.cjs')], env: { ...process.env,
     AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: 'fixture' } });
   const page = await app.firstWindow();
   await page.waitForFunction(() => Boolean(document.querySelector('main')?.getAttribute('data-sampled-at')));
@@ -28,6 +28,13 @@ try {
   };
   const storeLabel = process.platform === 'darwin' ? '收纳到菜单栏' : '收纳到托盘';
   assert.equal((await state()).trayAvailable, true);
+  const menuRows = () => app.evaluate(() => global.aiWatchTestMenu.items.map(item => ({ id: item.id, label: item.label, enabled: item.enabled })));
+  const summaries = () => menuRows().then(items => items.filter(item => item.id?.startsWith('quota-')));
+  let summary = await summaries();
+  assert.equal(summary.length, 8);
+  assert.match((await menuRows())[0].label, /测试数据/);
+  assert.equal(summary.find(row => row.id === 'quota-codex').label, 'Codex    7 天 · 剩余 75%');
+  assert.ok(summary.every(row => row.enabled === false));
   // Move away from the work-area boundary: macOS Dock animations can change that
   // boundary by a few pixels. Verify an intentional user position is not redocked.
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ x: 80, y: 50, width: 200, height: 900 }));
@@ -52,6 +59,23 @@ try {
   assert.equal(await page.locator('.provider-viewport').evaluate(element => element.scrollTop), scroll);
   assert.equal(await page.locator('[data-provider="antigravity"] .quota-pagination > span').innerText(), '2/5');
   assert.equal(await readFile(path.join(profile, 'preferences.json'), 'utf8'), originalPreferences);
+
+  await page.evaluate(() => window.panel.setKimiSource('work'));
+  assert.equal((await summaries()).find(row => row.id === 'quota-kimi').label, 'Kimi Work    订阅积分 · 剩余 75%');
+  await page.evaluate(async () => {
+    const current = await window.panel.getState();
+    await window.panel.setOrder([...current.providerOrder].reverse());
+    await window.panel.setEnabled(['codex', 'workbuddy']);
+  });
+  assert.deepEqual((await summaries()).map(row => row.id), ['quota-workbuddy', 'quota-codex']);
+  await page.evaluate(() => window.panel.setEnabled([]));
+  assert.equal((await summaries()).length, 0);
+  assert.ok((await menuRows()).some(row => row.label === '尚未启用监看模块'));
+  await page.evaluate(async () => {
+    const current = await window.panel.getState();
+    await window.panel.setOrder([...current.providerOrder].reverse());
+    await window.panel.setEnabled(current.providerOrder);
+  });
 
   await page.getByRole('button', { name: '收起面板', exact: true }).click();
   await expect(page.locator('main')).toHaveClass(/collapsed/);
@@ -97,7 +121,7 @@ try {
   await page.evaluate(() => window.panel.quit()).catch(() => {});
   await closed;
   app = null;
-  console.log('Tray checks passed: hidden background polling, restore, position/lock/scroll/pagination preservation, collapsed rail, close-to-tray, eight toolbar layouts, sandbox and exit while hidden.');
+  console.log('Tray checks passed: native summary menu, one quota per enabled module, weekly selection, Kimi source/order/visibility changes, hidden background polling, restore, position/lock/scroll/pagination preservation, collapsed rail, close-to-tray, eight toolbar layouts, sandbox and exit while hidden.');
 } finally {
   await app?.close().catch(() => {});
   await rm(profile, { recursive: true, force: true });

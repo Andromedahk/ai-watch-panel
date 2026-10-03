@@ -1,6 +1,11 @@
 const path = require('node:path');
 const RATIO = 4.5;
 const COLLAPSED_WIDTH = 46;
+// Work-area changes from the Dock/menu bar are not monitor geometry changes.
+function displayGeometry(display) {
+  const { x, y, width, height } = display.bounds;
+  return JSON.stringify({ x, y, width, height, scaleFactor: display.scaleFactor, rotation: display.rotation });
+}
 const PROVIDER_ORDER = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi', 'qwen', 'workbuddy'];
 function isEnabledProviders(value) {
   return Array.isArray(value) && new Set(value).size === value.length && value.every(id => PROVIDER_ORDER.includes(id));
@@ -70,4 +75,4 @@ function validPreferences(value) {
   };
 }
 
-module.exports = { panelBounds, clampBounds, validPreferences, isTheme, isKimiSource, isProviderOrder, isEnabledProviders, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };
+module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isProviderOrder, isEnabledProviders, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };
