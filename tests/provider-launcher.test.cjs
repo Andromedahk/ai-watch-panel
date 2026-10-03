@@ -154,3 +154,18 @@ test('cancelled, invalid and failed native choices never leak paths or silently 
   const result = await valid.choose('kimi', async () => ({ canceled: false, filePaths: ['/picked.app'] }), () => { throw new Error('/private/preferences.json'); });
   assert.equal(result.status, 'error'); assert.doesNotMatch(result.message, /private|picked|preferences/);
 });
+
+test('Kimi Work discovery uses its identity only when explicitly selected', async t => {
+  const root = await temp(t);
+  const work = await macApp(root, 'Kimi');
+  const impostor = await macApp(root, 'KimiWork');
+  const plist = async (file, key) => key === 'CFBundleExecutable' ? 'App' : file.startsWith(work) ? 'com.moonshot.kimichat' : 'com.other.app';
+  assert.equal(await discoverMacApp('kimi', { roots: [root], plist, kimiSource: 'work' }), await fs.realpath(work));
+  assert.equal(await discoverMacApp('kimi', { roots: [root], plist, kimiSource: 'code' }), null);
+  assert.notEqual(await discoverMacApp('kimi', { roots: [root], plist, kimiSource: 'work' }), impostor);
+  const sources = [];
+  const launcher = new ProviderLauncher({ platform: 'darwin', discover: async (id, source) => { sources.push(source); return source === 'work' ? work : null; }, open: async () => {} });
+  assert.match((await launcher.launch('kimi', null, 'work')).message, /Kimi Work/);
+  assert.equal((await launcher.launch('kimi', null, 'code')).status, 'missing');
+  assert.deepEqual(sources, ['work', 'code']);
+});

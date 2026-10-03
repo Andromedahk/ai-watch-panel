@@ -1,10 +1,16 @@
-const { app, BrowserWindow, ipcMain, screen, dialog, Menu, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog, Menu, nativeTheme, net } = require('electron');
+const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, validPreferences, isTheme, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, validPreferences, isTheme, isKimiSource, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
+const { requestKimiWorkSubscription } = require('./kimi-work-api.cjs');
+const { requestZcodeJson } = require('./zcode-account-api.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
 const { ProviderLauncher } = require('./provider-launcher.cjs');
 const statusReader = new LocalStatusReader();
+// Electron's network stack follows the system proxy. The API reader owns the fixed URL.
+statusReader.kimiWorkReader.request = token => requestKimiWorkSubscription(token, { transport: electronTransport(net) });
+statusReader.zcodeReader.accountReader.request = (family, kind, token) => requestZcodeJson(family, kind, token, { transport: electronTransport(net) });
 let statusTimer;
 let statusSnapshot = statusReader.current;
 const fixtureVariant = process.env.AI_WATCH_TEST_STATUS;
@@ -17,6 +23,16 @@ async function refreshLocalStatus(force = false) {
   if (fixtureMode && fixtureVariant?.startsWith('glow-')) {
     for (const id of PROVIDER_ORDER) Object.assign(statusSnapshot[id], { activity: 'running', activeTasks: 1, task: '合成测试 · 任务运行中' });
     if (fixtureVariant === 'glow-attention') Object.assign(statusSnapshot.codex, { activity: 'waiting', activeTasks: 1, waitingTasks: 1, waitingReason: 'both', task: '合成测试 · 待回答 / 待授权' });
+  }
+  if (fixtureMode) {
+    statusSnapshot.sampledAt = new Date().toISOString();
+    for (const id of PROVIDER_ORDER) statusSnapshot[id].sampledAt = statusSnapshot.sampledAt;
+    statusSnapshot.kimi.kimiSource = preferences.kimiSource;
+    if (preferences.kimiSource === 'work') Object.assign(statusSnapshot.kimi, {
+      activity: 'unknown', activeTasks: 0, waitingTasks: 0, task: '合成测试 · Work 活动未知',
+      quotas: [{ model: '共享积分', period: '订阅额度', remaining: 75, reset: '2099-01-01T00:00:00Z', resetKind: 'expiry' },
+        { model: '共享积分', period: '赠送额度', remaining: 50, reset: '2099-01-01T00:00:00Z', resetKind: 'expiry' }],
+    });
   }
   if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
   return statusSnapshot;
@@ -44,7 +60,7 @@ function savePreferences() {
 }
 function currentState() {
   const display = screen.getDisplayMatching(window.getBounds());
-  const { providerApps: _privateLaunchPaths, ...publicPreferences } = preferences;
+  const { providerApps: _privateLaunchPaths, kimiWorkApp: _privateWorkPath, ...publicPreferences } = preferences;
   return { ...publicPreferences, collapsed, desktop: true, platform: process.platform,
     resolvedTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
@@ -108,6 +124,7 @@ else {
   app.on('second-instance', () => { window?.show(); window?.focus(); });
   app.whenReady().then(() => {
     preferences = readPreferences();
+    statusReader.setKimiSource(preferences.kimiSource);
     statusReader.qwenReader.setKeychainAllowed(!fixtureMode && preferences.qwenKeychainAllowed);
     nativeTheme.themeSource = preferences.theme;
     const display = screen.getPrimaryDisplay();
@@ -164,7 +181,8 @@ else {
       setCollapsed(value); return currentState();
     });
     handle('panel:configure', (value) => {
-      const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
+      const next = validPreferences({ ...value, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
+        kimiSource: preferences.kimiSource, kimiWorkApp: preferences.kimiWorkApp, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -177,14 +195,24 @@ else {
       try { savePreferences(); } catch (error) { preferences.animeMode = previous; throw error; }
       emitState(); return currentState();
     });
-    handle('panel:open-provider', (id) => providerLauncher.launch(id, preferences.providerApps[id]));
-    handle('panel:choose-provider-app', (id) => providerLauncher.choose(id,
+    handle('panel:open-provider', (id) => providerLauncher.launch(id,
+      id === 'kimi' && preferences.kimiSource === 'work' ? preferences.kimiWorkApp : preferences.providerApps[id], preferences.kimiSource));
+    handle('panel:choose-provider-app', (id) => {
+      const source = preferences.kimiSource;
+      return providerLauncher.choose(id,
       options => dialog.showOpenDialog(window, options),
       (provider, file) => {
+        if (provider === 'kimi' && source === 'work') {
+          const previous = preferences.kimiWorkApp;
+          preferences.kimiWorkApp = file;
+          try { savePreferences(); } catch (error) { preferences.kimiWorkApp = previous; throw error; }
+          return;
+        }
         const previous = preferences.providerApps;
         preferences.providerApps = { ...previous, [provider]: file };
         try { savePreferences(); } catch (error) { preferences.providerApps = previous; throw error; }
-      }));
+      }, source);
+    });
     handle('panel:theme', (value) => {
       if (!isTheme(value)) throw new Error('Invalid theme');
       const previous = preferences.theme;
@@ -217,6 +245,20 @@ else {
       }
       emitState();
       if (!fixtureMode) void refreshLocalStatus().catch(() => {});
+      return currentState();
+    });
+    handle('panel:kimi-source', async (value) => {
+      if (!isKimiSource(value)) throw new Error('Invalid Kimi source');
+      const previous = preferences.kimiSource;
+      preferences.kimiSource = value;
+      try { savePreferences(); } catch (error) { preferences.kimiSource = previous; throw error; }
+      const pending = statusReader.pending;
+      statusReader.setKimiSource(value);
+      statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), kimi: statusReader.current.kimi };
+      window.webContents.send('panel:status-changed', statusSnapshot);
+      emitState();
+      if (pending) await pending.catch(() => {});
+      await refreshLocalStatus(true);
       return currentState();
     });
     handle('panel:order', (value) => {

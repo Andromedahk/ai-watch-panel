@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/build-native.mjs && tsc --noEmit && vite build",
     "start": "electron .",
     "test": "node --test tests/*.test.cjs",
     "test:desktop": "node scripts/verify-desktop.mjs",
@@ -23,7 +23,9 @@
     "test:modules": "node scripts/verify-modules.mjs",
     "test:credits": "node scripts/verify-credits.mjs",
     "test:plans": "node scripts/verify-plans.mjs",
-    "test:anime": "node scripts/verify-anime.mjs"
+    "test:anime": "node scripts/verify-anime.mjs",
+    "test:kimi-work": "node scripts/verify-kimi-work.mjs",
+    "test:live-kimi-zcode": "node scripts/verify-live-kimi-zcode.mjs"
   },
   "dependencies": {
     "big.js": "^7.0.1",
@@ -55,6 +57,7 @@
       "package.json"
     ],
     "asar": true,
+    "asarUnpack": ["electron/native/bin/**/*"],
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [

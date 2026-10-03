@@ -263,3 +263,41 @@ test('Antigravity plan is historical on service failure/offline and never crosse
     assert.equal(f.reader.antigravityRateCache, null);
   } finally { await fs.rm(home, { recursive: true, force: true }); }
 });
+
+test('explicit Kimi Work selection never queries Code or publishes a superseded source', async () => {
+  const status = label => ({ id: 'kimi', source: 'account', plan: { name: label }, quotas: [{ remaining: 75 }], activity: 'unknown', activeTasks: 0 });
+  let release; let started; const inFlight = new Promise(resolve => { started = resolve; });
+  let codeCalls = 0; let workCalls = 0;
+  const code = { poll: async () => { codeCalls++; return status('Code'); } };
+  const work = { poll: async () => { workCalls++; started(); return new Promise(resolve => { release = () => resolve(status('Work')); }); } };
+  const reader = new LocalStatusReader({ kimiSource: 'work', kimiReader: code, kimiWorkReader: work });
+  reader.codex = reader.antigravity = reader.deepseek = async () => ({});
+  for (const key of ['claudeReader', 'zcodeReader', 'qwenReader', 'workbuddyReader']) reader[key] = { poll: async () => ({}) };
+  const pending = reader.poll(); await inFlight;
+  assert.equal(codeCalls, 0); assert.equal(workCalls, 1);
+  reader.setKimiSource('code');
+  assert.equal(reader.current.kimi.plan, undefined); assert.deepEqual(reader.current.kimi.quotas, []);
+  release(); const superseded = await pending;
+  assert.equal(superseded.kimi.kimiSource, 'code'); assert.equal(superseded.kimi.plan, undefined);
+  assert.equal((await reader.poll()).kimi.plan.name, 'Code'); assert.equal(codeCalls, 1);
+  assert.throws(() => reader.setKimiSource('automatic'), /Invalid Kimi source/);
+});
+
+test('switching Kimi sources away and back discards cache written by the superseded query', async () => {
+  let release, start; const started = new Promise(resolve => { start = resolve; });
+  let calls = 0;
+  const code = { cache: null, nextAt: 0, poll: async function () {
+    calls++;
+    if (this.cache) return this.cache;
+    if (calls === 1) { start(); await new Promise(resolve => { release = resolve; }); }
+    this.cache = { id: 'kimi', source: 'account', plan: { name: calls === 1 ? 'Old' : 'New' }, quotas: [], activity: 'unknown', activeTasks: 0 };
+    this.nextAt = Date.now() + 60000; return this.cache;
+  } };
+  const reader = new LocalStatusReader({ kimiReader: code, kimiWorkReader: { poll: async () => ({}) } });
+  reader.codex = reader.antigravity = reader.deepseek = async () => ({});
+  for (const key of ['claudeReader', 'zcodeReader', 'qwenReader', 'workbuddyReader']) reader[key] = { poll: async () => ({}) };
+  const pending = reader.poll(); await started;
+  reader.setKimiSource('work'); reader.setKimiSource('code'); release();
+  await pending; assert.equal(code.cache, null); assert.equal(code.nextAt, 0);
+  assert.equal((await reader.poll()).kimi.plan.name, 'New'); assert.equal(calls, 2);
+});

@@ -22,6 +22,7 @@ function migrateEnabled(value) {
   return enabled;
 }
 const isTheme = value => ['system', 'light', 'dark'].includes(value);
+const isKimiSource = value => ['code', 'work'].includes(value);
 function isProviderOrder(value) {
   return Array.isArray(value) && value.length === PROVIDER_ORDER.length
     && new Set(value).size === PROVIDER_ORDER.length && value.every(id => PROVIDER_ORDER.includes(id));
@@ -60,6 +61,8 @@ function validPreferences(value) {
     animate: value?.animate !== false,
     theme: isTheme(value?.theme) ? value.theme : 'system',
     qwenKeychainAllowed: value?.qwenKeychainAllowed === true,
+    kimiSource: isKimiSource(value?.kimiSource) ? value.kimiSource : 'code',
+    kimiWorkApp: validProviderApps({ kimi: value?.kimiWorkApp }).kimi || null,
     animeMode: value?.animeMode === true,
     providerApps: validProviderApps(value?.providerApps),
     providerOrder: migrateOrder(value?.providerOrder),
@@ -67,4 +70,4 @@ function validPreferences(value) {
   };
 }
 
-module.exports = { panelBounds, clampBounds, validPreferences, isTheme, isProviderOrder, isEnabledProviders, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };
+module.exports = { panelBounds, clampBounds, validPreferences, isTheme, isKimiSource, isProviderOrder, isEnabledProviders, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };

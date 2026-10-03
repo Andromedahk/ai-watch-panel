@@ -1,16 +1,18 @@
 export type ProviderId = 'claude' | 'codex' | 'antigravity' | 'deepseek' | 'zcode' | 'kimi' | 'qwen' | 'workbuddy';
 export type Theme = 'system' | 'light' | 'dark';
+export type KimiSource = 'code' | 'work';
 export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: boolean };
 export type PanelState = Preferences & {
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
   providerOrder: ProviderId[];
   enabledProviders: ProviderId[];
   qwenKeychainAllowed: boolean;
+  kimiSource: KimiSource;
   animeMode: boolean;
   theme: Theme; resolvedTheme: 'light' | 'dark';
   bounds?: { x: number; y: number; width: number; height: number };
 };
-export type Quota = { model: string; period: string; remaining: number | null; reset: string; stale?: boolean };
+export type Quota = { model: string; period: string; remaining: number | null; reset: string; stale?: boolean; resetKind?: 'expiry' };
 export type Wallet = { currency: 'CNY' | 'USD'; total: string; paid: string; bonus: string };
 export type CreditItem = { label: string; remaining: string | null; total?: string | null; unit: string; reset?: string };
 export type LocalProviderStatus = {
@@ -20,6 +22,7 @@ export type LocalProviderStatus = {
   task: string; quotas: Quota[]; observedAt: string | null; sampledAt: string | null; detail: string;
   waitingTasks?: number; waitingReason?: 'input' | 'approval' | 'both'; attentionAvailable?: boolean;
   accessRequired?: boolean;
+  kimiSource?: KimiSource;
   activityDetail?: string; activityObservedAt?: string | null;
   surfaces?: { desktop: string; terminal: string };
   balance?: { wallets: Wallet[]; stale: boolean };
@@ -44,6 +47,7 @@ declare global {
       setOrder(order: ProviderId[]): Promise<PanelState>;
       setEnabled(ids: ProviderId[]): Promise<PanelState>;
       setQwenAccess(allowed: boolean): Promise<PanelState>;
+      setKimiSource(source: KimiSource): Promise<PanelState>;
       setAnimeMode(enabled: boolean): Promise<PanelState>;
       openProvider(provider: ProviderId): Promise<{ status: 'opened' | 'missing' | 'unsupported' | 'error' | 'test'; message: string }>;
       chooseProviderApp(provider: ProviderId): Promise<{ status: 'selected' | 'cancelled' | 'error'; message: string }>;

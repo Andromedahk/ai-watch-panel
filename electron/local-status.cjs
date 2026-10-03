@@ -10,6 +10,8 @@ const { ClaudeStatusReader } = require('./claude-status.cjs');
 const { CodexAttentionReader } = require('./codex-attention.cjs');
 const { ZcodeStatusReader } = require('./zcode-status.cjs');
 const { KimiStatusReader } = require('./kimi-status.cjs');
+const { KimiWorkStatusReader } = require('./kimi-work-status.cjs');
+const { isKimiSource } = require('./window-policy.cjs');
 const { QwenStatusReader } = require('./qwen-status.cjs');
 const { WorkBuddyStatusReader } = require('./workbuddy-status.cjs');
 const execute = promisify(execFile);
@@ -81,6 +83,7 @@ class LocalStatusReader {
     deepseekReader = new DeepSeekBalanceReader({ home }),
     deepseekActivityReader = new DeepSeekActivityReader({ home }), claudeReader = new ClaudeStatusReader({ home }),
     zcodeReader = new ZcodeStatusReader({ home }), kimiReader = new KimiStatusReader({ home }),
+    kimiWorkReader = new KimiWorkStatusReader({ home }), kimiSource = 'code',
     qwenReader = new QwenStatusReader({ home }), workbuddyReader = new WorkBuddyStatusReader({ home }),
     runCommand = execute, requestLocal = postLocal } = {}) {
     this.home = home;
@@ -94,9 +97,22 @@ class LocalStatusReader {
     this.deepseekActivityReader = deepseekActivityReader;
     this.claudeReader = claudeReader;
     this.zcodeReader = zcodeReader; this.kimiReader = kimiReader;
+    this.kimiWorkReader = kimiWorkReader; this.kimiSource = isKimiSource(kimiSource) ? kimiSource : 'code'; this.kimiGeneration = 0;
     this.qwenReader = qwenReader; this.workbuddyReader = workbuddyReader;
     this.current = { sampledAt: null, claude: unavailable('claude'), codex: unavailable('codex'), antigravity: unavailable('antigravity'), deepseek: unavailable('deepseek'), zcode: unavailable('zcode'), kimi: unavailable('kimi'), qwen: unavailable('qwen'), workbuddy: unavailable('workbuddy') };
     this.pending = null;
+  }
+  setKimiSource(source) {
+    if (!isKimiSource(source)) throw new Error('Invalid Kimi source');
+    if (source === this.kimiSource) return;
+    this.kimiSource = source; this.kimiGeneration++;
+    for (const reader of [this.kimiReader, this.kimiWorkReader]) this.clearKimiCache(reader);
+    this.current = { ...this.current, kimi: { ...unavailable('kimi'), kimiSource: source,
+      task: '正在核对所选客户端', detail: '来源已切换，等待新的套餐和额度。' } };
+  }
+  clearKimiCache(reader) {
+    reader.cache = null; reader.planCache = null;
+    if (reader.error !== 'rate') reader.nextAt = 0;
   }
   async poll(force = false) {
     if (this.pending) return this.pending;
@@ -106,7 +122,10 @@ class LocalStatusReader {
   async collect(force) {
     let list;
     try { list = await processes(); } catch { list = null; }
-    const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseek(list, force), this.claudeReader.poll(list), this.zcodeReader.poll(list), this.kimiReader.poll(list), this.qwenReader.poll(list, force), this.workbuddyReader.poll(list, force)]);
+    const kimiGeneration = this.kimiGeneration;
+    const kimiSource = this.kimiSource;
+    const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseek(list, force), this.claudeReader.poll(list), this.zcodeReader.poll(list, Date.now(), force),
+      kimiSource === 'work' ? this.kimiWorkReader.poll(list, Date.now(), force) : this.kimiReader.poll(list), this.qwenReader.poll(list, force), this.workbuddyReader.poll(list, force)]);
     const sampledAt = new Date().toISOString();
     const next = { sampledAt };
     for (const [index, id] of ['codex', 'antigravity', 'deepseek', 'claude', 'zcode', 'kimi', 'qwen', 'workbuddy'].entries()) {
@@ -114,6 +133,10 @@ class LocalStatusReader {
       next[id] = result.status === 'fulfilled' ? result.value : {
         ...unavailable(id), task: '本地状态暂不可读', detail: '读取失败，稍后自动重试', connection: 'error' };
       next[id].sampledAt = sampledAt;
+      if (id === 'kimi') {
+        if (kimiGeneration !== this.kimiGeneration) this.clearKimiCache(kimiSource === 'work' ? this.kimiWorkReader : this.kimiReader);
+        next[id] = kimiGeneration === this.kimiGeneration ? { ...next[id], kimiSource } : { ...this.current.kimi, sampledAt };
+      }
     }
     this.current = next;
     return next;

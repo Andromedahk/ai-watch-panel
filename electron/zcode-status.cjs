@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const { ZcodeAccountStatusReader } = require('./zcode-account-status.cjs');
 
 const FRESH_MS = 10 * 60 * 1000;
 const MAX_DATABASE_BYTES = 512 * 1024 * 1024;
@@ -64,10 +65,11 @@ class ZcodeStatusReader {
   constructor(options = {}) {
     this.paths = resolveZcodePaths(options);
     this.readTurns = options.readTurns || readZcodeTurns;
+    this.accountReader = options.accountReader || new ZcodeAccountStatusReader(options);
     this.previous = new Map(); this.advanced = new Map(); this.sampled = false;
     this.processKey = null;
   }
-  async poll(processes, now = Date.now()) {
+  async poll(processes, now = Date.now(), force = false) {
     const matches = processes?.filter(p => isZcodeProcess(p.command)) || [];
     const processKey = matches.map(p => p.pid).sort((a, b) => a - b).join(',');
     // A process restart cannot inherit confidence from a previous runtime.
@@ -118,17 +120,22 @@ class ZcodeStatusReader {
     this.sampled = available && !failed;
     const activity = processes === null ? 'unknown' : !matches.length ? 'offline'
       : activeTasks ? 'running' : !available || uncertain ? 'unknown' : 'idle';
-    return { id: 'zcode', source: available ? 'cache' : 'unavailable',
+    const activityStatus = { id: 'zcode', source: available ? 'cache' : 'unavailable',
       connection: processes === null || failed ? 'error' : matches.length ? available ? 'ready' : 'unavailable' : 'offline',
       activity, activeTasks, task: activeTasks ? `${activeTasks} 项任务有已确认的新活动`
         : activity === 'idle' ? '已读取记录 · 暂无运行任务' : activity === 'offline' ? 'ZCode 未运行'
           : available ? '等待新的任务活动证据' : 'ZCode 当前任务状态未知',
-      // The runtime's telemetry has no subscription field. Account selection and
-      // entitlements live behind separate encrypted credentials; do not infer a tier.
       plan: { name: null }, quotas: [], observedAt: null, sampledAt: new Date(now).toISOString(),
       activityObservedAt: observed ? new Date(observed).toISOString() : null,
-      detail: '已接入本地任务遥测；套餐档位和额度暂不可读，请在 ZCode 的使用统计中查看。当前账户保存在独立加密记录中，任务或旧页面缓存不能确认套餐。无需为面板复制 Key。',
+      detail: '已接入本地任务遥测；套餐和额度由独立账号来源核对。',
       activityDetail: '只读官方运行时的回合遥测，并核对本地进程。首次采样或历史未结束记录显示未知；观察到新回合或遥测推进后点亮，十分钟没有新证据则恢复未知。授权与提问等待状态暂不可区分。' };
+    let account;
+    try { account = await this.accountReader.poll(processes, now, force); }
+    catch { account = { source: 'unavailable', connection: 'error', plan: { name: null }, quotas: [],
+      observedAt: null, detail: 'ZCode 当前账号暂不可验证，套餐和额度保持未知。' }; }
+    return { ...activityStatus, plan: account.plan, quotas: account.quotas, observedAt: account.observedAt,
+      detail: account.detail, source: account.source === 'unavailable' ? activityStatus.source : account.source,
+      connection: ['ready', 'auth-required', 'error'].includes(account.connection) ? account.connection : activityStatus.connection };
   }
 }
 module.exports = { ZcodeStatusReader, resolveZcodePaths, isZcodeProcess, readZcodeTurns, FRESH_MS };
