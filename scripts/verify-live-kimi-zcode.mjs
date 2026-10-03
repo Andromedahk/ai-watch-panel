@@ -43,6 +43,15 @@ try {
       await expect(card).toContainText(quota.period);
       if (quota.remaining !== null) await expect(card).toContainText(`${quota.remaining}%`);
     }
+    const geometry = await card.evaluate(element => {
+      const bounds = node => { const box = node.getBoundingClientRect(); return { top: box.top, bottom: box.bottom }; };
+      return { tools: bounds(element.querySelector('.quota-tools')), list: bounds(element.querySelector('.quota-list')),
+        footer: bounds(element.querySelector('.task-line')), rows: [...element.querySelectorAll('.quota')].map(bounds) };
+    });
+    assert.ok(geometry.tools.bottom <= geometry.list.top + 1, `${id}: quota toolbar overlap`);
+    assert.ok(geometry.list.bottom <= geometry.footer.top + 1, `${id}: quota footer overlap`);
+    assert.ok(geometry.rows.every(row => row.top >= geometry.list.top - 1 && row.bottom <= geometry.list.bottom + 1),
+      `${id}: quota rows overflow`);
   }
   await expect(page.getByRole('heading', { name: 'Kimi Work', exact: true })).toBeVisible();
   assert.deepEqual(await Promise.all(watched.map(fingerprint)), before, 'Provider files changed during the check; repeat after the clients settle.');

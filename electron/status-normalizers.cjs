@@ -49,7 +49,7 @@ function unknownCodexQuotas() {
     { model: '周额度', period: '1 周', remaining: null, reset: '', stale: false },
   ];
 }
-function normalizeCodexRates(payload, observedAt, now = Date.now()) {
+function normalizeCodexRates(payload, observedAt, now = Date.now(), { includeMissing = true } = {}) {
   const observed = timestamp(observedAt);
   const old = !observed || now - observed > QUOTA_FRESH_MS || observed > now + 120000;
   const buckets = payload?.rateLimitsByLimitId && typeof payload.rateLimitsByLimitId === 'object'
@@ -73,7 +73,7 @@ function normalizeCodexRates(payload, observedAt, now = Date.now()) {
   }
   if (!quotas.length) return unknownCodexQuotas();
   // A missing window is unknown, never an inferred full allowance.
-  if (!quotas.some((quota) => quota.period === '5 小时')) quotas.unshift(unknownCodexQuotas()[0]);
+  if (includeMissing && !quotas.some((quota) => quota.period === '5 小时')) quotas.unshift(unknownCodexQuotas()[0]);
   return quotas;
 }
 function normalizeAntigravityQuotas(payload, observedAt, now = Date.now()) {
@@ -81,14 +81,27 @@ function normalizeAntigravityQuotas(payload, observedAt, now = Date.now()) {
   const old = !observed || now - observed > QUOTA_FRESH_MS || observed > now + 120000;
   const models = payload?.userStatus?.cascadeModelConfigData?.clientModelConfigs;
   if (!Array.isArray(models)) return [];
-  return models.slice(0, 100).map((model) => {
+  const quotas = models.slice(0, 100).map((model) => {
     const fraction = number(model?.quotaInfo?.remainingFraction);
     const resetAt = timestamp(model?.quotaInfo?.resetTime);
     return { model: text(model?.label, '未命名模型'), period: '模型额度',
       remaining: fraction !== null && fraction >= 0 && fraction <= 1 ? percentage(fraction * 100) : null,
       reset: resetAt === null ? '' : new Date(resetAt).toISOString(),
       stale: old || (resetAt !== null && resetAt <= now) };
-  }).sort((a, b) => a.model.localeCompare(b.model, 'en', { numeric: true }));
+  });
+  const groups = new Map();
+  for (const quota of quotas) {
+    // Only recognized thinking suffixes are variants; model versions remain distinct.
+    const name = quota.model.replace(/\s*\((?:high|medium|low|thinking)\)\s*$/i, '').trim() || quota.model;
+    const group = groups.get(name) || [];
+    group.push(quota); groups.set(name, group);
+  }
+  return [...groups].map(([model, variants]) => ({ model, period: '模型额度',
+    remaining: variants.every(item => item.remaining !== null) ? Math.min(...variants.map(item => item.remaining)) : null,
+    reset: variants.every(item => item.reset === variants[0].reset) ? variants[0].reset : '',
+    stale: variants.some(item => item.stale),
+    ...(variants.length > 1 ? { variants: [...new Set(variants.map(item => item.model))] } : {}),
+  })).sort((a, b) => a.model.localeCompare(b.model, 'en', { numeric: true }));
 }
 function normalizeCodexActivity(rows, latest, processRunning, now = Date.now()) {
   if (!processRunning) return { activity: 'offline', activeTasks: 0, task: '未检测到 Codex 进程' };

@@ -288,5 +288,5 @@ else {
     app.on('activate', () => window.show());
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance); statusReader.codexAttention.close(); });
+  app.on('before-quit', () => { clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance); statusReader.codexAttention.close(); statusReader.codexQuotaReader.close(); });
 }

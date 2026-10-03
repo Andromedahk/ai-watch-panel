@@ -53,7 +53,7 @@ try {
   await expect(card('DeepSeek Harness').locator('.task-status')).toHaveText('待确认');
 
   // Bounds, missing data, and history must remain distinct at the rendered progress bars.
-  for (const [value, text] of [['low', '12.5%'], ['zero', '0%'], ['full', '100%'], ['unknown', '未知'], ['stale', '记录已过时']]) {
+  for (const [value, text] of [['low', '12.5%'], ['zero', '0%'], ['full', '100%'], ['unknown', '未知'], ['stale', '历史剩余 78.4%，当前额度待更新']]) {
     await configure(); await select('Codex 测试数据显示', value); await view();
     await expect(card('Codex').getByRole('progressbar').first()).toHaveAttribute('aria-valuetext', text);
     if (['unknown', 'stale'].includes(value)) await expect(card('Codex').locator('.quota-fill')).toHaveCount(0);

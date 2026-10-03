@@ -8,6 +8,7 @@ const { DeepSeekBalanceReader } = require('./deepseek-status.cjs');
 const { DeepSeekActivityReader } = require('./deepseek-activity.cjs');
 const { ClaudeStatusReader } = require('./claude-status.cjs');
 const { CodexAttentionReader } = require('./codex-attention.cjs');
+const { CodexQuotaReader } = require('./codex-quota.cjs');
 const { ZcodeStatusReader } = require('./zcode-status.cjs');
 const { KimiStatusReader } = require('./kimi-status.cjs');
 const { KimiWorkStatusReader } = require('./kimi-work-status.cjs');
@@ -85,10 +86,11 @@ class LocalStatusReader {
     zcodeReader = new ZcodeStatusReader({ home }), kimiReader = new KimiStatusReader({ home }),
     kimiWorkReader = new KimiWorkStatusReader({ home }), kimiSource = 'code',
     qwenReader = new QwenStatusReader({ home }), workbuddyReader = new WorkBuddyStatusReader({ home }),
-    runCommand = execute, requestLocal = postLocal } = {}) {
+    codexQuotaReader = new CodexQuotaReader({ home, codexHome }), runCommand = execute, requestLocal = postLocal } = {}) {
     this.home = home;
     this.codexHome = codexHome;
     this.codexAttention = new CodexAttentionReader({ codexHome });
+    this.codexQuotaReader = codexQuotaReader;
     this.antigravityHome = path.join(home, '.gemini', 'antigravity');
     this.codexRateCache = null;
     this.antigravityRateCache = null;
@@ -148,6 +150,7 @@ class LocalStatusReader {
       ...(activity.status === 'fulfilled' ? activity.value : { activity: 'unknown', activeTasks: 0, task: '任务记录暂不可读', activityDetail: '稍后自动重试' }) };
   }
   async codex(list, force) {
+    const officialPromise = this.codexQuotaReader.poll(force);
     const now = Date.now();
     const detected = list?.some(({ command }) => /(?:^|\/)codex(?:\.exe)?$/.test(command)) ?? false;
     let rows = null; let latest = null;
@@ -209,12 +212,19 @@ class LocalStatusReader {
         waitingReason: attention.inputThreads.size && attention.approvalThreads.size ? 'both' : attention.inputThreads.size ? 'input' : 'approval' });
     }
     if (list === null) Object.assign(activity, { activity: 'unknown', task: '进程状态暂不可读' });
-    return { id: 'codex', source: cached ? 'cache' : 'unavailable', connection: list === null ? 'error' : detected ? 'ready' : 'offline',
-      ...activity, quotas, plan: cached ? { ...cached.plan, stale: cached.plan.stale || now - cached.at > 1800000 }
+    const official = await officialPromise;
+    const quotaStatus = official.useLocal ? {
+      source: cached ? 'cache' : 'unavailable', connection: list === null ? 'error' : detected ? 'ready' : 'offline',
+      quotas, plan: cached ? { ...cached.plan, stale: cached.plan.stale || now - cached.at > 1800000 }
         : normalizeCodexPlan(null, null, now), observedAt: cached ? new Date(cached.at).toISOString() : null,
+      detail: `${official.detail} 套餐与额度来自同一条本地快照；最新记录缺少套餐时显示未知。`,
+    } : { source: official.source, connection: official.connection, quotas: official.quotas, plan: official.plan,
+      observedAt: official.observedAt, detail: official.detail };
+    return { id: 'codex', ...quotaStatus,
+      ...activity,
       attentionAvailable: attention.connected && attention.observedThreads > 0,
       activityDetail: attention.connected && attention.observedThreads > 0 ? '通过 Codex 本地客户端状态通道监看待回答与待授权请求；红灯优先，处理后自动恢复。' : '任务活动来自本地记录；等待提醒通道暂不可用，不能确认是否有待回答或待授权请求。',
-      detail: '套餐与额度来自同一条本地快照，不能仅凭快照确认当前登录账号；最新记录缺少套餐时显示未知。十分钟无活动的未结束任务不显示为运行中。' };
+    };
   }
   async antigravity(list, force) {
     const now = Date.now();

@@ -1,0 +1,208 @@
+/*
+ * Anime mode card layout (NewUI).
+ * Loaded after styles.css; every rule is scoped to `.anime-mode`, so the ordinary layout is untouched.
+ *
+ * Structure inside each card (top → bottom):
+ *   hero   — square portrait frame + identity column (name, source, plan chip)
+ *   panel  — inset data panel: source / pagination row, quota · credit · balance rows
+ *   footer — status dot, task text and a status pill
+ *
+ * Sizes follow one scale derived from window width (the window keeps a 4.5 : 1 ratio,
+ * so width-based units also track the card height).
+ */
+.anime-mode .provider-card {
+  --a-pad: clamp(7px, 3.1vw, 12px);
+  --a-gap: clamp(5px, 2vw, 8px);
+  --a-radius: clamp(8px, 3.4vw, 12px);
+  --a-title: clamp(10px, 5.3vw, 17px);
+  --a-body: clamp(7.5px, 3.6vw, 11.5px);
+  --a-caption: clamp(6px, 2.75vw, 8.5px);
+  --a-number: clamp(10.5px, 5.2vw, 17px);
+  --a-ink: var(--accent-ink, var(--accent));
+  --a-tint: color-mix(in srgb, var(--accent) 12%, transparent);
+  --a-tint-border: color-mix(in srgb, var(--accent) 26%, transparent);
+  --a-panel: color-mix(in srgb, var(--text) 3.5%, transparent);
+  --a-panel-border: color-mix(in srgb, var(--text) 7%, transparent);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 51% minmax(0, 1fr) auto;
+  gap: var(--a-gap);
+  padding: var(--a-pad);
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--line));
+  background:
+    radial-gradient(120% 70% at 0 0, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%),
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, var(--card)), var(--card) 55%);
+  box-shadow: 0 1px 2px #0000001f, 0 6px 18px -10px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+/* Thin accent line along the top edge replaces the side marker. */
+.anime-mode .provider-card::before {
+  top: 0; left: 18%; right: 18%; width: auto; height: 2px;
+  border-radius: 0 0 2px 2px; opacity: .75;
+  background: linear-gradient(90deg, transparent, var(--a-ink), transparent);
+}
+/* Light theme: keep more of each character's color than the base 42% mix. */
+:root[data-theme="light"] .anime-mode .provider-card { --accent-ink: color-mix(in srgb, var(--accent) 55%, #1d3446); }
+.anime-mode .plan-status { flex: none; }
+
+/* ── Hero ─────────────────────────────────────────────── */
+.anime-mode .card-heading {
+  display: flex; align-items: stretch; gap: var(--a-pad);
+  height: 100%; min-height: 0;
+}
+.anime-mode .card-heading .avatar-launch {
+  flex: none; height: 100%; aspect-ratio: 1 / 1; width: auto;
+  min-width: 0; min-height: 0; border-radius: var(--a-radius);
+}
+.anime-mode .card-heading .avatar { width: 100%; height: 100%; border-radius: var(--a-radius); }
+.anime-mode .card-heading .avatar-face {
+  border: 1px solid var(--a-tint-border);
+  background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--accent) 16%, var(--avatar-bg)), var(--avatar-bg) 78%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 6%, transparent);
+}
+.anime-mode .card-heading .avatar img { padding: 0; object-fit: contain; object-position: center bottom; }
+.anime-mode .avatar-launch:hover .avatar-face { border-color: var(--a-ink); }
+
+.anime-mode .identity {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+  gap: clamp(2px, .9vw, 4px);
+  padding-top: calc(var(--a-caption) * 1.9);
+}
+.anime-mode .identity h2 {
+  order: 0; max-width: 100%; margin: 0;
+  font-size: var(--a-title); font-weight: 700; line-height: 1.2; letter-spacing: -.3px;
+  overflow-wrap: anywhere; text-wrap: balance;
+}
+.anime-mode .provider-card[data-provider="deepseek"] .identity h2,
+.anime-mode .provider-card[data-provider="qwen"] .identity h2 { font-size: calc(var(--a-title) * .92); }
+.anime-mode .identity .eyebrow {
+  order: 1; max-width: 100%;
+  font-size: var(--a-caption); line-height: 1.4; letter-spacing: 1.1px;
+  text-transform: uppercase; color: var(--muted); overflow-wrap: anywhere;
+}
+/* Plan chip: a small "套餐" label followed by the tier name. */
+.anime-mode .plan-summary {
+  order: 2; display: flex; flex-wrap: nowrap; align-items: center; gap: 5px;
+  max-width: 100%; margin-top: clamp(2px, .9vw, 5px);
+  padding: 2px 6px 2px 2px; border-radius: 6px;
+  border: 1px solid var(--a-tint-border); background: var(--a-tint);
+  font-size: var(--a-caption); line-height: 1.35; color: var(--strong);
+}
+.anime-mode .plan-summary::before {
+  content: '套餐'; flex: none; padding: 0 4px; border-radius: 4px;
+  background: var(--a-ink); color: var(--card); font-size: .9em; font-weight: 600; letter-spacing: .5px;
+}
+.anime-mode .plan-name {
+  min-width: 0; padding: 0; border-radius: 0; background: transparent;
+  white-space: normal; overflow-wrap: anywhere; font-weight: 600; font-size: 1.08em;
+}
+.anime-mode .plan-status { font-size: .9em; color: var(--muted); }
+.anime-mode .plan-summary.is-stale { color: var(--secondary); }
+.anime-mode .plan-summary.is-stale::before { background: var(--secondary); }
+
+/* Ordinal badge sits in the hero's top-right corner. */
+.anime-mode .card-index {
+  top: 0; right: 0; gap: 2px; padding: 1px 5px; border-radius: 999px;
+  font: 600 var(--a-caption) ui-monospace, 'SF Mono', monospace; letter-spacing: .5px;
+  color: var(--ordinal); background: var(--a-panel); border: 1px solid var(--a-panel-border);
+}
+.anime-mode .card-index svg { width: .95em; height: .95em; opacity: .7; }
+
+/* ── Data panel ───────────────────────────────────────── */
+.anime-mode .quota-area {
+  gap: clamp(3px, 1.2vw, 6px);
+  padding: clamp(4px, 1.8vw, 8px) clamp(6px, 2.8vw, 10px);
+  border-radius: var(--a-radius);
+  background: var(--a-panel); border: 1px solid var(--a-panel-border);
+}
+.anime-mode .quota-tools { min-height: 0; font-size: var(--a-caption); line-height: 1.4; }
+.anime-mode .source-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 0 6px; border-radius: 999px; font-size: var(--a-caption); line-height: 1.6;
+}
+.anime-mode .source-tag::before { content: ''; width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .75; }
+.anime-mode .quota-time { font-size: var(--a-caption); color: var(--secondary); }
+.anime-mode .quota-pagination { gap: 4px; font: 600 var(--a-caption) ui-monospace, 'SF Mono', monospace; color: var(--secondary); }
+.anime-mode .quota-pagination button {
+  width: calc(var(--a-caption) * 2.1); height: calc(var(--a-caption) * 1.7);
+  border-radius: 999px; background: var(--card);
+}
+.anime-mode .quota-pagination button svg { width: 1.2em; height: 1.2em; }
+
+.anime-mode .quota-list { gap: clamp(3px, 1.2vw, 6px); justify-content: space-evenly; }
+.anime-mode .quota-label {
+  align-items: center; margin-bottom: clamp(2px, .9vw, 5px);
+  font-size: var(--a-body); line-height: 1.2; color: var(--label);
+}
+.anime-mode .quota-label > span { align-items: center; }
+.anime-mode .model-name { font-weight: 500; }
+.anime-mode .quota-label small {
+  padding: 0 4px; border-radius: 4px; line-height: 1.5;
+  font-size: var(--a-caption); color: var(--period); background: var(--a-tint);
+}
+.anime-mode .quota-label strong { font-size: var(--a-number); font-weight: 600; line-height: 1; letter-spacing: -.3px; }
+.anime-mode .remaining-label { font-size: var(--a-caption); margin-right: 4px; font-weight: 400; letter-spacing: 0; }
+.anime-mode .quota-track { height: clamp(3px, 1.25vw, 5px); border-radius: 999px; }
+.anime-mode .quota-fill {
+  opacity: 1; border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--a-ink) 55%, transparent), var(--a-ink));
+}
+.anime-mode .quota-fill.is-low { background: linear-gradient(90deg, color-mix(in srgb, var(--low) 55%, transparent), var(--low)); }
+
+/* Credits (Qwen / WorkBuddy) */
+.anime-mode .credit-item { padding-block: 1px; gap: 6px; }
+.anime-mode .credit-item + .credit-item { border-top: 1px dashed var(--a-panel-border); }
+.anime-mode .credit-label { font-size: var(--a-body); font-weight: 500; }
+.anime-mode .credit-amount { gap: 3px; }
+.anime-mode .credit-amount > span, .anime-mode .credit-amount small { font-size: var(--a-caption); }
+.anime-mode .credit-value { font-size: calc(var(--a-number) * 1.1); font-weight: 600; }
+.anime-mode .credits-empty { display: flex; flex: 1; flex-direction: column; justify-content: center; text-align: center; }
+.anime-mode .credits-empty strong { font-size: var(--a-body); }
+.anime-mode .credits-empty > span { font-size: var(--a-number); margin-top: 2px; }
+.anime-mode .credits-empty p { margin-top: 2px; font-size: var(--a-caption); -webkit-line-clamp: 1; }
+
+/* Balance (DeepSeek) */
+.anime-mode .balance-content { gap: clamp(2px, .9vw, 5px); }
+.anime-mode .balance-caption { font-size: var(--a-caption); }
+.anime-mode .currency-switch { border-radius: 999px; padding: 0 6px; font-size: var(--a-caption); }
+.anime-mode .balance-total { gap: 4px; line-height: 1; }
+.anime-mode .balance-total small { font-size: var(--a-body); }
+.anime-mode .balance-total strong { font-size: calc(var(--a-number) * 1.55); font-weight: 600; line-height: 1; letter-spacing: -.5px; }
+.anime-mode .balance-total > span { font-size: var(--a-caption); }
+.anime-mode .balance-parts { font-size: var(--a-caption); }
+.anime-mode .balance-parts b { font-weight: 600; }
+.anime-mode .balance-empty { text-align: center; }
+.anime-mode .balance-empty strong { font-size: var(--a-body); }
+.anime-mode .balance-empty p { font-size: var(--a-caption); line-height: 1.5; margin-top: 3px; }
+
+/* Claude without a Code quota window */
+.anime-mode .claude-empty {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  padding: 2px 0; text-align: center; font-size: var(--a-caption); line-height: 1.5;
+}
+.anime-mode .claude-empty strong { font-size: var(--a-body); font-weight: 600; }
+.anime-mode .claude-empty p { margin: 3px 0 0; }
+.anime-mode .claude-empty small { display: none; }
+
+/* ── Footer ───────────────────────────────────────────── */
+.anime-mode .task-line {
+  gap: 6px; padding: 0 2px; border-top: 0;
+  font-size: var(--a-caption); line-height: 1.6; color: var(--task);
+}
+.anime-mode .task-line .status-dot { width: 6px; height: 6px; }
+.anime-mode .task-status {
+  flex: none; padding: 0 7px; border-radius: 999px; font-size: 1em; font-weight: 600;
+  color: var(--status); background: color-mix(in srgb, currentColor 13%, transparent);
+}
+.anime-mode .is-running .task-status { color: var(--running); }
+.anime-mode .provider-card[data-attention="true"] .task-status { color: var(--attention-text); }
+
+/* Short windows: trim inner padding so every row keeps its own line. */
+@media (max-height: 1000px) {
+  .anime-mode .provider-card { --a-gap: 5px; --a-pad: 7px; }
+  .anime-mode .quota-area { padding: 3px 7px; gap: 2px; }
+  .anime-mode .quota-list { gap: 2px; }
+  .anime-mode .quota-label { margin-bottom: 2px; }
+  .anime-mode .quota-track { height: 3px; }
+  .anime-mode .plan-summary { padding-block: 1px; }
+}

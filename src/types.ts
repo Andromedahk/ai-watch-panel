@@ -12,7 +12,7 @@ export type PanelState = Preferences & {
   theme: Theme; resolvedTheme: 'light' | 'dark';
   bounds?: { x: number; y: number; width: number; height: number };
 };
-export type Quota = { model: string; period: string; remaining: number | null; reset: string; stale?: boolean; resetKind?: 'expiry' };
+export type Quota = { model: string; period: string; remaining: number | null; reset: string; stale?: boolean; resetKind?: 'expiry'; variants?: string[] };
 export type Wallet = { currency: 'CNY' | 'USD'; total: string; paid: string; bonus: string };
 export type CreditItem = { label: string; remaining: string | null; total?: string | null; unit: string; reset?: string };
 export type LocalProviderStatus = {

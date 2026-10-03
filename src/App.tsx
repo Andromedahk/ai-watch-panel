@@ -142,13 +142,13 @@ function ProviderCard({ provider, index, image, anime = false, onOpen, launchBus
   const isBalance = local?.id === 'deepseek';
   const source = testing ? '测试数据' : !local ? '演示' : local.connection === 'offline' ? '未运行'
     : local.accessRequired ? '待授权' : local.connection === 'auth-required' ? '待登录' : local.source === 'account' ? isBalance ? '账号余额' : '账号额度'
-    : local.source === 'local-api' ? '本地服务' : local.source === 'cache' ? isBalance ? '历史记录' : '本地记录' : '未连接';
+    : local.source === 'local-api' ? '本地服务' : local.source === 'cache' ? isBalance ? '历史记录' : local.id === 'codex' && local.plan?.status === '官方查询缓存' ? '查询缓存' : '本地记录' : '未连接';
   const phase = !local ? provider.running ? '演示运行' : '演示待机'
     : { running: '运行中', idle: '待机', waiting: local.id === 'codex' ? local.waitingReason === 'input' ? '待回答' : local.waitingReason === 'approval' ? '待授权' : '待处理' : '待确认', unknown: '未知', offline: '离线' }[local.activity];
   const time = local?.observedAt ? new Date(local.observedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
   function quotaTitle(quota: Quota) {
     const reset = quota.reset && local ? `${quota.resetKind === 'expiry' ? '到期时间' : '重置时间'} ${new Date(quota.reset).toLocaleString('zh-CN')}` : quota.reset;
-    return `${quota.model} · ${quota.period}${reset ? ` · ${reset}` : ''}${quota.stale ? ` · 已过时，历史剩余 ${quota.remaining ?? '未知'}%` : ''}`;
+    return `${quota.model} · ${quota.period}${reset ? ` · ${reset}` : ''}${quota.variants?.length ? ` · 合并：${quota.variants.join('、')}；剩余额度取较低值` : ''}${quota.stale ? ` · 已过时，历史剩余 ${quota.remaining ?? '未知'}%` : ''}`;
   }
   return <section {...sortProps} className={`provider-card ${provider.running ? 'is-running' : ''} ${dragging ? 'is-dragging' : ''}`} style={{ '--accent': provider.color, ...sortProps?.style } as CSSProperties}
     aria-label={`${provider.name} 面板`} data-provider={provider.id} data-attention={local?.id === 'codex' && local.activity === 'waiting'} tabIndex={0} aria-describedby="card-sort-help" onDragStart={event => event.preventDefault()}>
@@ -169,9 +169,11 @@ function ProviderCard({ provider, index, image, anime = false, onOpen, launchBus
       {isEntitlement ? <EntitlementCard provider={provider} page={currentPage} /> : isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>Code 额度暂不可用</strong><p>{local.plan?.name === 'Free' ? 'Free 账号不包含 Code 权限' : '当前本地记录未提供额度窗口'}</p><small>{local.surfaces?.desktop}<br />{local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={`${testing ? '测试' : local ? '本地' : '演示'}剩余额度`}>
         {quotas.map((quota, row) => {
           const known = quota.remaining !== null && !quota.stale;
-          return <div className={`quota ${known ? '' : 'quota-unknown'}`} key={`${quota.model}:${quota.period}:${row}`} title={quotaTitle(quota)}>
-            <div className="quota-label"><span><span className="model-name">{local?.id === 'antigravity' ? quota.model.replace(/^Claude /, '').replace(/\(High\)/gi, '· 高').replace(/\(Medium\)/gi, '· 中').replace(/\(Low\)/gi, '· 低').replace(/\(Thinking\)/gi, '· 思考') : quota.model}</span>{local?.id !== 'antigravity' && <small>{quota.period}</small>}</span><strong><span className="remaining-label">{quota.stale ? '过时' : known ? '剩余' : '未知'}</span>{known ? quota.remaining : '—'}{known && <em>%</em>}</strong></div>
-            <div className="quota-track" role="progressbar" aria-label={`${quota.model} ${quota.period} 剩余额度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={known ? quota.remaining! : undefined} aria-valuetext={known ? `${quota.remaining}%` : quota.stale ? '记录已过时' : '未知'}>
+          const historical = provider.id === 'codex' && quota.stale && quota.remaining !== null;
+          const visible = known || historical;
+          return <div className={`quota ${known ? '' : 'quota-unknown'} ${historical ? 'quota-historical' : ''}`} key={`${quota.model}:${quota.period}:${row}`} title={quotaTitle(quota)}>
+            <div className="quota-label"><span><span className="model-name">{local?.id === 'antigravity' ? quota.model.replace(/^Claude /, '').replace(/\(High\)/gi, '· 高').replace(/\(Medium\)/gi, '· 中').replace(/\(Low\)/gi, '· 低').replace(/\(Thinking\)/gi, '· 思考') : quota.model}</span>{local?.id !== 'antigravity' && <small>{quota.period}</small>}</span><strong><span className="remaining-label">{historical ? '历史' : quota.stale ? '过时' : known ? '剩余' : '未知'}</span>{visible ? quota.remaining : '—'}{visible && <em>%</em>}</strong></div>
+            <div className="quota-track" role="progressbar" aria-label={`${quota.model} ${quota.period} 剩余额度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={known ? quota.remaining! : undefined} aria-valuetext={historical ? `历史剩余 ${quota.remaining}%，当前额度待更新` : known ? `${quota.remaining}%` : quota.stale ? '记录已过时' : '未知'}>
               {known && <div className={`quota-fill ${quota.remaining! < 30 ? 'is-low' : ''}`} style={{ width: `${quota.remaining}%` }} />}
             </div>
           </div>;
@@ -526,7 +528,7 @@ export default function App() {
         <div className="settings-section"><h3>启动应用</h3><p>点击卡片或收起栏图标打开应用；未找到时可手动选择安装位置。</p>{providers.map(provider => <div className="app-option" key={provider.id}>
           <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={`选择 ${provider.name} 启动应用`}>选择应用</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">本地状态 · v0.12.1</span><p>Codex 读取本地额度与任务记录；Antigravity 优先读取本地服务，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
+        <div className="settings-note"><span className="note-title">本地状态 · v0.14.1</span><p>Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。</p><p>DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。</p><p>Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。</p>
           {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{displayStatus[id]?.detail}<br />{displayStatus[id]?.activityDetail && <>{displayStatus[id]?.activityDetail}<br /></>}{displayStatus[id]?.observedAt ? `记录时间：${new Date(displayStatus[id]?.observedAt!).toLocaleString('zh-CN')}` : '尚无可用记录'}</p>)}</>}
           <p>{state.desktop ? `桌面版 · 显示缩放 ${state.scaleFactor}×` : '浏览器预览 · 窗口操作请使用桌面版'}</p></div>
       </div>
