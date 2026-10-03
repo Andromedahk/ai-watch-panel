@@ -82,7 +82,7 @@
 }
 /* Plan chip: a small "套餐" label followed by the tier name. */
 .anime-mode .plan-summary {
-  order: 2; display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 5px;
+  order: 2; display: flex; flex-wrap: nowrap; align-items: center; gap: 5px;
   max-width: 100%; margin-top: clamp(2px, .9vw, 5px);
   padding: 2px 6px 2px 2px; border-radius: 6px;
   border: 1px solid var(--a-tint-border); background: var(--a-tint);
