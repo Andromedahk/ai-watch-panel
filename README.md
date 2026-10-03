@@ -297,6 +297,10 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 
 单元检查覆盖窗口策略、额度换算、缺失和过时数据、陈旧任务、只读 SQLite/WAL、输出字段筛选、回环接口失败、响应大小与超时，以及 Harness 多设备发现、登录轮换、精确金额、HTTPS 错误和限流。新增 Claude 最新空额度清理、桌面/终端登记与 PID 验证，以及 Harness 多帧解码、任务边界、等待确认、失去锁与陈旧状态检查。桌面检查使用独立临时配置，默认加载合成记录，验证真实窗口比例、内容溢出与元素重叠，输出文档截图；本机模式的截图不会提交。macOS Apple Silicon 上已通过构建、桌面启动与本地读取；验收记录见 [QA](docs/QA.md)。
 
+## 参与开发
+
+没有上游写入权限时，通过 Fork 分支提交 PR。分支准备、验证命令和提交要求见 [贡献说明](CONTRIBUTING.md)；Kimi、ZCode 的合成测试可在没有付费账号的环境运行，真实客户端验证结果需单独记录。
+
 ## 实现与后续接入
 
 `electron/local-status.cjs` 实现只读本地适配器，`electron/status-normalizers.cjs` 筛选与换算公开状态字段，`electron/codex-attention.cjs` 只订阅 Codex 本地等待请求，通过有限的 preload 接口传给沙盒界面。千问权限开关只接受严格布尔值，并在主进程处理专属钥匙串访问；登录材料不进入界面。`electron/deepseek-status.cjs` 负责 Harness 登录发现及官方账户余额读取。`electron/claude-status.cjs` 负责 Claude 桌面用量与两种 Code 入口，`electron/deepseek-activity.cjs` 与 `electron/session-files.cjs` 负责 Harness 活动和有界会话读取。`src/data.ts` 仅向浏览器预览提供示例；桌面版八个卡片均使用实际适配器；没有可用数据时不填入示例值。`electron/zcode-status.cjs` 负责本地遥测，`electron/kimi-status.cjs` 负责 Kimi 额度与本机服务活动。`electron/qwen-status.cjs` 与 `electron/workbuddy-status.cjs` 负责新增两种客户端的只读套餐、积分和活动适配。
@@ -304,6 +308,10 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 额度窗口字段参考 OpenAI 官方 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。此版本读取既有本地记录，不另外启动 App Server；Antigravity 桌面接口按当前安装版本验证，其 CLI 的 [状态栏文档](https://antigravity.google/docs/cli/statusline) 作为后续适配参考。
 
 ## 更新记录
+
+### 开发中
+
+- 补充 Fork 与 PR 贡献流程、Kimi / ZCode 单独验证命令，以及合成测试与真实客户端验收的记录要求。
 
 ### 0.12.1 · 2026-10-03
 
