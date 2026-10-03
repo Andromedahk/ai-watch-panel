@@ -4,9 +4,13 @@
 
 ## Codex
 
-读取最新会话额度快照中的 `plan_type` / `planType`，兼容原始记录与 `rateLimits` / `rateLimitsByLimitId.codex` 结构。仅使用主 Codex 桶，代码审查桶不能替代账户主档位。支持已知 Free、Go、Plus、Pro、Team、Business、Enterprise、Edu 产品名。
+默认使用已经安装的官方 Codex 客户端，短时启动 stdio App Server，仅调用 `initialize`、`account/read`（不主动续期）和 `account/rateLimits/read`，不创建线程或回合。查询使用本设备已有 ChatGPT 登录；API Key 账号不提供订阅额度。身份字段只在主进程内用于比较查询前后的账号，不传到界面、日志或持久化缓存。查询结束、失败、十二秒超时或应用退出时结束子进程；不随面板打包额外客户端。
 
-套餐与额度来自同一条记录；最新记录为空或不包含套餐时清空旧名称。超过三十分钟或异常未来时间标为历史。它仍是本地快照，无法单靠该记录确认当前登录账号，悬停标明“本地快照”。实际本机记录读取已验证，不在文档或截图保存真实账户套餐。
+优先使用主额度桶 `rateLimitsByLimitId.codex.planType`（兼容旧 `rateLimits` 结构），缺失时使用同次确认的账号 `planType`。代码审查桶不能替代账户主档位。支持已知 Free、Go、Plus、Pro、Team、Business、Enterprise、Edu 产品名；不认识的字段保持未知。
+
+默认每分钟查询，手动最短间隔十五秒，失败采用有上限的退避。网络失败保留最近结果并标为历史；尚无查询缓存且客户端不可用时读取最近本地会话快照中的 `plan_type` / `planType`。本地快照不能单独确认当前登录账号。下一次查询确认退出或账号变化后清除旧值，并禁止旧本地记录填回；查询前后账号不同则丢弃本次数据。当前账号完全未返回窗口时不会沿用上个账号的额度。
+
+官方接口实际提供哪些窗口就显示哪些，不从周额度推测五小时额度。过时数字在 Codex 卡片保持可见并标“历史”，不作为当前进度显示；重置后不会推断额度恢复。macOS 本机查询和本地后备均已验证，Windows / Linux 的 PATH 发现已准备但登录和窗口行为未做实机验收。
 
 官方结构依据：[Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。
 
@@ -15,6 +19,8 @@
 复用已有、已验证端口归属的本机 `GetUserStatus` 只读接口。优先使用 `userStatus.userTier.name`，旧结构读取 `planStatus.planInfo.planName`；明确排除可能包含账户身份的 `userStatus.name`。新的用户档位字段存在但不认识时保持未知，不回退到可能过时的通用名称。
 
 成功返回的空套餐或未知套餐清除旧名称，服务失败或离线时旧数据标历史，服务进程或端口切换清除旧缓存。套餐读取不依赖模型额度列表是否存在。本机实际接口读取已验证；该接口为客户端内部实现，版本升级仍需适配。
+
+额度列表将同一模型的 High / Medium / Low / Thinking 后缀合并，版本号保留。返回值不同取较低值，有未知值则整体未知；任一过时则整体过时，重置时间不同则隐藏单一时间。悬停可查看合并前的名称，分页按合并后的模型数计算。
 
 官方产品档位依据：[Antigravity Plans](https://antigravity.google/docs/plans/)。
 

@@ -116,7 +116,7 @@ test('local cache adapter handles live WAL data read-only and rejects rollout pa
     await fs.writeFile(outside, event(99));
     stateDb.prepare('INSERT INTO threads VALUES (?,?)').run(inside, 1);
     stateDb.prepare('INSERT INTO threads VALUES (?,?)').run(outside, 2);
-    const reader = new LocalStatusReader({ home, codexHome });
+    const reader = new LocalStatusReader({ codexQuotaReader: { poll: async () => ({ useLocal: true, detail: '合成本地记录' }) }, home, codexHome });
     const result = await reader.codex([{ command: '/app/codex' }], true);
     assert.equal(result.activity, 'running');
     assert.equal(result.quotas[1].remaining, 75);
@@ -130,7 +130,7 @@ test('local cache adapter handles live WAL data read-only and rejects rollout pa
 test('missing local files stay missing, without creating state or starting providers', async () => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-missing-'));
   try {
-    const reader = new LocalStatusReader({ home, codexHome: path.join(home, '.codex') });
+    const reader = new LocalStatusReader({ codexQuotaReader: { poll: async () => ({ useLocal: true, detail: '合成本地记录' }) }, home, codexHome: path.join(home, '.codex') });
     assert.equal((await reader.codex([], true)).activity, 'offline');
     assert.equal((await reader.antigravity([], true)).activity, 'offline');
     assert.deepEqual(await fs.readdir(home), []);
@@ -191,7 +191,7 @@ test('Codex latest snapshot replaces plan on account changes and clears absent o
     db.prepare('INSERT INTO threads VALUES (?,?)').run(file, 1);
     const base = Date.now() - 10000;
     let lines = '';
-    const reader = new LocalStatusReader({ home, codexHome });
+    const reader = new LocalStatusReader({ codexQuotaReader: { poll: async () => ({ useLocal: true, detail: '合成本地记录' }) }, home, codexHome });
     const sample = async (rates, index) => {
       lines += JSON.stringify({ timestamp: new Date(base + index * 1000).toISOString(), type: 'event_msg',
         payload: { type: 'token_count', rate_limits: rates } }) + '\n';
@@ -213,7 +213,7 @@ test('Codex latest snapshot replaces plan on account changes and clears absent o
 function antigravityPlanFixture(home) {
   let payload = { userStatus: { userTier: { name: 'Google AI Pro' } } };
   let fail = false;
-  const reader = new LocalStatusReader({ home,
+  const reader = new LocalStatusReader({ codexQuotaReader: { poll: async () => ({ useLocal: true, detail: '合成本地记录' }) }, home,
     runCommand: async (command) => ({ stdout: command === 'ps' ? 'server --csrf_token fixture-token' : 'n127.0.0.1:43210\n' }),
     requestLocal: async (_port, _token, method) => {
       if (method === 'GetAllCascadeTrajectories') return { trajectorySummaries: {} };

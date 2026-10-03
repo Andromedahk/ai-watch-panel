@@ -100,6 +100,7 @@ h1 { font-size: clamp(10px, 4.8vw, 14px); font-weight: 650; letter-spacing: 1.9p
 .quota-fill { height: 100%; background: var(--accent-ink, var(--accent)); opacity: .83; border-radius: inherit; }
 .quota-fill.is-low { background: var(--low); }
 .quota-unknown .quota-track { background: repeating-linear-gradient(110deg, var(--track), var(--track) 5px, var(--stripe) 5px, var(--stripe) 10px); }
+.quota-historical .quota-label strong { color: var(--secondary); }
 .quota-unknown strong { color: var(--secondary); }
 .task-line { display: flex; align-items: center; gap: 6px; font-size: clamp(7px, 3.55vw, 11px); color: var(--task); padding-top: clamp(7px, 1vh, 12px); border-top: 1px solid var(--divider); white-space: nowrap; }
 .task-line > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

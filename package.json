@@ -1,6 +1,6 @@
 {
   "name": "ai-watch-panel",
-  "version": "0.12.1",
+  "version": "0.13.0",
   "description": "A cross-platform vertical AI activity and quota panel",
   "private": true,
   "type": "module",
@@ -23,7 +23,8 @@
     "test:modules": "node scripts/verify-modules.mjs",
     "test:credits": "node scripts/verify-credits.mjs",
     "test:plans": "node scripts/verify-plans.mjs",
-    "test:anime": "node scripts/verify-anime.mjs"
+    "test:anime": "node scripts/verify-anime.mjs",
+    "test:quotas": "node scripts/verify-codex-quota.mjs"
   },
   "dependencies": {
     "big.js": "^7.0.1",

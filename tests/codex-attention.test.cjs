@@ -77,7 +77,7 @@ test('Codex red attention takes priority while unrelated running jobs remain cou
     db.exec('CREATE TABLE thread_turns(thread_id TEXT, turn_id TEXT, status TEXT, started_at INTEGER, completed_at INTEGER); CREATE TABLE thread_items(thread_id TEXT, turn_id TEXT, created_at_ms INTEGER)');
     const time = Math.floor(Date.now() / 1000);
     for (const id of ['waiting', 'working']) db.prepare('INSERT INTO thread_turns VALUES (?,?,?,?,?)').run(id, 'turn', 'inProgress', time, null);
-    const reader = new LocalStatusReader({ home, codexHome });
+    const reader = new LocalStatusReader({ codexQuotaReader: { poll: async () => ({ useLocal: true, detail: '合成本地记录' }) }, home, codexHome });
     reader.codexAttention = { poll: async () => ({ inputThreads: new Set(['waiting']), approvalThreads: new Set(), waitingThreads: new Set(['waiting']), connected: true, observedThreads: 2 }) };
     const status = await reader.codex([{ command: '/app/codex' }], true);
     assert.equal(status.activity, 'waiting'); assert.equal(status.activeTasks, 1); assert.equal(status.waitingTasks, 1); assert.equal(status.waitingReason, 'input');

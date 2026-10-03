@@ -2,11 +2,13 @@
 
 macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vite**，预留 Windows、Linux 的构建入口。
 
-> v0.12.1 优化二次元卡片信息层级：名称优先、来源在下、套餐独立分行，空额度提示居中。支持点击图标打开对应桌面应用，新增二次元模式：角色图片约占卡片四分之一，普通 LOGO 与二次元图片独立保存。内置七张已批准同步的角色图，WorkBuddy 暂用占位图；保留套餐、额度、呼吸灯、排序与本地状态接入。
+> v0.13.0 新增 Codex 官方额度自动查询与本地记录后备，保留可辨认的历史数值；Antigravity 同一模型的思考等级合并显示。保留名称 / 来源 / 套餐层级和居中空额度提示。支持点击图标打开对应桌面应用，新增二次元模式：角色图片约占卡片四分之一，普通 LOGO 与二次元图片独立保存。内置七张已批准同步的角色图，WorkBuddy 暂用占位图；保留套餐、额度、呼吸灯、排序与本地状态接入。
 
 <img src="docs/screenshots/panel.png" width="220" alt="AI Watch 固定顶部与四卡首屏预览" />
 
-文档截图使用合成测试数据，顶部标有“测试”，不包含真实账户数据。
+文档截图使用合成测试数据，顶部或卡片标有“测试”，不包含真实账户数据。
+
+新增额度预览：[官方窗口与合并模型](docs/screenshots/quotas-online-merged.png)、[Codex 历史数字](docs/screenshots/codex-quota-history.png)。
 
 ## 界面
 
@@ -18,7 +20,7 @@ macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vi
 | --- | --- |
 | 控制栏 | 锁定、收起、刷新、配置，本地运行任务数与检查时间 |
 | Claude Code | 助手图片、桌面额度快照、桌面/终端会话状态；无额度时明确提示 |
-| Codex | 助手图片、本地额度快照、近期任务活动指示灯 |
+| Codex | 助手图片、官方账号额度 / 本地后备记录、近期任务活动指示灯 |
 | Antigravity | 助手图片、本地模型额度分页、当前任务指示灯 |
 | DeepSeek Harness | 助手图片、账户可用余额、现金与赠送金额、任务活动及等待确认状态 |
 | ZCode | 助手图片、经新活动证据确认的本地任务状态；套餐额度暂不可读 |
@@ -171,7 +173,7 @@ npm start
 | 工具 | 额度来源 | 工作状态来源 | 边界 |
 | --- | --- | --- | --- |
 | Claude Code | 桌面应用用量历史，已用百分比换算为剩余比例 | 本地 Code 会话登记，区分桌面和终端入口，校验对应进程与记录时效 | 无额度记录不代表已用完；Free 无 Code 权限，普通聊天额度不可读；仅终端安装不提供本版额度快照 |
-| Codex | 最近会话中的额度快照，按实际返回的时间窗口计算 `100 - used_percent` | 本地桌面任务记录，结合进程存在与最近活动时间 | 是本地记录，不能保证实时账户额度；CLI 独立任务可能没有桌面任务记录 |
+| Codex | 自动调用已安装 Codex 的官方账号额度接口，失败时保留查询缓存或读取最近会话快照 | 本地桌面任务记录，结合进程存在与最近活动时间 | 使用本设备已有 ChatGPT 登录；API Key 登录没有订阅额度，CLI 独立任务可能没有桌面任务记录 |
 | Antigravity | 已运行语言服务的本机 HTTP 接口，读取各模型 `remainingFraction` 与重置时间 | 本地服务返回的任务状态 | 属于当前安装版本的内部接口，升级后可能需要适配；服务不可用时只读任务缓存 |
 | DeepSeek Harness | 使用本设备已有的 Harness 账号登录态，查询官方账户服务 | v4 会话事件、进程与会话锁文件的持有情况 | 显示金额而非百分比；任务无充分当前证据时显示未知 |
 | ZCode | 暂不可读 | 只读会话数据库内的回合遥测，结合存活进程与监看期间的新活动 | 首次建立基线；历史未结束记录不判为运行；等待状态暂不可区分 |
@@ -179,14 +181,16 @@ npm start
 | Qwen（千问） | 本机桌面登录配合官方会员只读接口 | 本地智能体事件的近期实际增长 | 需在设置允许千问专属钥匙串读取；普通聊天、云端及等待状态暂不可确认 |
 | WorkBuddy | 官方客户端 WBIPC 通道查询当前套餐与资源摘要 | 当前账户本地任务状态和近期用量变化 | 套餐 / 积分已实测；活动首次采样和陈旧记录保持未知 |
 
-- Codex 缺少五小时窗口时显示“未知”，不会填入演示值或推断额度充足。十分钟无活动的未结束任务记录不显示为运行中。
-- Antigravity 模型按名称稳定排序，普通模式每页最多三项、二次元模式每页最多两项，使用左右箭头查看全部模型；名称中的高、中、低与思考模式会紧凑显示，悬停可查看完整名称和重置时间。服务未返回额度周期时不推断五小时或一周。
-- 额度保留一位小数，例如 99.7% 不会被显示为 100%。记录超过三十分钟或已到重置时间时显示“过时”，保留历史值供悬停查看，不推断重置后的新余额。
-- Codex 与 Antigravity 进程未运行时显示离线，文件缺失、接口失败或不认识的任务状态显示未知，并自动重试。Antigravity 缓存里的历史运行标记不会点亮当前运行灯。
+- Codex 默认每分钟通过官方 `account/rateLimits/read` 查询额度与套餐，复用本设备 Codex 的 ChatGPT 登录。无需面板 Key，也无需打开一个任务；仅短时启动已安装客户端的 App Server 元数据通道，完成或超时即结束。手动刷新最短联网间隔 15 秒，失败时自动退避，手动刷新不绕过退避。
+- 官方查询只显示实际返回的额度窗口。只返回周额度时显示一周这一项；不补造五小时额度。没有可用窗口时显示未知，十分钟无活动的未结束任务不显示为运行中。
+- 网络失败保留最近官方查询值并明确标为“历史”，重置后也不推断新余额；尚无查询结果且无法使用官方客户端时，可读取本地会话记录。下一次查询确认退出、API Key 登录或切换账号时清除旧值，并阻止无账号关联的旧会话记录覆盖当前账号；查询中的账号变化也会丢弃结果。当前版本不将查询缓存写盘。
+- Antigravity 将同一模型名称末尾的 High / Medium / Low / Thinking 合并为一行，模型版本仍分别显示。多等级数值不一致时取较低剩余值；任一等级未知则显示未知，任一过时则整体标过时。重置时间不同则不显示单一重置时间；悬停可查看合并的原始名称。模型按名称稳定排序，普通模式每页最多三项、二次元模式每页最多两项，使用左右箭头查看全部模型。服务未返回额度周期时不推断五小时或一周。
+- 额度保留一位小数，例如 99.7% 不会被显示为 100%。记录超过三十分钟或已到重置时间时标为历史 / 过时。Codex 直接保留历史数字，灰色显示并取消当前额度进度条；其他额度保留历史值供悬停查看，不推断重置后的新余额。
+- Codex 与 Antigravity 进程未运行时任务显示离线；Codex 账号额度仍可独立查询。文件缺失、接口失败或不认识的任务状态显示未知，并自动重试。Antigravity 缓存里的历史运行标记不会点亮当前运行灯。
 - Antigravity 接入只连接本机回环地址上的服务，并校验端口属于对应进程；运行时防伪令牌只在内存中使用。不会保存认证材料、发送消息或启动 AI 任务。服务本身可能正常向服务商刷新状态。
 - 传到界面的字段限于白名单套餐名称、模型名称、额度、币种与余额、重置时间、采样时间和任务状态；账户身份、会话内容、项目路径与运行时令牌不进入界面或仓库。
 
-当前在 macOS 上验证了 Codex 桌面记录格式和 Antigravity 2.19.1 的本地接口。不同客户端版本、缺失桌面数据库、自定义数据目录和远程任务可能导致部分数据不可用。Codex 支持继承已有的 `CODEX_HOME` 环境设置；面板不会修改工具配置。Windows 与 Linux 的 Codex、Antigravity 状态发现仍需后续平台适配和验收。
+当前在 macOS 上验证了 Codex 官方账号额度查询、桌面记录格式和 Antigravity 2.19.1 的本地接口。不同客户端版本、缺失桌面数据库、自定义数据目录和远程任务可能导致部分数据不可用。Codex 支持继承已有的 `CODEX_HOME` 环境设置；面板不会修改工具配置。官方额度查询支持系统 PATH 中的 Codex CLI 发现，macOS 另按应用身份发现内置 CLI；Windows 与 Linux 的实际登录、进程发现、接口与窗口行为仍待实机适配和验收。
 
 ### Codex 等待提醒
 
@@ -246,7 +250,7 @@ Claude、Codex、Antigravity、Kimi Code、ZCode、千问和 WorkBuddy 的套餐
 | 工具 | 套餐读取范围 |
 | --- | --- |
 | Claude | 已有文件型 Code 登录记录中的明确套餐字段；仅有桌面端加密登录时显示未知，本轮不新增钥匙串读取 |
-| Codex | 最新本地额度快照中的 `plan_type` / `planType`；记录可能滞后于实际账户变化，过时后标历史，最新记录缺失则清空旧档位 |
+| Codex | 官方主额度桶中的 `planType`，缺失时使用同次确认的账号套餐；失败时使用明确标记的查询缓存或本地快照，下一次确认退出 / 换号后清空旧值 |
 | Antigravity | 已验证本机服务返回的用户档位；当前已实测档位读取，服务失败的旧数据标历史 |
 | Kimi Code | 复用本设备已有登录，通过官方账户信息接口读取白名单档位；账户切换清除旧数据 |
 | ZCode | 本轮提供显示位置；尚无可确认的当前账户套餐来源，保持未知，不从模型或活动猜测 |
@@ -290,6 +294,7 @@ npm run test:modules  # 0～8 模块选择、滚动、底边提示、跨屏排�
 npm run test:credits  # 套餐、积分分页、历史与未知值、登录失败显示
 npm run test:plans  # 七模块套餐、缺失与历史标记、积分横排及不同尺寸主题检查
 npm run test:anime  # 图标启动、双套图片、二次元布局、持久化及模拟启动隔离
+npm run test:quotas  # Codex 官方窗口、历史值、登录清理与合并模型分页
 AI_WATCH_TEST_STATUS=glow-running npm run test:desktop
 AI_WATCH_TEST_STATUS=glow-attention npm run test:desktop
 AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存在忽略目录
@@ -299,11 +304,18 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 
 ## 实现与后续接入
 
-`electron/local-status.cjs` 实现只读本地适配器，`electron/status-normalizers.cjs` 筛选与换算公开状态字段，`electron/codex-attention.cjs` 只订阅 Codex 本地等待请求，通过有限的 preload 接口传给沙盒界面。千问权限开关只接受严格布尔值，并在主进程处理专属钥匙串访问；登录材料不进入界面。`electron/deepseek-status.cjs` 负责 Harness 登录发现及官方账户余额读取。`electron/claude-status.cjs` 负责 Claude 桌面用量与两种 Code 入口，`electron/deepseek-activity.cjs` 与 `electron/session-files.cjs` 负责 Harness 活动和有界会话读取。`src/data.ts` 仅向浏览器预览提供示例；桌面版八个卡片均使用实际适配器；没有可用数据时不填入示例值。`electron/zcode-status.cjs` 负责本地遥测，`electron/kimi-status.cjs` 负责 Kimi 额度与本机服务活动。`electron/qwen-status.cjs` 与 `electron/workbuddy-status.cjs` 负责新增两种客户端的只读套餐、积分和活动适配。
+`electron/codex-quota.cjs` 管理官方只读额度查询、已安装客户端发现、账号切换与退避；`electron/local-status.cjs` 实现只读本地适配器，`electron/status-normalizers.cjs` 筛选与换算公开状态字段，`electron/codex-attention.cjs` 只订阅 Codex 本地等待请求，通过有限的 preload 接口传给沙盒界面。千问权限开关只接受严格布尔值，并在主进程处理专属钥匙串访问；登录材料不进入界面。`electron/deepseek-status.cjs` 负责 Harness 登录发现及官方账户余额读取。`electron/claude-status.cjs` 负责 Claude 桌面用量与两种 Code 入口，`electron/deepseek-activity.cjs` 与 `electron/session-files.cjs` 负责 Harness 活动和有界会话读取。`src/data.ts` 仅向浏览器预览提供示例；桌面版八个卡片均使用实际适配器；没有可用数据时不填入示例值。`electron/zcode-status.cjs` 负责本地遥测，`electron/kimi-status.cjs` 负责 Kimi 额度与本机服务活动。`electron/qwen-status.cjs` 与 `electron/workbuddy-status.cjs` 负责新增两种客户端的只读套餐、积分和活动适配。
 
-额度窗口字段参考 OpenAI 官方 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。此版本读取既有本地记录，不另外启动 App Server；Antigravity 桌面接口按当前安装版本验证，其 CLI 的 [状态栏文档](https://antigravity.google/docs/cli/statusline) 作为后续适配参考。
+额度窗口字段参考 OpenAI 官方 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。此版本短时启动本设备已经安装的官方 App Server，限定为初始化、账号读取和额度查询，完成后结束进程；本地会话记录作为后备。不会发起推理、批准操作、申请额度重置或发送消息；Antigravity 桌面接口按当前安装版本验证，其 CLI 的 [状态栏文档](https://antigravity.google/docs/cli/statusline) 作为后续适配参考。
 
 ## 更新记录
+
+### 0.13.0 · 2026-10-03
+
+- Codex 复用本机登录，每分钟查询官方套餐和额度；支持只返回周窗口、手动刷新最短间隔、请求去重和失败退避。
+- 查询失败保留灰色历史数字和采样时间；退出 / 换号确认清理旧值，本地记录继续作为后备，任务及等待提醒独立。
+- Antigravity 同模型思考等级合并、保守处理不一致和未知值、保留原名称悬停说明及分页。
+- 新增隔离的额度检查和合成截图；更新接入说明、验收记录及 macOS 应用包。
 
 ### 0.12.1 · 2026-10-03
 
