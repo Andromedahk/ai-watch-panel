@@ -62,6 +62,25 @@ try {
   await expect(page.locator('.task-details')).toHaveCount(8);
   await expect(page.locator('.task-title').first()).toContainText('sample task');
   await expect(page.locator('.toast')).toHaveCount(0);
+  // The compact fullscreen strip still exposes every individual allowance/pool.
+  const snapshot = await page.evaluate(() => window.panel.getStatus());
+  for (const id of ['antigravity','qwen','workbuddy']) {
+    const card = page.locator(`[data-provider="${id}"]`), credit = id !== 'antigravity';
+    const items = credit ? snapshot[id].credits.items : snapshot[id].quotas;
+    for (let index=0;index<items.length;index++) {
+      await expect(card.locator(credit ? '.credit-item' : '.quota-list > .quota')).toHaveCount(1);
+      if (credit) await expect(card.locator('.credit-value bdi')).toHaveText(items[index].remaining);
+      else await expect(card.locator('.quota-label strong bdi')).toHaveText(`${items[index].remaining}%`);
+      if(index+1<items.length)await card.locator('.quota-pagination button').last().click();
+    }
+    for(let index=items.length-1;index>0;index--)await card.locator('.quota-pagination button').first().click();
+  }
+  const currency = page.locator('[data-provider="deepseek"] .currency-switch');
+  if(await currency.count()) {
+    const before = await page.locator('.balance-total').textContent();
+    await currency.click(); assert.notEqual(await page.locator('.balance-total').textContent(), before);
+    await currency.click(); assert.equal(await page.locator('.balance-total').textContent(), before);
+  }
   for (const { id, dir } of shared.languages) {
     await page.evaluate(id => window.panel.setLanguage(id), id);
     for (const anime of [false, true]) for (const theme of ['light', 'dark']) {
@@ -74,10 +93,13 @@ try {
         const [heading, quota, tasks, footer] = boxes;
         return { id: card.dataset.provider,
           inside: boxes.every(b => b.left >= r.left - 1 && b.right <= r.right + 1 && b.top >= r.top - 1 && b.bottom <= r.bottom + 1),
-          separate: heading.bottom <= quota.top + 1 && heading.bottom <= tasks.top + 1 && Math.max(quota.bottom, tasks.bottom) <= footer.top + 1,
-          mirrored: document.documentElement.dir === 'rtl' ? tasks.right <= quota.left + 1 : quota.right <= tasks.left + 1 };
+          separate: heading.bottom <= quota.top + 1 && quota.bottom <= tasks.top + 1 && tasks.bottom <= footer.top + 1,
+          compact: quota.height <= 38 && Math.abs(tasks.left-quota.left)<1 && Math.abs(tasks.right-quota.right)<1,
+          stripFit: [...card.querySelectorAll('.quota-area .source-tag,.quota-area .quota-pagination,.quota-area .quota,.quota-area .credit-item,.quota-area .balance-total,.quota-area .balance-empty,.quota-area .credits-empty,.quota-area .claude-empty')].every(el=>{
+            const b=el.getBoundingClientRect();return !b.width||!b.height||(b.left>=quota.left-1&&b.right<=quota.right+1&&b.top>=quota.top-1&&b.bottom<=quota.bottom+1);
+          }) };
       }));
-      for (const card of layout) assert.ok(card.inside && card.separate && card.mirrored, `${id}/${anime}/${theme}: ${JSON.stringify(card)}`);
+      for (const card of layout) assert.ok(card.inside && card.separate && card.compact && card.stripFit, `${id}/${anime}/${theme}: ${JSON.stringify(card)}`);
       if (anime && theme === 'dark' && ['zh-CN', 'ar'].includes(id)) await page.screenshot({ path: `.local/qa/layouts/fullscreen-${id}.png`, animations: 'disabled', scale: 'css' });
     }
   }
@@ -114,5 +136,5 @@ try {
   await fullRestart.evaluate(()=>window.panel.setCollapsed(false)); await fullRestart.evaluate(()=>window.panel.setLayout('single'));
   await expect.poll(()=>fullRestart.evaluate(()=>window.panel.getStatus()).then(s=>Object.values(s).filter(p=>p?.taskDetails).length)).toBe(0);
   assert.deepEqual(errors,[]);
-  console.log('Layout checks passed: native fullscreen entry/exit, exact 2x geometry, moved-position restore, two-dimensional sorting, collapse, tray, persistence, invalid input, test restoration and 136 double/fullscreen locale/anime/theme layouts and fullscreen restart.');
+  console.log('Layout checks passed: native fullscreen entry/exit, exact 2x geometry, moved-position restore, two-dimensional sorting, compact 36px quota strips with full-width task areas, all allowance/credit pages and balance currencies, collapse, tray, persistence, invalid input, test restoration and 136 double/fullscreen locale/anime/theme layouts and fullscreen restart.');
 } finally { if(app) await app.close().catch(()=>{}); await rm(profile,{recursive:true,force:true}); }

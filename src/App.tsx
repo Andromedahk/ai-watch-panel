@@ -119,14 +119,14 @@ function PlanBadge({ provider, compact = false }: { provider: Provider; compact?
     <span className="plan-kind">{t("套餐")}</span><bdi className="plan-name">{displayLabel}</bdi>{state && <span className="plan-status">{state}</span>}
   </div>;
 }
-function EntitlementCard({ provider, page }: { provider: Provider; page: number }) {
+function EntitlementCard({ provider, page, pageSize = 2 }: { provider: Provider; page: number; pageSize?: number }) {
   const { language, t, date, number, percent, label: translatedLabel } = useI18n();
   const local = provider.local;
   const credits = local?.credits;
   const items = local ? credits?.items || [] : [{ label: t("示例积分"), remaining: '1234.5', unit: t("积分"), total: '2000' }];
   return <div className="entitlement-content">
     <div className="credits-list" aria-label={t("{p0} 剩余积分", { p0: provider.name })}>
-      {items.length ? items.slice(page * 2, page * 2 + 2).map((item, index) => <div className={`credit-item ${credits?.stale ? 'is-stale' : ''}`} key={`${item.label}:${index}`}
+      {items.length ? items.slice(page * pageSize, page * pageSize + pageSize).map((item, index) => <div className={`credit-item ${credits?.stale ? 'is-stale' : ''}`} key={`${item.label}:${index}`}
         title={[item.label, item.remaining === null ? t("剩余未知") : t("剩余 {p0} {p1}", { p0: item.remaining, p1: item.unit }), item.total != null ? t("总量 {p0} {p1}", { p0: item.total, p1: item.unit }) : '', item.reset ? t("重置 / 到期时间 {p0}", { p0: date(item.reset) }) : '', credits?.stale ? t("历史快照，当前值待更新") : ''].filter(Boolean).join(' · ')}>
         <div className="credit-label">{item.label}</div>
         <div className="credit-amount"><span>{credits?.stale ? t("历史") : item.remaining === null ? t("未知") : t("剩余")}</span><strong className="credit-value"><bdi dir="ltr">{item.remaining === null ? '—' : number(creditNumber(item.remaining), { maximumFractionDigits: 2, useGrouping: language !== 'zh-CN' })}</bdi></strong><small>{item.unit}</small></div>
@@ -163,7 +163,7 @@ function ProviderCard({ provider, index, image, anime = false, onOpen, launchBus
   const local = provider.local;
   const isEntitlement = provider.id === 'qwen' || provider.id === 'workbuddy';
   const itemCount = isEntitlement ? local?.credits?.items.length || 0 : provider.quotas.length;
-  const pageSize = isEntitlement || anime ? 2 : 3;
+  const pageSize = fullscreen ? 1 : isEntitlement || anime ? 2 : 3;
   const pages = Math.max(1, Math.ceil(itemCount / pageSize));
   const currentPage = Math.min(page, pages - 1);
   useEffect(() => setPage((old) => Math.min(old, pages - 1)), [pages]);
@@ -196,7 +196,7 @@ function ProviderCard({ provider, index, image, anime = false, onOpen, launchBus
           <button aria-label={t("{p0} 下一页额度", { p0: provider.name })} disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight size={11} /></button>
         </div> : <span className="quota-time" title={local?.observedAt ? t("记录于 {p0}", { p0: date(local.observedAt) }) : ''}>{local ? local.id === 'claude' && !local.quotas.length ? t("未提供 Code 额度") : time ? t("记录 {p0}", { p0: time }) : isBalance ? t("自动识别登录态") : t("额度未知") : t("示例额度")}</span>}
       </div>
-      {isEntitlement ? <EntitlementCard provider={provider} page={currentPage} /> : isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>{t("Code 额度暂不可用")}</strong><p>{local.plan?.name === 'Free' ? t("Free 账号不包含 Code 权限") : t("当前本地记录未提供额度窗口")}</p><small>{local.surfaces?.desktop}<br />{local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={t("{p0}剩余额度", { p0: testing ? '测试' : local ? '本地' : '演示' })}>
+      {isEntitlement ? <EntitlementCard provider={provider} page={currentPage} pageSize={pageSize} /> : isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>{t("Code 额度暂不可用")}</strong><p>{local.plan?.name === 'Free' ? t("Free 账号不包含 Code 权限") : t("当前本地记录未提供额度窗口")}</p><small>{local.surfaces?.desktop}<br />{local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={t("{p0}剩余额度", { p0: testing ? '测试' : local ? '本地' : '演示' })}>
         {quotas.map((quota, row) => {
           const known = quota.remaining !== null && !quota.stale;
           const historical = provider.id === 'codex' && quota.stale && quota.remaining !== null;
@@ -613,7 +613,7 @@ export default function App() {
         <div className="settings-section"><h3>{t("启动应用")}</h3><p>{t("点击卡片或收起栏图标打开应用；未找到时可手动选择安装位置。")}</p>{providers.map(provider => <div className="app-option" key={provider.id}>
           <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={t("选择 {p0} 启动应用", { p0: provider.name })}>{t("选择应用")}</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">{`${t("本地")} · v0.17.0`}</span><p>{t("Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。")}</p><p>{t("DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。")}</p><p>{t("Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。")}</p>
+        <div className="settings-note"><span className="note-title">{`${t("本地")} · v0.17.1`}</span><p>{t("Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。")}</p><p>{t("DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。")}</p><p>{t("Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。")}</p>
           {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{settingsStatus?.[id]?.detail}<br />{settingsStatus?.[id]?.activityDetail && <>{settingsStatus?.[id]?.activityDetail}<br /></>}{settingsStatus?.[id]?.observedAt ? t("记录时间：{p0}", { p0: date(settingsStatus?.[id]?.observedAt!) }) : t("尚无可用记录")}</p>)}</>}
           <p>{state.desktop ? t("桌面版 · 显示缩放 {p0}×", { p0: state.scaleFactor }) : t("浏览器预览 · 窗口操作请使用桌面版")}</p></div>
       </div>
