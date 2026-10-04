@@ -1,6 +1,8 @@
 import type { Language } from './i18n';
 export type ProviderId = 'claude' | 'codex' | 'antigravity' | 'deepseek' | 'zcode' | 'kimi' | 'qwen' | 'workbuddy';
 export type Theme = 'system' | 'light' | 'dark';
+export type Layout = 'single' | 'double' | 'fullscreen';
+export type TaskDetail = { title: string | null; state: 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled' | 'unknown' | 'idle'; updatedAt: string | null; stale: boolean; source: 'cache' | 'local-api'; operation: string | null; steps: number | null; toolCalls: number | null; progress: number | null };
 export type KimiSource = 'code' | 'work';
 export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: boolean };
 export type PanelState = Preferences & {
@@ -10,7 +12,7 @@ export type PanelState = Preferences & {
   enabledProviders: ProviderId[];
   qwenKeychainAllowed: boolean;
   kimiSource: KimiSource;
-  animeMode: boolean;
+  animeMode: boolean; layout: Layout; windowLayout: 'single' | 'double';
   language: Language; resolvedLanguage?: Exclude<Language, 'system'>;
   theme: Theme; resolvedTheme: 'light' | 'dark';
   bounds?: { x: number; y: number; width: number; height: number };
@@ -27,6 +29,7 @@ export type LocalProviderStatus = {
   accessRequired?: boolean;
   kimiSource?: KimiSource;
   activityDetail?: string; activityObservedAt?: string | null;
+  taskDetails?: TaskDetail[];
   surfaces?: { desktop: string; terminal: string };
   balance?: { wallets: Wallet[]; stale: boolean };
   plan?: { name: string | null; status?: string; expiresAt?: string | null; stale?: boolean };
@@ -56,6 +59,7 @@ declare global {
       openProvider(provider: ProviderId): Promise<{ status: 'opened' | 'missing' | 'unsupported' | 'error' | 'test'; message: string }>;
       chooseProviderApp(provider: ProviderId): Promise<{ status: 'selected' | 'cancelled' | 'error'; message: string }>;
       setLanguage(language: Language): Promise<PanelState>;
+      setLayout(layout: Layout): Promise<PanelState>;
       setTheme(theme: Theme): Promise<PanelState>;
       dock(): Promise<PanelState>;
       chooseImage(provider: ProviderId): Promise<string | null>;

@@ -1,3 +1,4 @@
+const { taskDetail } = require('./task-details.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
@@ -31,7 +32,9 @@ class DeepSeekActivityReader {
   async poll(processes, now = Date.now()) {
     const root = path.join(resolveHarnessHome(this.options), 'sessions');
     const pids = processes?.filter(p => /(?:^|[/\\])(?:DeepSeek Harness|dsh)(?:\.exe)?$/.test(p.command)).map(p => p.pid) || [];
-    const state = (activity, task, activeTasks = 0, at = null) => ({ activity, task, activeTasks,
+    const details = [];
+    const state = (activity, task, activeTasks = 0, at = null) => ({
+      ...(this.taskDetailsEnabled ? { taskDetails: details.slice(0, 8) } : {}), activity, task, activeTasks,
       activityObservedAt: at ? new Date(at).toISOString() : null, activitySource: 'cache',
       activityDetail: '只读 Harness 会话开始、结束与确认事件，结合进程持有的会话锁及十分钟活动时效；不读取任务内容到界面。' });
     if (processes === null) return state('unknown', '进程状态暂不可读');
@@ -55,16 +58,22 @@ class DeepSeekActivityReader {
     const selected = files.slice(0, 40); const results = [];
     for (const { file, session, stat, compressed } of selected) {
       try {
-        const stamp = `${stat.ino}:${stat.size}:${stat.mtimeMs}`;
+        const stamp = `${stat.ino}:${stat.size}:${stat.mtimeMs}:${this.taskDetailsEnabled === true}`;
         let cached = this.cache.get(file);
         if (cached?.stamp !== stamp) {
-          cached = { stamp, events: await harnessEvents(await boundedFile(file, root), compressed) };
+          cached = { stamp, events: await harnessEvents(await boundedFile(file, root), compressed, this.taskDetailsEnabled) };
           this.cache.set(file, cached);
         }
         const realSession = await fs.realpath(session);
-        results.push(classifyHarness(cached.events, owned?.has(path.join(realSession, 'session.lock')) || false, now));
+        const verified = owned?.has(path.join(realSession, 'session.lock')) || false;
+        const result = classifyHarness(cached.events, verified, now); results.push(result);
+        if (this.taskDetailsEnabled) details.push(taskDetail({ title: cached.events.findLast(e => e.title)?.title,
+          state: result.phase === 'idle' ? ({ completed: 'completed', cancelled: 'cancelled', aborted: 'cancelled', error: 'failed', failed: 'failed' }[cached.events.findLast(e => e.type === 'turn/end')?.reason] || 'idle') : result.phase,
+          updatedAt: result.at, operation: cached.events.findLast(e => ['tool/start', 'tool/end', 'approval/asked', 'turn/start', 'turn/end'].includes(e.type))?.type,
+        }, { now, live: verified }));
       } catch { this.cache.delete(file); results.push({ phase: 'unknown', at: null }); }
     }
+    details.sort((a, b) => Number(b.state === 'running' || b.state === 'waiting') - Number(a.state === 'running' || a.state === 'waiting') || (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
     const keep = new Set(selected.map(f => f.file));
     for (const key of this.cache.keys()) if (!keep.has(key)) this.cache.delete(key);
     const active = results.filter(r => r.phase === 'running').length;

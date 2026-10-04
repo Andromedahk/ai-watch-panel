@@ -1,3 +1,4 @@
+const { taskDetail } = require('./task-details.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
@@ -38,16 +39,18 @@ async function checkedDatabase(file, root) {
   }
   return real;
 }
-async function readZcodeTurns({ file, root }) {
+async function readZcodeTurns({ file, root }, details = false) {
   const real = await checkedDatabase(file, root);
   const { DatabaseSync } = require('node:sqlite');
   const db = new DatabaseSync(real, { readOnly: true, timeout: 300 });
   try {
     db.exec('PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA busy_timeout=300;');
+    const columns = details ? db.prepare('PRAGMA table_info(session)').all().map(r => r.name) : [];
+    const title = columns.includes('title') ? ', s.title AS task_title' : '';
     // Only bounded numeric telemetry and opaque deduplication IDs enter memory. Never SELECT message bodies.
     return db.prepare(`SELECT t.session_id, t.turn_id, t.status, t.started_at,
       t.first_model_start_at, t.first_token_at, t.completed_at, t.model_request_count,
-      t.tool_call_count, t.input_tokens, t.output_tokens, t.reasoning_tokens
+      t.tool_call_count, t.input_tokens, t.output_tokens, t.reasoning_tokens${title}
       FROM turn_usage t JOIN session s ON s.id=t.session_id
       WHERE s.parent_id IS NULL AND s.time_archived IS NULL
       ORDER BY t.started_at DESC LIMIT ${MAX_ROWS + 1}`).all();
@@ -80,7 +83,7 @@ class ZcodeStatusReader {
     const latest = new Map();
     for (const location of this.paths) {
       try {
-        const rows = await this.readTurns(location);
+        const rows = await this.readTurns(location, this.taskDetailsEnabled);
         if (!Array.isArray(rows)) { incomplete = true; continue; }
         if (rows.length > MAX_ROWS) incomplete = true;
         available = true;
@@ -133,7 +136,13 @@ class ZcodeStatusReader {
     try { account = await this.accountReader.poll(processes, now, force); }
     catch { account = { source: 'unavailable', connection: 'error', plan: { name: null }, quotas: [],
       observedAt: null, detail: 'ZCode 当前账号暂不可验证，套餐和额度保持未知。' }; }
-    return { ...activityStatus, plan: account.plan, quotas: account.quotas, observedAt: account.observedAt,
+    return { ...activityStatus,
+      ...(this.taskDetailsEnabled ? { taskDetails: [...latest.values()].slice(0, 8).map(row => {
+        const advanced = this.advanced.get(`${row.session_id}\0${row.turn_id}`);
+        const verified = !!matches.length && fresh(advanced, now);
+        return taskDetail({ title: row.task_title, state: verified ? 'running' : row.status === 'completed' ? 'completed' : row.status === 'error' ? 'failed' : row.status === 'cancelled' ? 'cancelled' : 'unknown',
+          updatedAt: advanced || row.completed_at || row.first_token_at || row.started_at, toolCalls: row.tool_call_count, steps: row.model_request_count }, { now, live: verified });
+      }) } : {}), plan: account.plan, quotas: account.quotas, observedAt: account.observedAt,
       detail: account.detail, source: account.source === 'unavailable' ? activityStatus.source : account.source,
       connection: ['ready', 'auth-required', 'error'].includes(account.connection) ? account.connection : activityStatus.connection };
   }

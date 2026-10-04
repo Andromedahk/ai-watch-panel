@@ -1,3 +1,4 @@
+const { taskDetail } = require('./task-details.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
@@ -88,7 +89,7 @@ class ClaudeStatusReader {
         const phase = row.status === 'idle' ? 'idle' : fresh && row.status === 'busy' ? 'running'
           : fresh && row.status === 'waiting' ? 'waiting' : 'unknown';
         // A PID appears once even if both desktop and CLI present the same session.
-        states.set(row.pid, { phase, surface: row.entrypoint === 'claude-desktop' ? 'desktop' : 'terminal', at: stat.mtimeMs });
+        states.set(row.pid, { phase, surface: row.entrypoint === 'claude-desktop' ? 'desktop' : 'terminal', at: stat.mtimeMs, ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName) } : {}) });
       } catch { failed = true; }
     }
     const values = [...states.values()];
@@ -106,7 +107,8 @@ class ClaudeStatusReader {
         : desktopOpen && !codeProcesses.length ? '桌面已打开 · 暂无 Code 状态' : 'Code 当前任务状态未知';
     return { id: 'claude', source: usage || values.length || plan.name ? 'cache' : 'unavailable',
       connection: processes === null ? 'error' : desktopOpen || codeProcesses.length ? 'ready' : 'offline',
-      activity, activeTasks, task, plan, quotas: usage?.quotas || [], observedAt: usage?.observedAt || null,
+      activity, activeTasks, task, plan,
+      ...(this.taskDetailsEnabled ? { taskDetails: values.slice(0, 8).map(s => taskDetail({ title: s.title, state: s.phase, updatedAt: s.at }, { now, live: true })) } : {}), quotas: usage?.quotas || [], observedAt: usage?.observedAt || null,
       surfaces, activityObservedAt: values.length ? new Date(Math.max(...values.map(s => s.at))).toISOString() : null,
       activityDetail: `${surfaces.desktop}；${surfaces.terminal}。只读会话登记并校验进程和十分钟时效；后台子任务不单独计数。`,
       detail: (usage?.quotas.length ? '桌面用量历史中的额度快照；未返回的窗口和重置时间不作推测。'

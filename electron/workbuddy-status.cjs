@@ -1,3 +1,4 @@
+const { taskDetail } = require('./task-details.cjs');
 const fs = require('node:fs/promises');
 const { constants } = require('node:fs');
 const os = require('node:os');
@@ -194,7 +195,7 @@ function normalizeWorkBuddyUsage(payload, enterprise = false) {
   if (total.gt(0)) quotas.push({ model: '全部积分', period: '当前周期', remaining: Math.round(Number(left.div(total).times(100).toFixed(1)) * 10) / 10, reset: '' });
   return { plan: { name: plan, stale: false }, credits: { items, stale: false }, quotas };
 }
-async function readActivityRows(paths, uid) {
+async function readActivityRows(paths, uid, details = false) {
   for (const file of [paths.database, `${paths.database}-wal`, `${paths.database}-shm`]) {
     try { const stat = await fs.lstat(file); if (stat.isSymbolicLink() || !stat.isFile() || stat.size > 512 * 1024 * 1024) throw new WorkBuddyError('format'); }
     catch (error) { if (file === paths.database || error.code !== 'ENOENT') throw error; }
@@ -204,7 +205,9 @@ async function readActivityRows(paths, uid) {
   const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync(real, { readOnly: true, timeout: 300 });
   try {
     db.exec('PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA busy_timeout=300;');
-    return db.prepare(`SELECT s.id,s.status,s.updated_at,s.last_activity_at,u.updated_at AS usage_at,u.used
+    const columns = details ? db.prepare('PRAGMA table_info(sessions)').all().map(r => r.name) : [];
+    const title = columns.includes('title') ? ',s.title AS task_title' : '';
+    return db.prepare(`SELECT s.id,s.status,s.updated_at,s.last_activity_at,u.updated_at AS usage_at,u.used${title}
       FROM sessions s LEFT JOIN session_usage u ON u.session_id=s.id
       WHERE s.user_id=? AND (s.deleted_at IS NULL OR s.deleted_at=-1) AND (s.transport IS NULL OR s.transport='local')
       ORDER BY s.last_activity_at DESC LIMIT ${MAX_ROWS + 1}`).all(uid);
@@ -254,8 +257,9 @@ class WorkBuddyStatusReader {
     const base = { activity: processes === null ? 'unknown' : matches.length ? 'unknown' : 'offline', activeTasks: 0,
       activityDetail: '本地状态需观察到新鲜变化；云端及后台子任务状态暂不可确认。' };
     if (!matches.length || !account) return base;
-    let rows; try { rows = await this.readActivityRows(this.paths, account.uid); } catch { return base; }
+    let rows; try { rows = await this.readActivityRows(this.paths, account.uid, this.taskDetailsEnabled); } catch { return base; }
     if (!Array.isArray(rows) || rows.length > MAX_ROWS) return base;
+    const details = [];
     const next = new Map(); let activeTasks = 0; let observed = null;
     for (const row of rows) {
       if (typeof row.id !== 'string' || row.id.length > 256 || typeof row.status !== 'string') continue;
@@ -263,16 +267,18 @@ class WorkBuddyStatusReader {
         : ['pending', 'waiting_permission', 'waiting_question', 'paused'].includes(row.status) ? 'waiting' : null;
       const sig = JSON.stringify([row.status, row.last_activity_at, row.usage_at, row.used]); next.set(row.id, sig);
       const stamp = Math.max(...[row.last_activity_at, row.usage_at].filter(value => typeof value === 'number' && Number.isFinite(value)), 0);
-      if (!state) { this.advanced.delete(row.id); continue; }
+      if (!state) { this.advanced.delete(row.id); if (this.taskDetailsEnabled) details.push(taskDetail({ title: row.task_title, state: ['completed','finished'].includes(row.status) ? 'completed' : 'unknown', updatedAt: stamp }, { now })); continue; }
       if (this.sampled && this.previous.get(row.id) !== sig && stamp > 0 && stamp <= now + 2000 && now - stamp <= FRESH_MS) this.advanced.set(row.id, stamp);
       const advanced = this.advanced.get(row.id);
+      if (this.taskDetailsEnabled) details.push(taskDetail({ title: row.task_title, state: state === 'running' && advanced && now - advanced <= FRESH_MS ? 'running' : 'unknown', updatedAt: stamp }, { now, live: !!advanced, freshMs: FRESH_MS }));
       // Persisted pending may be orphaned; no red/waiting claim without a live HITL API.
       if (state === 'running' && advanced && now - advanced <= FRESH_MS) { activeTasks++; observed = Math.max(observed || 0, advanced); }
     }
     this.previous = next; this.sampled = true;
     for (const id of this.advanced.keys()) if (!next.has(id)) this.advanced.delete(id);
-    return activeTasks ? { activity: 'running', activeTasks, activityObservedAt: new Date(observed).toISOString(),
-      activityDetail: '已观察到本地任务的新鲜状态变化；超过两分钟无进展后回到未知。' } : base;
+    const taskDetails = this.taskDetailsEnabled ? { taskDetails: details.slice(0, 8) } : {};
+    return activeTasks ? { ...taskDetails, activity: 'running', activeTasks, activityObservedAt: new Date(observed).toISOString(),
+      activityDetail: '已观察到本地任务的新鲜状态变化；超过两分钟无进展后回到未知。' } : { ...base, ...taskDetails };
   }
   async poll(processes, force = false) {
     if (this.pending) return this.pending;

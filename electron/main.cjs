@@ -5,9 +5,11 @@ const { traySummary } = require('./tray-summary.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isLayout, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
 const { requestKimiWorkSubscription } = require('./kimi-work-api.cjs');
 const { requestZcodeJson } = require('./zcode-account-api.cjs');
+const { WindowLayout } = require('./window-layout.cjs');
+const { taskDetail } = require('./task-details.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
 const { ProviderLauncher } = require('./provider-launcher.cjs');
 const statusReader = new LocalStatusReader();
@@ -28,6 +30,9 @@ async function refreshLocalStatus(force = false) {
     if (fixtureVariant === 'glow-attention') Object.assign(statusSnapshot.codex, { activity: 'waiting', activeTasks: 1, waitingTasks: 1, waitingReason: 'both', task: '合成测试 · 待回答 / 待授权' });
   }
   if (fixtureMode) {
+    if (preferences.layout === 'fullscreen') for (const id of PROVIDER_ORDER) statusSnapshot[id].taskDetails = [taskDetail({
+      title: 'UI review · sample task', state: statusSnapshot[id].activity, updatedAt: Date.now(), operation: 'fileChange', steps: 6, toolCalls: 3, progress: 65,
+    }, { live: true, source: 'local-api' })];
     statusSnapshot.sampledAt = new Date().toISOString();
     for (const id of PROVIDER_ORDER) statusSnapshot[id].sampledAt = statusSnapshot.sampledAt;
     statusSnapshot.kimi.kimiSource = preferences.kimiSource;
@@ -47,6 +52,7 @@ let panelTray;
 let preferences;
 let collapsed = false;
 let expandedBounds;
+let windowLayout;
 let lastDisplayId;
 const displayLayouts = new Map();
 let repositioning = false;
@@ -70,7 +76,7 @@ function buildApplicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ label: 'AI Watch', submenu: [
       { role: 'about', label: t('关于') + ' AI Watch' }, { type: 'separator' },
-      { label: t('展开 / 收起'), accelerator: 'CommandOrControl+Shift+B', click: () => setCollapsed(!collapsed) },
+      { label: t('展开 / 收起'), accelerator: 'CommandOrControl+Shift+B', click: () => { void setCollapsed(!collapsed).catch(() => {}); } },
       { label: t('收纳到菜单栏'), accelerator: 'CommandOrControl+Shift+H', enabled: panelTray.available, click: () => panelTray.store() },
       { label: t('额度速览'), accelerator: 'CommandOrControl+Shift+U', enabled: panelTray.available, click: () => panelTray.openMenu() },
       { label: t('重新贴边'), click: dock }, { type: 'separator' }, { role: 'quit', label: t('退出 AI Watch') },
@@ -88,6 +94,13 @@ function currentState() {
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
 }
 function emitState() {
+  const details = preferences?.layout === 'fullscreen' && !collapsed;
+  if (statusReader.taskDetailsEnabled !== details) {
+    statusReader.setTaskDetailsEnabled(details);
+    statusSnapshot = statusReader.current;
+    if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
+    void refreshLocalStatus().catch(() => {});
+  }
   panelTray?.updateMenu();
   if (window && !window.isDestroyed()) window.webContents.send('panel:changed', currentState());
 }
@@ -102,20 +115,24 @@ function setBounds(bounds) {
   setTimeout(() => { repositioning = false; }, 100);
 }
 function dock() {
+  if (preferences.layout === 'fullscreen' || windowLayout?.transitioning) return;
   const display = screen.getDisplayMatching(window.getBounds());
   lastDisplayId = display.id;
-  setBounds(panelBounds(display.workArea, preferences.side, collapsed));
+  setBounds(panelBounds(display.workArea, preferences.side, collapsed, preferences.layout));
   if (!collapsed) expandedBounds = window.getBounds();
   emitState();
 }
 function lock() {
-  window.setAlwaysOnTop(preferences.locked, 'floating');
+  const pinned = preferences.locked && preferences.layout !== 'fullscreen' && !window.isFullScreen();
+  window.setAlwaysOnTop(pinned, 'floating');
   if (process.platform !== 'win32') {
-    window.setVisibleOnAllWorkspaces(preferences.locked, { visibleOnFullScreen: preferences.locked });
+    window.setVisibleOnAllWorkspaces(pinned, { visibleOnFullScreen: pinned });
   }
-  if (process.platform === 'darwin') window.setHiddenInMissionControl(preferences.locked);
+  if (process.platform === 'darwin') window.setHiddenInMissionControl(pinned);
 }
-function setCollapsed(value) {
+async function setCollapsed(value) {
+  await windowLayout?.pending;
+  if (value && preferences.layout === 'fullscreen') await windowLayout.change(preferences.windowLayout);
   if (collapsed === value) return;
   const display = screen.getDisplayMatching(window.getBounds());
   if (value) {
@@ -125,7 +142,7 @@ function setCollapsed(value) {
     setBounds({ ...old, width: newWidth, x: preferences.side === 'right' ? old.x + old.width - newWidth : old.x });
   } else {
     const current = window.getBounds();
-    const width = panelBounds(display.workArea).width;
+    const width = panelBounds({ ...display.workArea, height: current.height }, preferences.side, false, preferences.layout).width;
     setBounds(clampBounds({ ...current, width,
       x: preferences.side === 'right' ? current.x + current.width - width : current.x,
     }, display.workArea));
@@ -154,14 +171,15 @@ else {
     for (const item of screen.getAllDisplays()) displayLayouts.set(item.id, displayGeometry(item));
     lastDisplayId = display.id;
     window = new BrowserWindow({
-      ...panelBounds(display.workArea, preferences.side), title: 'AI Watch',
-      frame: false, resizable: false, maximizable: false, fullscreenable: false,
+      ...panelBounds(display.workArea, preferences.side, false, preferences.layout === 'fullscreen' ? preferences.windowLayout : preferences.layout), title: 'AI Watch',
+      frame: false, resizable: false, maximizable: false, fullscreenable: true,
       show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#111519' : '#edf1f5', autoHideMenuBar: true,
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),
         contextIsolation: true, nodeIntegration: false, sandbox: true,
       },
     });
+    windowLayout = new WindowLayout({ window, screen, getPreferences: () => preferences, save: savePreferences, changed: emitState, pin: lock, setBounds });
     if (process.platform === 'win32') app.setAppUserModelId('app.aiwatch.panel');
     panelTray = new PanelTray({ app, window, Tray, Menu, nativeImage,
       getSummary: () => ({ rows: traySummary(statusSnapshot, { ...preferences, language: currentLanguage().language }), isTestData: fixtureMode }),
@@ -171,7 +189,7 @@ else {
     nativeTheme.on('updated', updateAppearance);
     buildApplicationMenu();
     lock();
-    window.once('ready-to-show', () => window.show());
+    window.once('ready-to-show', () => { window.show(); if (preferences.layout === 'fullscreen') void windowLayout.change('fullscreen').catch(() => {}); });
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     window.webContents.on('will-navigate', (event, url) => {
       if (url !== window.webContents.getURL()) event.preventDefault();
@@ -181,11 +199,11 @@ else {
       window.loadURL(devUrl);
     } else window.loadFile(path.join(__dirname, '../dist/index.html'));
     window.on('move', () => {
-      if (repositioning) return;
+      if (repositioning || windowLayout.transitioning || preferences.layout === 'fullscreen') return;
       const target = screen.getDisplayMatching(window.getBounds());
       if (target.id !== lastDisplayId) {
         lastDisplayId = target.id;
-        const dimensions = panelBounds(target.workArea, preferences.side, collapsed);
+        const dimensions = panelBounds(target.workArea, preferences.side, collapsed, preferences.layout);
         setBounds(clampBounds({ ...window.getBounds(), width: dimensions.width, height: dimensions.height, y: target.workArea.y }, target.workArea));
       }
       if (!collapsed) expandedBounds = window.getBounds();
@@ -209,9 +227,14 @@ else {
       if (typeof value !== 'boolean') throw new Error('Invalid lock state');
       preferences.locked = value; lock(); savePreferences(); emitState(); return currentState();
     });
-    handle('panel:collapse', (value) => {
+    handle('panel:layout', async value => {
+      if (!isLayout(value)) throw new Error('Invalid layout');
+      if (collapsed) await setCollapsed(false);
+      await windowLayout.change(value); return currentState();
+    });
+    handle('panel:collapse', async (value) => {
       if (typeof value !== 'boolean') throw new Error('Invalid collapse state');
-      setCollapsed(value); return currentState();
+      await setCollapsed(value); return currentState();
     });
     handle('panel:store', () => {
       if (!panelTray.store()) throw new Error('System tray unavailable');
@@ -224,7 +247,7 @@ else {
       buildApplicationMenu(); emitState(); return currentState();
     });
     handle('panel:configure', (value) => {
-      const next = validPreferences({ ...value, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
+      const next = validPreferences({ ...value, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
         kimiSource: preferences.kimiSource, kimiWorkApp: preferences.kimiWorkApp, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();

@@ -11,13 +11,13 @@
  * so width-based units also track the card height).
  */
 .anime-mode .provider-card {
-  --a-pad: clamp(7px, 3.1vw, 12px);
-  --a-gap: clamp(5px, 2vw, 8px);
-  --a-radius: clamp(8px, 3.4vw, 12px);
-  --a-title: clamp(10px, 5.3vw, 17px);
-  --a-body: clamp(7.5px, 3.6vw, 11.5px);
-  --a-caption: clamp(6px, 2.75vw, 8.5px);
-  --a-number: clamp(10.5px, 5.2vw, 17px);
+  --a-pad: clamp(7px, calc(3.1 * var(--ui-vw)), 12px);
+  --a-gap: clamp(5px, calc(2 * var(--ui-vw)), 8px);
+  --a-radius: clamp(8px, calc(3.4 * var(--ui-vw)), 12px);
+  --a-title: clamp(10px, calc(5.3 * var(--ui-vw)), 17px);
+  --a-body: clamp(7.5px, calc(3.6 * var(--ui-vw)), 11.5px);
+  --a-caption: clamp(6px, calc(2.75 * var(--ui-vw)), 8.5px);
+  --a-number: clamp(10.5px, calc(5.2 * var(--ui-vw)), 17px);
   --a-ink: var(--accent-ink, var(--accent));
   --a-tint: color-mix(in srgb, var(--accent) 12%, transparent);
   --a-tint-border: color-mix(in srgb, var(--accent) 26%, transparent);
@@ -65,7 +65,7 @@
 .anime-mode .identity {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
-  gap: clamp(2px, .9vw, 4px);
+  gap: clamp(2px, calc(.9 * var(--ui-vw)), 4px);
   padding-top: calc(var(--a-caption) * 1.9);
 }
 .anime-mode .identity h2 {
@@ -83,7 +83,7 @@
 /* Plan chip: a small "套餐" label followed by the tier name. */
 .anime-mode .plan-summary {
   order: 2; display: flex; flex-wrap: nowrap; align-items: center; gap: 5px;
-  max-width: 100%; margin-top: clamp(2px, .9vw, 5px);
+  max-width: 100%; margin-top: clamp(2px, calc(.9 * var(--ui-vw)), 5px);
   padding: 2px 6px 2px 2px; border-radius: 6px;
   border: 1px solid var(--a-tint-border); background: var(--a-tint);
   font-size: var(--a-caption); line-height: 1.35; color: var(--strong);
@@ -110,8 +110,8 @@
 
 /* ── Data panel ───────────────────────────────────────── */
 .anime-mode .quota-area {
-  gap: clamp(3px, 1.2vw, 6px);
-  padding: clamp(4px, 1.8vw, 8px) clamp(6px, 2.8vw, 10px);
+  gap: clamp(3px, calc(1.2 * var(--ui-vw)), 6px);
+  padding: clamp(4px, calc(1.8 * var(--ui-vw)), 8px) clamp(6px, calc(2.8 * var(--ui-vw)), 10px);
   border-radius: var(--a-radius);
   background: var(--a-panel); border: 1px solid var(--a-panel-border);
 }
@@ -129,9 +129,9 @@
 }
 .anime-mode .quota-pagination button svg { width: 1.2em; height: 1.2em; }
 
-.anime-mode .quota-list { gap: clamp(3px, 1.2vw, 6px); justify-content: space-evenly; }
+.anime-mode .quota-list { gap: clamp(3px, calc(1.2 * var(--ui-vw)), 6px); justify-content: space-evenly; }
 .anime-mode .quota-label {
-  align-items: center; margin-bottom: clamp(2px, .9vw, 5px);
+  align-items: center; margin-bottom: clamp(2px, calc(.9 * var(--ui-vw)), 5px);
   font-size: var(--a-body); line-height: 1.2; color: var(--label);
 }
 .anime-mode .quota-label > span { align-items: center; }
@@ -142,7 +142,7 @@
 }
 .anime-mode .quota-label strong { font-size: var(--a-number); font-weight: 600; line-height: 1; letter-spacing: -.3px; }
 .anime-mode .remaining-label { font-size: var(--a-caption); margin-inline-end: 4px; font-weight: 400; letter-spacing: 0; }
-.anime-mode .quota-track { height: clamp(3px, 1.25vw, 5px); border-radius: 999px; }
+.anime-mode .quota-track { height: clamp(3px, calc(1.25 * var(--ui-vw)), 5px); border-radius: 999px; }
 .anime-mode .quota-fill {
   opacity: 1; border-radius: 999px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--a-ink) 55%, transparent), var(--a-ink));
@@ -162,7 +162,7 @@
 .anime-mode .credits-empty p { margin-top: 2px; font-size: var(--a-caption); -webkit-line-clamp: 1; }
 
 /* Balance (DeepSeek) */
-.anime-mode .balance-content { gap: clamp(2px, .9vw, 5px); }
+.anime-mode .balance-content { gap: clamp(2px, calc(.9 * var(--ui-vw)), 5px); }
 .anime-mode .balance-caption { font-size: var(--a-caption); }
 .anime-mode .currency-switch { border-radius: 999px; padding: 0 6px; font-size: var(--a-caption); }
 .anime-mode .balance-total { gap: 4px; line-height: 1; }

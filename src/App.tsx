@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
-import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, PanelTopClose, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
+import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, Minimize, PanelTopClose, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
 import { providers as baseProviders, providerIds, animeImages as defaultAnimeImages } from './data';
 import { useVisibleCards } from './useVisibleCards';
 import { TestControls } from './TestControls';
@@ -7,7 +7,7 @@ import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
 import Big from 'big.js';
 import { I18nContext, useI18n, createI18n, readLanguage, languages, localizeProvider, localizeStatus, type Language } from './i18n';
-import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provider, ProviderId, Quota, Theme, KimiSource } from './types';
+import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provider, ProviderId, Quota, Theme, KimiSource, Layout } from './types';
 const providers = baseProviders;
 
 const previewState: PanelState = {
@@ -16,7 +16,7 @@ const previewState: PanelState = {
   trayAvailable: false, stored: false,
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
-  kimiSource: 'code',
+  kimiSource: 'code', layout: 'single', windowLayout: 'single',
   animeMode: readAnimeMode(),
   language: window.panel ? 'zh-CN' : readLanguage(),
   theme: window.panel ? 'system' : readTheme(),
@@ -134,8 +134,29 @@ function EntitlementCard({ provider, page }: { provider: Provider; page: number 
     </div>
   </div>;
 }
-function ProviderCard({ provider, index, image, anime = false, onOpen, launchBusy, testing = false, sortProps, dragging = false }: {
-  provider: Provider; index: number; image?: string; anime?: boolean; onOpen: () => void; launchBusy?: boolean; testing?: boolean; sortProps?: HTMLAttributes<HTMLElement>; dragging?: boolean;
+function TaskDetails({ provider, testing }: { provider: Provider; testing: boolean }) {
+  const { t, date, number, percent } = useI18n();
+  const rows = provider.local?.taskDetails || [];
+  const operations: Record<string, string> = { commandExecution: '执行命令', fileChange: '修改文件', webSearch: '搜索网页', toolCall: '调用工具', agentMessage: '助手回复', reasoning: '思考',
+    'turn/start': '开始任务', 'turn/end': '结束任务', 'approval/asked': '等待确认', 'approval/decided': '确认已处理', 'tool/start': '调用工具', 'tool/end': '工具已返回', turn_started: '开始任务', turn_completed: '结束任务' };
+  const states = { running: '运行中', waiting: '待处理', completed: '已完成', failed: '失败', cancelled: '已取消', unknown: '未知', idle: '待机' };
+  return <div className="task-details" aria-label={t('任务详情')}>
+    <div className="task-details-heading"><h3>{t('任务详情')}</h3>{testing && <span className="source-tag">{t('测试数据')}</span>}</div>
+    <div className="task-details-list">
+      {rows.length ? rows.map((task, index) => <article className="task-entry" key={index} data-state={task.state}>
+        <div className="task-entry-heading"><bdi className="task-title" title={task.title || undefined}>{task.title || t('任务名称未提供')}</bdi><span className="task-state">{t(states[task.state])}</span></div>
+        <time>{t('最近更新')} · {task.updatedAt ? date(task.updatedAt) : t('未知')}</time>
+        {task.stale && <span className="task-history">{t('历史任务记录')}</span>}
+        {task.progress !== null && <div className="task-progress"><span>{t('进度')} · <bdi dir="ltr">{percent(task.progress)}</bdi></span><progress max={100} value={task.progress} aria-label={t('进度')} /></div>}
+        <p className="task-operation">{task.operation ? t('最近操作') + ' · ' + t(operations[task.operation] || '未知')
+          : task.steps !== null ? t('已记录 {p0} 步', { p0: task.steps }) : t('进度或操作摘要未提供')}</p>
+        {task.toolCalls !== null && <span className="task-counter">{t('调用工具 {p0} 次', { p0: task.toolCalls })}</span>}
+      </article>) : <div className="task-details-empty"><strong>{t('暂无可读任务记录')}</strong><p>{provider.local?.activityDetail || provider.task}</p><small>{t('任务名称、进度和操作摘要取决于客户端提供的记录。')}</small></div>}
+    </div>
+  </div>;
+}
+function ProviderCard({ provider, index, image, anime = false, onOpen, launchBusy, testing = false, fullscreen = false, sortProps, dragging = false }: {
+  provider: Provider; index: number; image?: string; anime?: boolean; onOpen: () => void; launchBusy?: boolean; testing?: boolean; fullscreen?: boolean; sortProps?: HTMLAttributes<HTMLElement>; dragging?: boolean;
 }) {
   const [page, setPage] = useState(0);
   const { language, t, date, number, percent, label: translatedLabel } = useI18n();
@@ -189,6 +210,7 @@ function ProviderCard({ provider, index, image, anime = false, onOpen, launchBus
         })}
       </div>}
     </div>
+    {fullscreen && <TaskDetails provider={provider} testing={testing} />}
     <div className="task-line" title={local?.activityDetail || local?.detail}><span className={`status-dot ${provider.running ? 'active' : ''} ${local?.activity === 'unknown' ? 'unknown' : local?.activity === 'waiting' ? 'waiting' : ''}`} /><span>{provider.task}</span><span className="task-status">{phase}</span></div>
   </section>;
 }
@@ -213,6 +235,7 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
   const [orderSaving, setOrderSaving] = useState(false);
+  const [layoutSaving, setLayoutSaving] = useState(false);
   const [themeSaving, setThemeSaving] = useState(false);
   const [modulesSaving, setModulesSaving] = useState(false);
   const [qwenAccessSaving, setQwenAccessSaving] = useState(false);
@@ -267,6 +290,15 @@ export default function App() {
       else { localStorage.setItem('ai-watch:enabled-providers', JSON.stringify(next)); setState(current => ({ ...current, enabledProviders: next })); }
     } catch { setNotice(t("模块选择保存失败，请重试")); }
     finally { setModulesSaving(false); }
+  }
+  async function changeLayout(layout: Layout) {
+    if (layoutSaving) return;
+    setLayoutSaving(true);
+    try {
+      if (window.panel) setState(await window.panel.setLayout(layout));
+      else setState(current => ({ ...current, layout, collapsed: false, windowLayout: layout === 'fullscreen' ? current.windowLayout : layout }));
+    } catch { setNotice(t('窗口模式切换失败，请重试')); }
+    finally { setLayoutSaving(false); }
   }
   async function changeAnimeMode(value: boolean) {
     if (animeSaving) return;
@@ -374,6 +406,7 @@ export default function App() {
     document.documentElement.lang = i18n.language; document.documentElement.dir = i18n.dir;
     document.title = `AI Watch · ${t('AI 工具监看面板')}`;
   }, [i18n.language]);
+  useLayoutEffect(() => { document.documentElement.dataset.layout = state.collapsed ? 'single' : state.layout; }, [state.layout, state.collapsed]);
   useLayoutEffect(() => { document.documentElement.dataset.theme = resolvedTheme; }, [resolvedTheme]);
   useEffect(() => {
     const focused = document.activeElement;
@@ -397,13 +430,14 @@ export default function App() {
   }, [settingsOpen]);
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && state.layout === 'fullscreen' && !settingsOpen && !sorting.sorting) { event.preventDefault(); void changeLayout(state.windowLayout); }
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'b' && !state.desktop) {
         event.preventDefault(); setState((old) => ({ ...old, collapsed: !old.collapsed }));
       }
     };
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
-  }, [state.desktop]);
+  }, [state.desktop, state.layout, settingsOpen, sorting.sorting]);
 
   async function toggleLock() {
     try {
@@ -476,7 +510,7 @@ export default function App() {
     } catch { setNotice(t("无法读取这张图片")); }
   }
 
-  return <I18nContext.Provider value={i18n}><main lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${!state.animate ? 'no-animation' : ''}`}>
+  return <I18nContext.Provider value={i18n}><main lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${!state.animate ? 'no-animation' : ''}`}>
     {state.collapsed ? <aside className="collapsed-rail" aria-label={t("收起的监看面板")}>
       <div className="rail-grip"><GripVertical size={15} /></div>
       <button className="rail-expand" title={t("展开面板")} aria-label={t("展开面板")} onClick={() => collapse(false)}>{state.side === 'right' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}</button>
@@ -492,20 +526,24 @@ export default function App() {
         <div className="brand-line"><div className="brand"><Activity size={15} strokeWidth={1.7} /><h1 dir="ltr">AI WATCH</h1></div><GripVertical size={13} className="drag-hint" /></div>
         <div className="overview" title={testMode ? t("当前运行数、任务、额度与余额均为手动选择的测试数据。") : t("运行数只统计本地接入且有运行证据的任务；未知状态和演示卡片不计入。")}><span><span className={`tiny-dot ${activeTasks ? 'active' : ''}`} /><span className="running-summary">{state.desktop || testMode ? t("{p0} 项运行", { p0: activeTasks }) : t("界面预览")}</span> {testMode ? <button className="demo-tag test-badge" aria-label={t("测试模式设置")} onClick={openSettings}>{t("测试模式")}</button> : <span className="demo-tag">{localStatus?.isTestData ? t("测试") : state.desktop ? t("本地") : t("演示")}</span>}</span><time dir="ltr">{state.desktop || testMode ? refreshTime : t("演示数据")}</time></div>
         <nav className="toolbar" aria-label={t("面板控制")}>
-          <button className={state.locked ? 'selected' : ''} aria-label={t("锁定窗口")} aria-pressed={state.locked} title={state.locked ? t("解除跨桌面锁定") : t("锁定：置顶并显示在所有桌面")} onClick={toggleLock}>{state.locked ? <LockKeyhole /> : <UnlockKeyhole />}</button>
+          <button disabled={state.layout === 'fullscreen'} className={state.locked && state.layout !== 'fullscreen' ? 'selected' : ''} aria-label={t("锁定窗口")} aria-pressed={state.locked && state.layout !== 'fullscreen'} title={state.locked ? t("解除跨桌面锁定") : t("锁定：置顶并显示在所有桌面")} onClick={toggleLock}>{state.locked ? <LockKeyhole /> : <UnlockKeyhole />}</button>
           <button aria-label={t("收起面板")} title={t("收起为状态窄条")} onClick={() => collapse(true)}>{state.side === 'right' ? <ArrowRightToLine /> : <ArrowLeftToLine />}</button>
           <button aria-label={storeLabel} title={storeHint} disabled={!state.trayAvailable} onClick={storePanel}><PanelTopClose /></button>
           <button aria-label={t("刷新面板")} title={testMode ? t("刷新测试画面") : t("重新读取本地额度与任务状态")} disabled={refreshing} onClick={refresh}><RefreshCw className={refreshing ? 'spinning' : ''} /></button>
+          {state.layout === 'fullscreen' && <button aria-label={t("退出全屏")} title={t("退出全屏")} disabled={layoutSaving} onClick={() => void changeLayout(state.windowLayout)}><Minimize /></button>}
           <button aria-label={t("打开配置")} title={t("配置面板")} onClick={openSettings}><Settings2 /></button>
         </nav>
       </header>
       <div ref={viewport} className="provider-viewport" aria-label={t("工具模块列表")} aria-busy={orderSaving || modulesSaving} tabIndex={0}>
       {!visibleProviders.length && <div className="empty-providers"><p>{t("尚未启用模块")}</p><button onClick={openSettings}>{t("选择监看模块")}</button></div>}
-      {translatedProviders.map((provider, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${provider.id}`} provider={provider} index={index} image={(state.animeMode ? animeImages : images)[provider.id]} anime={state.animeMode} onOpen={() => void openProvider(provider)} launchBusy={launching === provider.id} testing={Boolean(displayStatus?.isTestData)} dragging={sorting.activeId === provider.id}
+      {translatedProviders.map((provider, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${provider.id}`} provider={provider} index={index} image={(state.animeMode ? animeImages : images)[provider.id]} anime={state.animeMode} onOpen={() => void openProvider(provider)} launchBusy={launching === provider.id} testing={Boolean(displayStatus?.isTestData)} fullscreen={state.layout === 'fullscreen'} dragging={sorting.activeId === provider.id}
         sortProps={{ style: sorting.style(provider.id), onPointerDown: event => sorting.start(event, provider.id), onKeyDown: event => {
-          if (event.target !== event.currentTarget || !event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key) || sorting.sorting) return;
+          if (event.target !== event.currentTarget || !event.altKey || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) || sorting.sorting) return;
           event.preventDefault();
-          const next = [...enabledOrder], target = Math.max(0, Math.min(enabledOrder.length - 1, index + (event.key === 'ArrowUp' ? -1 : 1)));
+          const cards = [...viewport.current!.querySelectorAll<HTMLElement>(':scope > .provider-card')];
+          const columns = cards.filter(card => Math.abs(card.getBoundingClientRect().top - cards[0].getBoundingClientRect().top) < 2).length;
+          const delta = event.key === 'ArrowUp' ? -columns : event.key === 'ArrowDown' ? columns : (event.key === 'ArrowLeft' ? -1 : 1) * (i18n.dir === 'rtl' ? -1 : 1);
+          const next = [...enabledOrder], target = Math.max(0, Math.min(enabledOrder.length - 1, index + delta));
           if (target !== index) { next.splice(index, 1); next.splice(target, 0, provider.id); void saveVisibleOrder(next); }
         } }} />)}
       </div>
@@ -517,11 +555,16 @@ export default function App() {
         title={t("{p0} · {p1} · 点击查看", { p0: provider.name, p1: provider.local?.activity === 'waiting' ? '等待处理' : '正在运行' })}
         onClick={() => revealProvider(provider.id)}><span className="sr-only">{provider.name}</span></button>)}
     </div>}
-    <span id="card-sort-help" className="sr-only">{t("长按卡片约半秒后上下拖动，松开保存顺序；Escape 取消。键盘聚焦卡片后可按 Alt 加上下方向键排序。")}</span>
+    <span id="card-sort-help" className="sr-only">{t("长按卡片拖动排序；Escape 取消。Alt 加方向键按行列排序。")}</span>
     {sorting.sorting && <div className="sort-hint" role="status" title={t("排序说明")}>{t("排序")} · <bdi dir="ltr">{number((sorting.target ?? 0) + 1)}</bdi></div>}
     <dialog ref={modal} className="settings-dialog" aria-labelledby="settings-title" onCancel={() => setSettingsOpen(false)}>
       <div className="settings-heading"><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">{t("面板配置")}</h2></div><button className="icon-button" aria-label={t("关闭配置")} onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
       <div className="settings-content">
+        <fieldset className="layout-settings"><legend>{t('窗口模式')}</legend>
+          <select aria-label={t('窗口模式')} value={state.layout} disabled={layoutSaving} onChange={event => void changeLayout(event.target.value as Layout)}>
+            <option value="single">{t('单列模式')}</option><option value="double">{t('双排模式')}</option><option value="fullscreen">{t('全屏模式')}</option>
+          </select><p className="appearance-hint">{t('双排宽度加倍；全屏显示任务详情。Escape 退出全屏。')}</p>
+        </fieldset>
         <fieldset className="language-settings"><legend>{t('语言')}</legend>
           <select aria-label={t('语言')} value={state.language} disabled={languageSaving} onChange={event => void changeLanguage(event.target.value as Language)}>
             <option value="system">{t('跟随系统')}</option>
@@ -570,7 +613,7 @@ export default function App() {
         <div className="settings-section"><h3>{t("启动应用")}</h3><p>{t("点击卡片或收起栏图标打开应用；未找到时可手动选择安装位置。")}</p>{providers.map(provider => <div className="app-option" key={provider.id}>
           <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={t("选择 {p0} 启动应用", { p0: provider.name })}>{t("选择应用")}</button>
         </div>)}</div>
-        <div className="settings-note"><span className="note-title">{`${t("本地")} · v0.16.0`}</span><p>{t("Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。")}</p><p>{t("DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。")}</p><p>{t("Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。")}</p>
+        <div className="settings-note"><span className="note-title">{`${t("本地")} · v0.17.0`}</span><p>{t("Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。")}</p><p>{t("DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。")}</p><p>{t("Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。")}</p>
           {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{settingsStatus?.[id]?.detail}<br />{settingsStatus?.[id]?.activityDetail && <>{settingsStatus?.[id]?.activityDetail}<br /></>}{settingsStatus?.[id]?.observedAt ? t("记录时间：{p0}", { p0: date(settingsStatus?.[id]?.observedAt!) }) : t("尚无可用记录")}</p>)}</>}
           <p>{state.desktop ? t("桌面版 · 显示缩放 {p0}×", { p0: state.scaleFactor }) : t("浏览器预览 · 窗口操作请使用桌面版")}</p></div>
       </div>

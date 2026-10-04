@@ -1,3 +1,4 @@
+const { codexDetails, antigravityDetails } = require('./task-details.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
@@ -103,6 +104,13 @@ class LocalStatusReader {
     this.qwenReader = qwenReader; this.workbuddyReader = workbuddyReader;
     this.current = { sampledAt: null, claude: unavailable('claude'), codex: unavailable('codex'), antigravity: unavailable('antigravity'), deepseek: unavailable('deepseek'), zcode: unavailable('zcode'), kimi: unavailable('kimi'), qwen: unavailable('qwen'), workbuddy: unavailable('workbuddy') };
     this.pending = null;
+    this.taskDetailsEnabled = false; this.taskGeneration = 0;
+  }
+  setTaskDetailsEnabled(enabled) {
+    this.taskDetailsEnabled = enabled === true; this.taskGeneration++;
+    for (const reader of [this.deepseekActivityReader, this.claudeReader, this.zcodeReader, this.kimiReader, this.qwenReader, this.workbuddyReader]) reader.taskDetailsEnabled = this.taskDetailsEnabled;
+    this.current = { ...this.current, sampledAt: new Date().toISOString() };
+    for (const id of ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi', 'qwen', 'workbuddy']) { this.current[id] = { ...this.current[id] }; delete this.current[id].taskDetails; }
   }
   setKimiSource(source) {
     if (!isKimiSource(source)) throw new Error('Invalid Kimi source');
@@ -124,6 +132,7 @@ class LocalStatusReader {
   async collect(force) {
     let list;
     try { list = await processes(); } catch { list = null; }
+    const taskGeneration = this.taskGeneration;
     const kimiGeneration = this.kimiGeneration;
     const kimiSource = this.kimiSource;
     const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseek(list, force), this.claudeReader.poll(list), this.zcodeReader.poll(list, Date.now(), force),
@@ -135,6 +144,7 @@ class LocalStatusReader {
       next[id] = result.status === 'fulfilled' ? result.value : {
         ...unavailable(id), task: '本地状态暂不可读', detail: '读取失败，稍后自动重试', connection: 'error' };
       next[id].sampledAt = sampledAt;
+      if (!this.taskDetailsEnabled || taskGeneration !== this.taskGeneration) delete next[id].taskDetails;
       if (id === 'kimi') {
         if (kimiGeneration !== this.kimiGeneration) this.clearKimiCache(kimiSource === 'work' ? this.kimiWorkReader : this.kimiReader);
         next[id] = kimiGeneration === this.kimiGeneration ? { ...next[id], kimiSource } : { ...this.current.kimi, sampledAt };
@@ -156,7 +166,7 @@ class LocalStatusReader {
     let rows = null; let latest = null;
     try {
       ({ rows, latest } = withDatabase(path.join(this.codexHome, 'thread_history_1.sqlite'), (db) => ({
-        rows: db.prepare(`SELECT thread_id, status, started_at,
+        rows: db.prepare(`SELECT thread_id, turn_id, status, started_at,
           (SELECT MAX(created_at_ms) FROM thread_items i WHERE i.thread_id=t.thread_id AND i.turn_id=t.turn_id) AS last_item_at
           FROM thread_turns t WHERE status=? ORDER BY started_at DESC LIMIT 100`).all('inProgress'),
         latest: db.prepare('SELECT status, started_at, completed_at FROM thread_turns ORDER BY started_at DESC LIMIT 1').get(),
@@ -221,6 +231,7 @@ class LocalStatusReader {
     } : { source: official.source, connection: official.connection, quotas: official.quotas, plan: official.plan,
       observedAt: official.observedAt, detail: official.detail };
     return { id: 'codex', ...quotaStatus,
+      ...(this.taskDetailsEnabled ? { taskDetails: codexDetails(this.codexHome, rows || [], attention, detected && list !== null, now) } : {}),
       ...activity,
       attentionAvailable: attention.connected && attention.observedThreads > 0,
       activityDetail: attention.connected && attention.observedThreads > 0 ? '通过 Codex 本地客户端状态通道监看待回答与待授权请求；红灯优先，处理后自动恢复。' : '任务活动来自本地记录；等待提醒通道暂不可用，不能确认是否有待回答或待授权请求。',
@@ -229,7 +240,7 @@ class LocalStatusReader {
   async antigravity(list, force) {
     const now = Date.now();
     const service = list?.find(({ command }) => /antigravity/i.test(command) && /(?:^|\/)language_server(?:\.exe)?$/.test(command));
-    let rows = null; let source = 'unavailable'; let live = false;
+    let rows = null; let source = 'unavailable'; let live = false; let taskDetails = [];
     if (service && this.antigravityRateCache && !this.antigravityRateCache.endpoint.startsWith(`${service.pid}:`)) {
       this.antigravityRateCache = null;
     }
@@ -262,6 +273,7 @@ class LocalStatusReader {
             needQuota ? this.requestLocal(port, token, 'GetUserStatus') : Promise.resolve(null),
           ]);
           if (replies[0].status === 'fulfilled' && replies[0].value?.trajectorySummaries && typeof replies[0].value.trajectorySummaries === 'object') {
+            if (this.taskDetailsEnabled) taskDetails = antigravityDetails(Object.values(replies[0].value.trajectorySummaries), true, now);
             rows = Object.values(replies[0].value.trajectorySummaries).slice(0, 200).map((row) => ({ status: row?.status }));
             live = true; source = 'local-api';
           }
@@ -306,7 +318,7 @@ class LocalStatusReader {
       Object.assign(activity, { activity: 'unknown', task: '仅有任务缓存，当前状态未知' });
     }
     if (list === null) Object.assign(activity, { activity: 'unknown', task: '进程状态暂不可读' });
-    return { id: 'antigravity', source, connection: list === null ? 'error' : live ? 'ready' : service ? 'error' : 'offline',
+    return { id: 'antigravity', ...(this.taskDetailsEnabled ? { taskDetails } : {}), source, connection: list === null ? 'error' : live ? 'ready' : service ? 'error' : 'offline',
       ...activity, quotas, plan: cached ? { ...cached.plan, stale: !service || cached.readFailed || cached.plan.stale || now - cached.at > 1800000 }
         : normalizeAntigravityPlan(null, null, now), observedAt: cached ? new Date(cached.at).toISOString() : null,
       detail: live ? '套餐与额度来自正在运行的本地服务，只显示已识别的产品档位；未返回的套餐与周期不作推测。'
