@@ -13,7 +13,7 @@ const { CodexQuotaReader } = require('./codex-quota.cjs');
 const { ZcodeStatusReader } = require('./zcode-status.cjs');
 const { KimiStatusReader } = require('./kimi-status.cjs');
 const { KimiWorkStatusReader } = require('./kimi-work-status.cjs');
-const { isKimiSource } = require('./window-policy.cjs');
+const { isKimiSource, isClaudeSource } = require('./window-policy.cjs');
 const { QwenStatusReader } = require('./qwen-status.cjs');
 const { WorkBuddyStatusReader } = require('./workbuddy-status.cjs');
 const execute = promisify(execFile);
@@ -85,7 +85,7 @@ class LocalStatusReader {
     deepseekReader = new DeepSeekBalanceReader({ home }),
     deepseekActivityReader = new DeepSeekActivityReader({ home }), claudeReader = new ClaudeStatusReader({ home }),
     zcodeReader = new ZcodeStatusReader({ home }), kimiReader = new KimiStatusReader({ home }),
-    kimiWorkReader = new KimiWorkStatusReader({ home }), kimiSource = 'code',
+    kimiWorkReader = new KimiWorkStatusReader({ home }), kimiSource = 'code', claudeSource = 'desktop',
     qwenReader = new QwenStatusReader({ home }), workbuddyReader = new WorkBuddyStatusReader({ home }),
     codexQuotaReader = new CodexQuotaReader({ home, codexHome }), runCommand = execute, requestLocal = postLocal } = {}) {
     this.home = home;
@@ -99,6 +99,8 @@ class LocalStatusReader {
     this.deepseekReader = deepseekReader;
     this.deepseekActivityReader = deepseekActivityReader;
     this.claudeReader = claudeReader;
+    this.claudeSource = isClaudeSource(claudeSource) ? claudeSource : 'desktop'; this.claudeGeneration = 0;
+    this.claudeReader.setSource?.(this.claudeSource);
     this.zcodeReader = zcodeReader; this.kimiReader = kimiReader;
     this.kimiWorkReader = kimiWorkReader; this.kimiSource = isKimiSource(kimiSource) ? kimiSource : 'code'; this.kimiGeneration = 0;
     this.qwenReader = qwenReader; this.workbuddyReader = workbuddyReader;
@@ -120,6 +122,14 @@ class LocalStatusReader {
     this.current = { ...this.current, kimi: { ...unavailable('kimi'), kimiSource: source,
       task: '正在核对所选客户端', detail: '来源已切换，等待新的套餐和额度。' } };
   }
+  setClaudeSource(source) {
+    if (!isClaudeSource(source)) throw new Error('Invalid Claude source');
+    if (source === this.claudeSource) return;
+    this.claudeSource = source; this.claudeGeneration++;
+    this.claudeReader.setSource(source);
+    this.current = { ...this.current, claude: { ...unavailable('claude'), claudeSource: source,
+      task: '正在核对所选客户端', detail: '来源已切换，等待新的套餐和额度。' } };
+  }
   clearKimiCache(reader) {
     reader.cache = null; reader.planCache = null;
     if (reader.error !== 'rate') reader.nextAt = 0;
@@ -135,6 +145,7 @@ class LocalStatusReader {
     const taskGeneration = this.taskGeneration;
     const kimiGeneration = this.kimiGeneration;
     const kimiSource = this.kimiSource;
+    const claudeGeneration = this.claudeGeneration, claudeSource = this.claudeSource;
     const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseek(list, force), this.claudeReader.poll(list), this.zcodeReader.poll(list, Date.now(), force),
       kimiSource === 'work' ? this.kimiWorkReader.poll(list, Date.now(), force) : this.kimiReader.poll(list), this.qwenReader.poll(list, force), this.workbuddyReader.poll(list, force)]);
     const sampledAt = new Date().toISOString();
@@ -149,6 +160,8 @@ class LocalStatusReader {
         if (kimiGeneration !== this.kimiGeneration) this.clearKimiCache(kimiSource === 'work' ? this.kimiWorkReader : this.kimiReader);
         next[id] = kimiGeneration === this.kimiGeneration ? { ...next[id], kimiSource } : { ...this.current.kimi, sampledAt };
       }
+      if (id === 'claude') next[id] = claudeGeneration === this.claudeGeneration
+        ? { ...next[id], claudeSource } : { ...this.current.claude, sampledAt };
     }
     this.current = next;
     return next;

@@ -88,6 +88,28 @@ test('Antigravity fractions preserve tenths and discard identity, payload and mo
   assert.equal(normalizeAntigravityQuotas(payload, now, now + QUOTA_FRESH_MS + 1)[0].stale, true);
 });
 
+test('Antigravity ProtoJSON omitted zero requires a valid quota reset, while missing or malformed data stays unknown', () => {
+  const resetTime = new Date(now + 60000).toISOString();
+  const configs = [
+    { label: 'A depleted', quotaInfo: { resetTime } },
+    { label: 'B explicit zero', quotaInfo: { remainingFraction: 0 } },
+    { label: 'C missing message' },
+    { label: 'D empty message', quotaInfo: {} },
+    { label: 'E invalid reset', quotaInfo: { resetTime: 'not-a-time' } },
+    { label: 'F explicit null', quotaInfo: { remainingFraction: null, resetTime } },
+    { label: 'G invalid fraction', quotaInfo: { remainingFraction: -1, resetTime } },
+    { label: 'H explicit string', quotaInfo: { remainingFraction: '0', resetTime } },
+    { label: 'I stale depleted', quotaInfo: { resetTime: new Date(now - 1000).toISOString() } },
+  ];
+  const payload = { userStatus: { cascadeModelConfigData: { clientModelConfigs: configs } } };
+  const rows = normalizeAntigravityQuotas(payload, now, now);
+  assert.deepEqual(rows.map(row => row.remaining), [0, 0, null, null, null, null, null, null, 0]);
+  assert.equal(rows[0].reset, resetTime);
+  assert.equal(rows[0].stale, false);
+  assert.equal(rows.at(-1).stale, true);
+  assert.equal(normalizeAntigravityQuotas(payload, now - QUOTA_FRESH_MS - 1, now)[0].stale, true);
+});
+
 test('Antigravity recognizes only explicit running states; unknown and cached flags are not green', () => {
   assert.equal(normalizeAntigravityActivity([{ status: 'CASCADE_RUN_STATUS_IDLE' }], true).activity, 'idle');
   assert.equal(normalizeAntigravityActivity([{ status: 'CASCADE_RUN_STATUS_RUNNING' }, { status: 'CASCADE_RUN_STATUS_RUNNING', killed: 1 }], true).activeTasks, 1);

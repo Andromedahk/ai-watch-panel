@@ -5,13 +5,15 @@ const { traySummary } = require('./tray-summary.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isLayout, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
 const { requestKimiWorkSubscription } = require('./kimi-work-api.cjs');
 const { requestZcodeJson } = require('./zcode-account-api.cjs');
 const { WindowLayout } = require('./window-layout.cjs');
 const { taskDetail } = require('./task-details.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
 const { ProviderLauncher } = require('./provider-launcher.cjs');
+const { cleanupOrphanedHelpers } = require('./orphan-helpers.cjs');
+const { clearStartupDiskCaches, clearSessionCaches } = require('./app-cache.cjs');
 const statusReader = new LocalStatusReader();
 // Electron's network stack follows the system proxy. The API reader owns the fixed URL.
 statusReader.kimiWorkReader.request = token => requestKimiWorkSubscription(token, { transport: electronTransport(net) });
@@ -36,6 +38,7 @@ async function refreshLocalStatus(force = false) {
     statusSnapshot.sampledAt = new Date().toISOString();
     for (const id of PROVIDER_ORDER) statusSnapshot[id].sampledAt = statusSnapshot.sampledAt;
     statusSnapshot.kimi.kimiSource = preferences.kimiSource;
+    statusSnapshot.claude.claudeSource = preferences.claudeSource;
     if (preferences.kimiSource === 'work') Object.assign(statusSnapshot.kimi, {
       activity: 'unknown', activeTasks: 0, waitingTasks: 0, task: '合成测试 · Work 活动未知',
       quotas: [{ model: '共享积分', period: '订阅额度', remaining: 75, reset: '2099-01-01T00:00:00Z', resetKind: 'expiry' },
@@ -86,7 +89,7 @@ function buildApplicationMenu() {
 }
 function currentState() {
   const display = screen.getDisplayMatching(window.getBounds());
-  const { providerApps: _privateLaunchPaths, kimiWorkApp: _privateWorkPath, ...publicPreferences } = preferences;
+  const { providerApps: _privateLaunchPaths, kimiWorkApp: _privateWorkPath, cacheCleanupPending: _cacheFlag, ...publicPreferences } = preferences;
   return { ...publicPreferences, collapsed, desktop: true, platform: process.platform,
     trayAvailable: panelTray?.available === true, stored: panelTray?.stored === true,
     resolvedLanguage: currentLanguage().language,
@@ -162,9 +165,22 @@ function handle(channel, callback) {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { void panelTray?.restore(); });
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    await cleanupOrphanedHelpers({ packaged: app.isPackaged });
     preferences = readPreferences();
+    if (preferences.cacheCleanupPending) {
+      try {
+        await clearStartupDiskCaches({ userData: app.getPath('userData') });
+        preferences.cacheCleanupPending = false; savePreferences();
+      } catch {
+        // Cache maintenance is optional. A rejected profile root or transient
+        // failure must not prevent startup; retain the request for a safe retry.
+        preferences.cacheCleanupPending = true;
+      }
+    }
+    statusReader.claudeReader.setDesktopPlanCacheFile(path.join(app.getPath('userData'), 'claude-desktop-plan.json'));
     statusReader.setKimiSource(preferences.kimiSource);
+    statusReader.setClaudeSource(preferences.claudeSource);
     statusReader.qwenReader.setKeychainAllowed(!fixtureMode && preferences.qwenKeychainAllowed);
     nativeTheme.themeSource = preferences.theme;
     const display = screen.getPrimaryDisplay();
@@ -222,6 +238,12 @@ else {
     screen.on('display-removed', (_event, display) => { displayLayouts.delete(display.id); dock(); });
     handle('panel:state', currentState);
     handle('panel:status', () => statusSnapshot);
+    handle('panel:clear-cache', async () => {
+      const result = await clearSessionCaches({ session: window.webContents.session });
+      if (!result.cleared.length) throw new Error('Cache cleanup unavailable');
+      preferences.cacheCleanupPending = true; savePreferences();
+      return { freedBytes: result.freedBytes };
+    });
     handle('panel:refresh', () => refreshLocalStatus(true));
     handle('panel:lock', (value) => {
       if (typeof value !== 'boolean') throw new Error('Invalid lock state');
@@ -248,7 +270,7 @@ else {
     });
     handle('panel:configure', (value) => {
       const next = validPreferences({ ...value, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
-        kimiSource: preferences.kimiSource, kimiWorkApp: preferences.kimiWorkApp, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
+        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -313,6 +335,24 @@ else {
       if (!fixtureMode) void refreshLocalStatus().catch(() => {});
       return currentState();
     });
+    handle('panel:claude-activity-access', async () => {
+      if (!fixtureMode && preferences.claudeSource === 'desktop') await statusReader.claudeReader.requestActivityAccess();
+      return refreshLocalStatus(true);
+    });
+    handle('panel:claude-source', async (value) => {
+      if (!isClaudeSource(value)) throw new Error('Invalid Claude source');
+      const previous = preferences.claudeSource;
+      preferences.claudeSource = value;
+      try { savePreferences(); } catch (error) { preferences.claudeSource = previous; throw error; }
+      const pending = statusReader.pending;
+      statusReader.setClaudeSource(value);
+      statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), claude: statusReader.current.claude };
+      window.webContents.send('panel:status-changed', statusSnapshot);
+      emitState();
+      if (pending) await pending.catch(() => {});
+      await refreshLocalStatus(true);
+      return currentState();
+    });
     handle('panel:kimi-source', async (value) => {
       if (!isKimiSource(value)) throw new Error('Invalid Kimi source');
       const previous = preferences.kimiSource;
@@ -354,5 +394,10 @@ else {
     app.on('activate', () => { void panelTray.restore(); });
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { panelTray?.dispose(); clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance); statusReader.codexAttention.close(); statusReader.codexQuotaReader.close(); });
+  app.on('before-quit', () => {
+    panelTray?.dispose(); clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance);
+    statusReader.codexAttention.close(); statusReader.codexQuotaReader.close();
+    // Tear down Chromium's window/IPC while the host is still alive.
+    if (window && !window.isDestroyed()) window.destroy();
+  });
 }

@@ -29,6 +29,7 @@ function migrateEnabled(value) {
 }
 const isTheme = value => ['system', 'light', 'dark'].includes(value);
 const isKimiSource = value => ['code', 'work'].includes(value);
+const isClaudeSource = value => ['desktop', 'code'].includes(value);
 const isLayout = value => ['single', 'double', 'fullscreen'].includes(value);
 function isProviderOrder(value) {
   return Array.isArray(value) && value.length === PROVIDER_ORDER.length
@@ -71,6 +72,8 @@ function validPreferences(value) {
     theme: isTheme(value?.theme) ? value.theme : 'system',
     qwenKeychainAllowed: value?.qwenKeychainAllowed === true,
     kimiSource: isKimiSource(value?.kimiSource) ? value.kimiSource : 'code',
+    claudeSource: isClaudeSource(value?.claudeSource) ? value.claudeSource : 'desktop',
+    cacheCleanupPending: value?.cacheCleanupPending === true,
     kimiWorkApp: validProviderApps({ kimi: value?.kimiWorkApp }).kimi || null,
     animeMode: value?.animeMode === true,
     layout: isLayout(value?.layout) ? value.layout : 'single',
@@ -81,4 +84,4 @@ function validPreferences(value) {
   };
 }
 
-module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isLayout, isProviderOrder, isEnabledProviders, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };
+module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };

@@ -26,7 +26,7 @@
 
 ## Claude、Kimi Code 与 ZCode
 
-Claude 按官方 [认证说明](https://code.claude.com/docs/en/authentication)，仅从可用的文件型 Code 登录记录提取明确套餐元数据；桌面客户端的加密登录信息不在本轮新增读取范围内。只有桌面登录而没有可读字段时，套餐显示未知。缺少额度时的提示不再自动认定账户为 Free。
+Claude 在设置中选择 Desktop 或 Code，套餐和状态分别读取，来源切换清除旧数据。Code 按官方 [认证说明](https://code.claude.com/docs/en/authentication)，从有效的已有文件型登录记录提取明确档位；Desktop 读取当前账号、组织及登录会话匹配的本地套餐元数据，并可通过辅助功能读取账号菜单中的明确档位。被缓存的桌面档位显示“历史”，无可信记录仍显示未知；不解密登录材料、不根据缺失额度判断 Free。普通聊天活动只识别发送 / 停止按钮，需要辅助功能授权。详见 README 中的来源范围与限制。
 
 Kimi Code 沿用本设备已有 OAuth 登录，查询官方 `/coding/v1/me` 的产品档位；与额度接口独立处理网络失败。退出、换号、请求期间登录变化和鉴权失败会清除旧数据，限流遵守退避。仅提取白名单套餐，不传出用户身份或原始查询响应。接口结构来自官方 [managed-userinfo 源码](https://github.com/MoonshotAI/kimi-code/blob/21406fb4c805cc8c715e6d1f16ad3fb5f25f4fe3/packages/oauth/src/managed-userinfo.ts)，产品名称参考 [Kimi 会员说明](https://www.kimi.com/en/help/membership/membership-overview)。
 

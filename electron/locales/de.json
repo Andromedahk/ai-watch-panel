@@ -419,5 +419,16 @@
   "开始任务": "Aufgabe gestartet",
   "结束任务": "Aufgabe beendet",
   "确认已处理": "Bestätigung bearbeitet",
-  "工具已返回": "Werkzeugantwort"
+  "工具已返回": "Werkzeugantwort",
+  "Claude 数据来源": "Claude-Datenquelle",
+  "Claude 来源已保存": "Claude-Quelle gespeichert",
+  "来源切换失败，请重试": "Quelle konnte nicht geändert werden. Bitte erneut versuchen.",
+  "桌面版与 Code 分开读取，切换后清除上个来源的套餐和状态。": "Desktop und Code werden getrennt gelesen. Beim Wechsel werden Tarif und Aktivität der vorherigen Quelle gelöscht.",
+  "识别桌面活动（辅助功能）": "Desktop-Aktivität erkennen (Bedienungshilfen)",
+  "仅识别发送和停止按钮；需要系统辅助功能授权，不读取聊天正文。": "Erkennt nur Senden- und Stopp-Schaltflächen. Systemzugriff für Bedienungshilfen ist erforderlich; Chatinhalte werden nicht gelesen.",
+  "缓存维护": "Cache-Verwaltung",
+  "清理缓存": "Cache leeren",
+  "已清理缓存 · {p0} MB": "Cache geleert · {p0} MB",
+  "缓存清理失败，请重试": "Cache konnte nicht geleert werden. Bitte erneut versuchen.",
+  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Leert Render- und Netzwerk-Caches und erhält Einstellungen und Bilder. Übrige Festplatten-Caches werden beim nächsten Start geleert."
 }

@@ -26,7 +26,7 @@ test('Claude resolves portable default and configured directories without fixed 
   assert.equal(resolveClaudePaths({ home: '/fixture', env: { CLAUDE_CONFIG_DIR: '~/custom', CLAUDE_USER_DATA_DIR: '~/desktop' } }).config, '/fixture/custom');
 });
 
-test('Claude validates live PIDs, activity freshness, desktop/terminal surfaces and strips private fields', async () => {
+test('Claude Code validates terminal PIDs and freshness while excluding desktop Code sessions', async () => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-claude-'));
   try {
     const reader = new ClaudeStatusReader({ home, env: {} });
@@ -39,8 +39,8 @@ test('Claude validates live PIDs, activity freshness, desktop/terminal surfaces 
     await put(10, 'busy', 'claude-desktop'); await put(20, 'waiting', 'cli'); await put(30, 'busy', 'cli');
     const processes = [{ pid: 10, command: '/app/claude' }, { pid: 20, command: '/fixture/.local/share/claude/versions/2.1.287' }, { pid: 30, command: '/app/unrelated' }];
     let result = await reader.poll(processes, now);
-    assert.equal(result.activeTasks, 1); assert.equal(result.activity, 'running');
-    assert.match(result.surfaces.desktop, /1 个/); assert.match(result.surfaces.terminal, /1 个/);
+    assert.equal(result.activeTasks, 0); assert.equal(result.activity, 'waiting');
+    assert.match(result.surfaces.desktop, /独立接入/); assert.match(result.surfaces.terminal, /1 个/);
     assert.ok(!JSON.stringify(result).includes('PRIVATE'));
     await put(10, 'idle', 'claude-desktop');
     assert.equal((await reader.poll(processes, now)).activity, 'waiting');
@@ -56,14 +56,15 @@ test('Claude validates live PIDs, activity freshness, desktop/terminal surfaces 
 test('Claude Free-compatible missing records stay unknown, read-only and never use demo quota', async () => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-claude-empty-'));
   try {
-    const reader = new ClaudeStatusReader({ home, env: {} });
+    const reader = new ClaudeStatusReader({ home, env: {}, source: 'desktop', desktopActivityReader: async () => ({ activity: 'unknown', trusted: false, supported: true, plan: null }) });
     const result = await reader.poll([{ pid: 1, command: '/app/Claude' }], now);
     assert.equal(result.activity, 'unknown'); assert.deepEqual(result.quotas, []); assert.equal(result.activeTasks, 0);
     assert.match(result.detail, /Free/); assert.deepEqual(await fs.readdir(home), []);
     const dir = reader.paths.desktop; await fs.mkdir(dir, { recursive: true });
     const file = path.join(dir, 'plan-usage-history.json');
     const content = JSON.stringify({ version: 2, samples: [{ t: now, u: { fh: 30 } }] }); await fs.writeFile(file, content);
-    assert.equal((await reader.poll([], now)).quotas[0].remaining, 70);
+    // A detached usage file cannot establish the current logged-in account.
+    assert.deepEqual((await reader.poll([], now)).quotas, []);
     assert.equal(await fs.readFile(file, 'utf8'), content);
     await fs.unlink(file); assert.deepEqual((await reader.poll([], now)).quotas, []);
   } finally { await fs.rm(home, { recursive: true, force: true }); }

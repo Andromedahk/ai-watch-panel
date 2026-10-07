@@ -4,6 +4,7 @@ export type Theme = 'system' | 'light' | 'dark';
 export type Layout = 'single' | 'double' | 'fullscreen';
 export type TaskDetail = { title: string | null; state: 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled' | 'unknown' | 'idle'; updatedAt: string | null; stale: boolean; source: 'cache' | 'local-api'; operation: string | null; steps: number | null; toolCalls: number | null; progress: number | null };
 export type KimiSource = 'code' | 'work';
+export type ClaudeSource = 'desktop' | 'code';
 export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: boolean };
 export type PanelState = Preferences & {
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
@@ -12,6 +13,7 @@ export type PanelState = Preferences & {
   enabledProviders: ProviderId[];
   qwenKeychainAllowed: boolean;
   kimiSource: KimiSource;
+  claudeSource: ClaudeSource;
   animeMode: boolean; layout: Layout; windowLayout: 'single' | 'double';
   language: Language; resolvedLanguage?: Exclude<Language, 'system'>;
   theme: Theme; resolvedTheme: 'light' | 'dark';
@@ -27,7 +29,9 @@ export type LocalProviderStatus = {
   task: string; quotas: Quota[]; observedAt: string | null; sampledAt: string | null; detail: string;
   waitingTasks?: number; waitingReason?: 'input' | 'approval' | 'both'; attentionAvailable?: boolean;
   accessRequired?: boolean;
+  activityAccessRequired?: boolean;
   kimiSource?: KimiSource;
+  claudeSource?: ClaudeSource;
   activityDetail?: string; activityObservedAt?: string | null;
   taskDetails?: TaskDetail[];
   surfaces?: { desktop: string; terminal: string };
@@ -55,6 +59,9 @@ declare global {
       setEnabled(ids: ProviderId[]): Promise<PanelState>;
       setQwenAccess(allowed: boolean): Promise<PanelState>;
       setKimiSource(source: KimiSource): Promise<PanelState>;
+      setClaudeSource(source: ClaudeSource): Promise<PanelState>;
+      requestClaudeActivityAccess(): Promise<LocalStatus>;
+      clearCache(): Promise<{ freedBytes: number }>;
       setAnimeMode(enabled: boolean): Promise<PanelState>;
       openProvider(provider: ProviderId): Promise<{ status: 'opened' | 'missing' | 'unsupported' | 'error' | 'test'; message: string }>;
       chooseProviderApp(provider: ProviderId): Promise<{ status: 'selected' | 'cancelled' | 'error'; message: string }>;

@@ -419,5 +419,16 @@
   "开始任务": "Bắt đầu tác vụ",
   "结束任务": "Kết thúc tác vụ",
   "确认已处理": "Đã xử lý xác nhận",
-  "工具已返回": "Công cụ trả kết quả"
+  "工具已返回": "Công cụ trả kết quả",
+  "Claude 数据来源": "Nguồn dữ liệu Claude",
+  "Claude 来源已保存": "Đã lưu nguồn Claude",
+  "来源切换失败，请重试": "Không thể đổi nguồn. Hãy thử lại.",
+  "桌面版与 Code 分开读取，切换后清除上个来源的套餐和状态。": "Desktop và Code được đọc riêng. Chuyển nguồn sẽ xóa gói và hoạt động của nguồn trước.",
+  "识别桌面活动（辅助功能）": "Nhận diện hoạt động Desktop (Trợ năng)",
+  "仅识别发送和停止按钮；需要系统辅助功能授权，不读取聊天正文。": "Chỉ nhận diện nút gửi và dừng. Cần quyền Trợ năng của hệ thống; không đọc nội dung trò chuyện.",
+  "缓存维护": "Quản lý bộ nhớ đệm",
+  "清理缓存": "Xóa bộ nhớ đệm",
+  "已清理缓存 · {p0} MB": "Đã xóa bộ nhớ đệm · {p0} MB",
+  "缓存清理失败，请重试": "Không thể xóa bộ nhớ đệm. Hãy thử lại.",
+  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Xóa bộ nhớ đệm hiển thị và mạng, giữ lại cài đặt và hình ảnh. Bộ nhớ đệm trên đĩa còn lại sẽ được xóa vào lần mở tiếp theo."
 }

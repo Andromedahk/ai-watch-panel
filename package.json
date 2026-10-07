@@ -1,6 +1,6 @@
 {
   "name": "ai-watch-panel",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "description": "A cross-platform vertical AI activity and quota panel",
   "private": true,
   "type": "module",
@@ -29,7 +29,8 @@
     "test:live-kimi-zcode": "node scripts/verify-live-kimi-zcode.mjs",
     "test:quotas": "node scripts/verify-codex-quota.mjs",
     "test:i18n": "node scripts/verify-i18n.mjs",
-    "test:layouts": "node scripts/verify-layouts.mjs"
+    "test:layouts": "node scripts/verify-layouts.mjs",
+    "test:resources": "node scripts/verify-resources.mjs"
   },
   "dependencies": {
     "big.js": "^7.0.1",

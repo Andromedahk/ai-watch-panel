@@ -2,7 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const net = require('node:net');
 const { randomUUID } = require('node:crypto');
-const MAX_FRAME = 16 * 1024 * 1024;
+const { JsonFrameDecoder } = require('./json-frame-decoder.cjs');
 const MAX_REQUESTS = 256;
 const INPUT = new Set(['item/tool/requestUserInput', 'item/tool/requestOptionPicker']);
 const APPROVAL = new Set(['item/commandExecution/requestApproval', 'item/fileChange/requestApproval',
@@ -54,7 +54,7 @@ function summarizeAttention(states) {
 class CodexAttentionReader {
   constructor({ codexHome, connect = net.createConnection, platform = process.platform } = {}) {
     this.endpoint = path.join(codexHome, 'ipc', 'ipc.sock'); this.connect = connect; this.platform = platform;
-    this.socket = null; this.client = null; this.buffer = Buffer.alloc(0); this.states = new Map();
+    this.socket = null; this.client = null; this.decoder = new JsonFrameDecoder(); this.states = new Map();
     this.wanted = new Set(); this.subscribed = new Set(); this.lastSnapshotRequest = new Map(); this.retryAt = 0;
   }
   async poll(threadIds, available, now = Date.now()) {
@@ -79,16 +79,10 @@ class CodexAttentionReader {
       socket.on('data', chunk => {
         if (this.socket !== socket) return;
         try {
-          this.buffer = Buffer.concat([this.buffer, chunk]);
-          while (this.buffer.length >= 4) {
-            const size = this.buffer.readUInt32LE(0);
-            if (!size || size > MAX_FRAME) throw new Error('Invalid frame');
-            if (this.buffer.length < size + 4) break;
-            const message = JSON.parse(this.buffer.subarray(4, size + 4).toString('utf8'));
-            this.buffer = this.buffer.length === size + 4 ? Buffer.alloc(0) : this.buffer.subarray(size + 4);
+          this.decoder.feed(chunk, message => {
             this.handle(message);
             if (this.client) clearTimeout(deadline);
-          }
+          });
         } catch { this.close(); }
       });
       socket.on('error', () => { if (this.socket === socket) this.close(); });
@@ -137,7 +131,7 @@ class CodexAttentionReader {
     }
   }
   close() {
-    const socket = this.socket; this.socket = null; this.client = null; this.buffer = Buffer.alloc(0);
+    const socket = this.socket; this.socket = null; this.client = null; this.decoder.reset();
     this.states.clear(); this.subscribed.clear(); this.lastSnapshotRequest.clear(); socket?.destroy();
   }
 }

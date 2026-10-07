@@ -419,5 +419,16 @@
   "开始任务": "Task started",
   "结束任务": "Task ended",
   "确认已处理": "Confirmation handled",
-  "工具已返回": "Tool returned"
+  "工具已返回": "Tool returned",
+  "Claude 数据来源": "Claude data source",
+  "Claude 来源已保存": "Claude source saved",
+  "来源切换失败，请重试": "Unable to change source. Try again.",
+  "桌面版与 Code 分开读取，切换后清除上个来源的套餐和状态。": "Desktop and Code are read separately. Switching clears the previous source’s plan and activity.",
+  "识别桌面活动（辅助功能）": "Detect desktop activity (Accessibility)",
+  "仅识别发送和停止按钮；需要系统辅助功能授权，不读取聊天正文。": "Detects only Send and Stop controls. Requires system Accessibility access; chat content is not read.",
+  "缓存维护": "Cache maintenance",
+  "清理缓存": "Clear cache",
+  "已清理缓存 · {p0} MB": "Cache cleared · {p0} MB",
+  "缓存清理失败，请重试": "Unable to clear cache. Try again.",
+  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Clears rendering and network caches. Settings and images are preserved; remaining disk caches are cleared on next launch."
 }

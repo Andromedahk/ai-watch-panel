@@ -419,5 +419,16 @@
   "开始任务": "Tâche démarrée",
   "结束任务": "Tâche terminée",
   "确认已处理": "Confirmation traitée",
-  "工具已返回": "Réponse de l’outil"
+  "工具已返回": "Réponse de l’outil",
+  "Claude 数据来源": "Source des données Claude",
+  "Claude 来源已保存": "Source Claude enregistrée",
+  "来源切换失败，请重试": "Impossible de changer de source. Réessayez.",
+  "桌面版与 Code 分开读取，切换后清除上个来源的套餐和状态。": "Desktop et Code sont lus séparément. Le changement efface l’offre et l’activité de la source précédente.",
+  "识别桌面活动（辅助功能）": "Détecter l’activité Desktop (Accessibilité)",
+  "仅识别发送和停止按钮；需要系统辅助功能授权，不读取聊天正文。": "Détecte uniquement les boutons d’envoi et d’arrêt. Nécessite l’autorisation d’accessibilité du système ; le contenu des discussions n’est pas lu.",
+  "缓存维护": "Entretien du cache",
+  "清理缓存": "Vider le cache",
+  "已清理缓存 · {p0} MB": "Cache vidé · {p0} MB",
+  "缓存清理失败，请重试": "Impossible de vider le cache. Réessayez.",
+  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Vide les caches de rendu et de réseau, en conservant les réglages et images. Le cache disque restant sera vidé au prochain lancement."
 }
