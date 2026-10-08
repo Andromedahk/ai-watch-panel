@@ -93,6 +93,24 @@ try {
   assert.match(spectrum.background, /conic-gradient/);
   assert.equal(spectrum.willChange, 'transform');
   assert.deepEqual(spectrum.declarations, ['transform']);
+  // Only an explicit permission denial may request another grant. Execution
+  // failures and granted-but-unreadable windows need distinct user feedback.
+  const snapshot = await page.evaluate(() => window.panel.getStatus());
+  for (const [access, error, expected] of [
+    ['granted', 'timeout', '已授权，暂无法读取活动'],
+    ['unknown', 'invalid-output', '活动读取失败'],
+    ['denied', undefined, '待授权'],
+  ]) {
+    const status = { ...snapshot, claude: { ...snapshot.claude, activity: 'unknown', activeTasks: 0,
+      activityAccessState: access, activityAccessRequired: access === 'denied', activityProbeError: error } };
+    await app.evaluate(({ BrowserWindow }, value) => {
+      BrowserWindow.getAllWindows()[0].webContents.send('panel:status-changed', value);
+    }, status);
+    await expect(claude.locator('.task-line')).toContainText(expected);
+    if (access !== 'denied') await expect(claude.locator('.task-line')).not.toContainText('待授权');
+  }
+  await page.evaluate(() => window.panel.refreshStatus());
+  await expect(avatar).toHaveAttribute('data-glow', 'running');
   await sampleCpu('single-visible');
 
   await page.locator('.provider-viewport').evaluate(element => { element.scrollTop = element.scrollHeight; });
@@ -135,6 +153,12 @@ try {
     ClaudeStatusReader.prototype.requestActivityAccess = async () => {
       global.aiWatchResourceAxRequests++; throw new Error('Fixture attempted a real activity request');
     };
+    global.aiWatchResourceNetworkEnables = 0;
+    const setNetworkAllowed = ClaudeStatusReader.prototype.setNetworkAllowed;
+    ClaudeStatusReader.prototype.setNetworkAllowed = function (allowed) {
+      if (allowed) { global.aiWatchResourceNetworkEnables++; throw new Error('Fixture enabled real credential access'); }
+      return setNetworkAllowed.call(this, allowed);
+    };
   }, path.resolve('electron/claude-status.cjs'));
   await page.getByRole('button', { name: '打开配置', exact: true }).click();
   await expect.poll(() => pseudoAnimation(avatar)).toEqual({ name: 'logo-breathe', state: 'paused', duration: '5s' });
@@ -142,6 +166,26 @@ try {
   await expect(source.getByRole('button', { name: 'Claude Desktop', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '识别桌面活动（辅助功能）', exact: true }).click();
   assert.equal(await app.evaluate(() => global.aiWatchResourceAxRequests), 0);
+  const networkSwitch = page.getByRole('checkbox', { name: '联网查询 Claude 额度', exact: true });
+  await expect(networkSwitch).not.toBeChecked();
+  // The controlled input updates after asynchronous IPC saves the preference.
+  // Click the real control, then verify both renderer and saved state after IPC.
+  await networkSwitch.click();
+  await expect.poll(() => page.evaluate(() => window.panel.getState()).then(value => value.claudeNetworkAllowed)).toBe(true);
+  await expect(networkSwitch).toBeChecked();
+  assert.equal(JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).claudeNetworkAllowed, true);
+  assert.equal(await app.evaluate(() => global.aiWatchResourceNetworkEnables), 0);
+  assert.equal((await page.evaluate(() => window.panel.getStatus())).isTestData, true);
+  for (const invalid of ['true', 1, null, {}, [true]]) {
+    assert.equal(await page.evaluate(async value => {
+      try { await window.panel.setClaudeNetworkAccess(value); return false; } catch { return true; }
+    }, invalid), true);
+  }
+  await page.evaluate(async () => {
+    const state = await window.panel.getState();
+    await window.panel.configure({ side: state.side, locked: state.locked, animate: state.animate, claudeNetworkAllowed: false });
+  });
+  assert.equal((await page.evaluate(() => window.panel.getState())).claudeNetworkAllowed, true);
   await source.getByRole('button', { name: 'Claude Code', exact: true }).click();
   await expect(source.getByRole('button', { name: 'Claude Code', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(claude.locator('h2')).toHaveText('Claude Code');
@@ -185,8 +229,14 @@ try {
   assert.equal(await readFile(path.join(profile, 'claude-desktop-plan.json'), 'utf8'), 'KEEP');
   await expect(page.locator('.provider-card[data-provider="claude"] h2')).toHaveText('Claude Code');
   assert.equal((await page.evaluate(() => window.panel.getState())).claudeSource, 'code');
+  assert.equal((await page.evaluate(() => window.panel.getState())).claudeNetworkAllowed, true);
   await page.getByRole('button', { name: '打开配置', exact: true }).click();
   await expect(page.locator('.segmented[aria-label="Claude 数据来源"]').getByRole('button', { name: 'Claude Code', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('checkbox', { name: '联网查询 Claude 额度', exact: true })).toBeChecked();
+  await page.getByRole('checkbox', { name: '联网查询 Claude 额度', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.panel.getState()).then(value => value.claudeNetworkAllowed)).toBe(false);
+  await expect(page.getByRole('checkbox', { name: '联网查询 Claude 额度', exact: true })).not.toBeChecked();
+  assert.equal(JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).claudeNetworkAllowed, false);
   await closeAndVerify();
 
   // A protected root must still be refused by disk cleanup, without preventing
@@ -211,8 +261,8 @@ try {
   await mkdir('.local/qa/resources', { recursive: true });
   await writeFile('.local/qa/resources/report.json', JSON.stringify({
     syntheticFixture: true, checks: ['visible breathing', 'offscreen pause with active indication', 'scroll resume',
-      'compositor spectrum transform', 'stored pause', 'restore resume', 'Claude source UI and invalid IPC',
-      'fixture activity access bypass', 'source persistence', 'cache button preserves settings/storage/plan', 'deferred disk cache cleanup',
+      'compositor spectrum transform', 'stored pause', 'restore resume', 'Claude source UI and invalid IPC', 'Claude permission versus read failure feedback',
+      'fixture activity access bypass', 'Claude network UI/persistence/strict IPC/fixture isolation', 'source persistence', 'cache button preserves settings/storage/plan', 'deferred disk cache cleanup',
       'rejected cache root preserves startup/settings/storage/plan', 'main and helper exit'],
     processAudits, metrics,
   }, null, 2));

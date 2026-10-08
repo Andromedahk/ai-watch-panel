@@ -38,7 +38,8 @@ static const char *const send_labels[] = {
 };
 static const char *const composer_labels[] = {
   "Reply to Claude...", "Reply to Claude…", "Message Claude...", "Message Claude…", "回复 Claude...", "回复 Claude…", "回覆 Claude...", "回覆 Claude…",
-  "How can I help you today?", "今天我能帮您什么？", "今天我能幫您什麼？", "向 Claude 发送消息", "向 Claude 發送訊息"
+  "How can I help you today?", "今天我能帮您什么？", "今天我能幫您什麼？", "向 Claude 发送消息", "向 Claude 發送訊息",
+  "输入您发送给 Claude 的提示词"
 };
 static const char *badge_plan(const char *text) {
   // Exact account-plan badges only. Marketing copy (upgrade, billing cancellation,
@@ -98,6 +99,33 @@ static void inspect(AXUIElementRef element, unsigned int depth, bool in_account,
   }
   if (children != NULL) CFRelease(children);
 }
+static void inspect_application(AXUIElementRef app, struct observation *state) {
+  // Electron documents this application attribute for third-party accessibility
+  // clients. Unsupported targets reject it; never disable another client's tree.
+  // The existing trust/PID checks run before this function. This toggles only tree
+  // exposure and never invokes an action or reads an editable element's value.
+  (void)AXUIElementSetAttributeValue(app, CFSTR("AXManualAccessibility"), kCFBooleanTrue);
+  if (monotonic() >= state->deadline) { state->complete = false; return; }
+
+  // AXApplication.AXChildren may omit the web window or list an expensive menu
+  // tree first. Visit its dedicated windows list instead, sharing the one global
+  // deadline/node budget; use AXChildren only if no windows list is available.
+  CFTypeRef windows = NULL;
+  AXError result = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute, &windows);
+  bool has_windows = result == kAXErrorSuccess && windows != NULL
+    && CFGetTypeID(windows) == CFArrayGetTypeID() && CFArrayGetCount((CFArrayRef)windows) > 0;
+  if (has_windows) {
+    CFIndex count = CFArrayGetCount((CFArrayRef)windows);
+    for (CFIndex index = 0; index < count; index++) {
+      if (monotonic() >= state->deadline || state->visited >= 1600) { state->complete = false; break; }
+      CFTypeRef window = CFArrayGetValueAtIndex((CFArrayRef)windows, index);
+      if (window != NULL && CFGetTypeID(window) == AXUIElementGetTypeID()) inspect((AXUIElementRef)window, 0, false, state);
+      else state->complete = false;
+    }
+  } else if (monotonic() < state->deadline) inspect(app, 0, false, state);
+  else state->complete = false;
+  if (windows != NULL) CFRelease(windows);
+}
 int main(int argc, char **argv) {
   bool request = argc == 2 && strcmp(argv[1], "--request-access") == 0;
   bool trusted;
@@ -118,7 +146,7 @@ int main(int argc, char **argv) {
   AXUIElementRef app = AXUIElementCreateApplication((pid_t)number);
   (void)AXUIElementSetMessagingTimeout(app, 0.05f);
   struct observation state = { false, false, false, true, NULL, 0, monotonic() + 0.75 };
-  inspect(app, 0, false, &state); CFRelease(app);
+  inspect_application(app, &state); CFRelease(app);
   const char *activity = state.stop ? "running"
     : state.complete && (state.send || state.composer) && !state.stop ? "idle" : "unknown";
   (void)printf("{\"trusted\":true,\"activity\":\"%s\",\"plan\":", activity);

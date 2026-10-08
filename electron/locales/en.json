@@ -430,5 +430,19 @@
   "清理缓存": "Clear cache",
   "已清理缓存 · {p0} MB": "Cache cleared · {p0} MB",
   "缓存清理失败，请重试": "Unable to clear cache. Try again.",
-  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Clears rendering and network caches. Settings and images are preserved; remaining disk caches are cleared on next launch."
+  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Clears rendering and network caches. Settings and images are preserved; remaining disk caches are cleared on next launch.",
+  "已授权，暂无法读取活动": "Access granted; activity unavailable",
+  "活动读取失败": "Unable to read activity",
+  "联网查询 Claude 额度": "Query Claude quotas online",
+  "复用所选客户端的本地登录": "Use the selected client’s local sign-in",
+  "仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。": "Queries plans and quotas only from official Claude services. macOS may request Keychain access. Credentials are not saved in the panel; turning this off stops queries.",
+  "使用所选客户端的本地登录，查询 Claude 官方额度和套餐。": "Uses the selected client’s local sign-in to query official Claude quotas and plans.",
+  "未找到所选客户端的有效登录，请在该客户端重新登录。": "No valid sign-in was found for the selected client. Sign in again in that client.",
+  "Claude 登录已失效，请在所选客户端重新登录。": "Your Claude sign-in has expired. Sign in again in the selected client.",
+  "Claude 钥匙串暂不可读；处理系统授权后请手动刷新，不会自动反复弹窗。": "Claude Keychain access is unavailable. Resolve the system permission and refresh manually; permission prompts will not repeat automatically.",
+  "Claude 联网查询暂时失败；保留的数值仅为历史快照。": "Claude online queries are temporarily unavailable. Retained values are historical snapshots only.",
+  "Claude 服务要求稍后重试，手动刷新也会遵守等待时间。": "Claude requires a delay before retrying. Manual refresh also respects this waiting period.",
+  "Claude 登录或服务端数据格式暂不兼容，未提供的额度保持未知。": "The Claude sign-in or server response format is currently unsupported. Quotas not provided remain unknown.",
+  "当前平台暂不支持读取 Claude 桌面登录；仍显示本地记录。": "This platform does not currently support reading the Claude desktop sign-in. Local records are still shown.",
+  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Claude online queries are off. Only local records are shown."
 }

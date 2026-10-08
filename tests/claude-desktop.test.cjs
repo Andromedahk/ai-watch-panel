@@ -189,3 +189,63 @@ test('Desktop cache expires in memory and refuses reuse after a new login, even 
   reader.persistedDesktopPlan = { identity: key, name: 'Pro', observedAt: new Date(now - 30 * 86400000 - 1).toISOString() };
   assert.equal(await reader.restoreDesktopPlan(key, now), null);
 });
+
+test('Helper execution failures preserve unknown permission and expose only bounded error enums', async () => {
+  const scenarios = [
+    ['ENOENT', 'helper-missing'], ['EACCES', 'helper-blocked'], ['EPERM', 'helper-blocked'], ['ENOEXEC', 'helper-blocked'],
+    ['ETIMEDOUT', 'timeout'], ['ERR_CHILD_PROCESS_TIMEOUT', 'timeout'], ['ERR_CHILD_PROCESS_STDIO_MAXBUFFER', 'invalid-output'],
+    ['PRIVATE_UNKNOWN_CODE', 'helper-failed'],
+  ];
+  for (const [code, expected] of scenarios) {
+    const result = await readDesktopActivity(10, { platform: 'darwin', run: async () => { const error = new Error('/PRIVATE_PATH PRIVATE_STDERR'); error.code = code; throw error; } });
+    assert.equal(result.trusted, null, `${code} cannot establish a denied grant`);
+    assert.equal(result.probeError, expected); assert.equal(result.activity, 'unknown');
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE|STDERR/);
+  }
+  const timeout = await readDesktopActivity(10, { platform: 'darwin', run: async () => { throw { killed: true, signal: 'SIGTERM', stderr: 'PRIVATE' }; } });
+  assert.equal(timeout.trusted, null); assert.equal(timeout.probeError, 'timeout');
+  let calls = 0; const run = async () => { calls++; throw new Error('Must not spawn'); };
+  for (const pid of [null, 0, -1, 1.5, '10', 2147483648]) {
+    const result = await readDesktopActivity(pid, { platform: 'darwin', run });
+    assert.equal(result.trusted, null); assert.equal(result.probeError, 'invalid-pid');
+  }
+  const unsupported = await readDesktopActivity(10, { platform: 'win32', run });
+  assert.equal(unsupported.trusted, null); assert.equal(unsupported.supported, false); assert.equal(unsupported.probeError, 'unsupported-platform');
+  assert.equal(calls, 0);
+});
+
+test('Only a complete successful native protocol can establish a denied accessibility grant', async () => {
+  const denied = { trusted: false, activity: 'unknown', plan: null, complete: false };
+  const probe = stdout => readDesktopActivity(10, { platform: 'darwin', run: async () => ({ stdout }) });
+  assert.deepEqual(await probe(JSON.stringify(denied)), { ...denied, supported: true });
+  assert.equal((await probe(JSON.stringify({ trusted: true, activity: 'unknown', plan: null, complete: false }))).trusted, true);
+  for (const output of ['', 'null', '[]', '{PRIVATE_BROKEN', JSON.stringify({ trusted: false }),
+    JSON.stringify({ ...denied, activity: 'running' }), JSON.stringify({ ...denied, plan: 'Pro' }),
+    JSON.stringify({ ...denied, complete: true }), JSON.stringify({ ...denied, plan: 'PRIVATE_UNKNOWN_PLAN' }), ' '.repeat(2049)]) {
+    const result = await probe(output);
+    assert.equal(result.trusted, null); assert.equal(result.probeError, 'invalid-output'); assert.equal(result.activity, 'unknown');
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE/);
+  }
+});
+
+test('A failed Desktop probe never renders pending authorization, while explicit native denial does', async t => {
+  let mode = 'failure';
+  const { reader, process } = await fixture(t, { desktopActivityReader: async pid => readDesktopActivity(pid, { platform: 'darwin', run: async () => {
+    if (mode === 'failure') { const error = new Error('/PRIVATE_PATH'); error.code = 'EACCES'; throw error; }
+    return { stdout: JSON.stringify({ trusted: mode !== 'denied', activity: 'unknown', plan: null, complete: false }) };
+  } }) });
+  const failed = await reader.poll(process, now);
+  assert.equal(failed.activityAccessRequired, false); assert.equal(failed.activityProbeError, 'helper-blocked'); assert.equal(failed.activity, 'unknown');
+  assert.doesNotMatch(JSON.stringify(failed), /PRIVATE_PATH/);
+  mode = 'denied'; const denied = await reader.poll(process, now);
+  assert.equal(denied.activityAccessRequired, true); assert.equal(denied.activityProbeError, undefined);
+  mode = 'granted'; const granted = await reader.poll(process, now);
+  assert.equal(granted.activityAccessRequired, false); assert.equal(granted.activityProbeError, undefined); assert.equal(granted.activity, 'unknown');
+});
+
+test('Explicit authorization requests preserve unknown permission and discard unapproved diagnostic fields', async t => {
+  const { reader } = await fixture(t, { desktopActivityReader: async (_pid, options) => readDesktopActivity(null, { platform: 'darwin', requestAccess: options.requestAccess, run: async () => { throw { code: 'ETIMEDOUT', stderr: '/PRIVATE_PATH' }; } }) });
+  assert.deepEqual(await reader.requestActivityAccess(), { trusted: null, supported: true, probeError: 'timeout' });
+  reader.desktopActivityReader = async () => ({ trusted: null, supported: true, activity: 'unknown', plan: null, probeError: 'PRIVATE_DIAGNOSTIC' });
+  assert.deepEqual(await reader.requestActivityAccess(), { trusted: null, supported: true });
+});

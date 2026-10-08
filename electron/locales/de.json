@@ -430,5 +430,19 @@
   "清理缓存": "Cache leeren",
   "已清理缓存 · {p0} MB": "Cache geleert · {p0} MB",
   "缓存清理失败，请重试": "Cache konnte nicht geleert werden. Bitte erneut versuchen.",
-  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Leert Render- und Netzwerk-Caches und erhält Einstellungen und Bilder. Übrige Festplatten-Caches werden beim nächsten Start geleert."
+  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Leert Render- und Netzwerk-Caches und erhält Einstellungen und Bilder. Übrige Festplatten-Caches werden beim nächsten Start geleert.",
+  "已授权，暂无法读取活动": "Zugriff erlaubt; Aktivität nicht verfügbar",
+  "活动读取失败": "Aktivität konnte nicht gelesen werden",
+  "联网查询 Claude 额度": "Claude-Kontingente online abfragen",
+  "复用所选客户端的本地登录": "Lokale Anmeldung des ausgewählten Clients verwenden",
+  "仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。": "Fragt Tarife und Kontingente nur bei offiziellen Claude-Diensten ab. macOS kann Zugriff auf den Schlüsselbund anfordern. Zugangsdaten werden nicht im Panel gespeichert; beim Ausschalten werden Abfragen beendet.",
+  "使用所选客户端的本地登录，查询 Claude 官方额度和套餐。": "Verwendet die lokale Anmeldung des ausgewählten Clients, um offizielle Claude-Kontingente und Tarife abzufragen.",
+  "未找到所选客户端的有效登录，请在该客户端重新登录。": "Für den ausgewählten Client wurde keine gültige Anmeldung gefunden. Melden Sie sich dort erneut an.",
+  "Claude 登录已失效，请在所选客户端重新登录。": "Ihre Claude-Anmeldung ist abgelaufen. Melden Sie sich im ausgewählten Client erneut an.",
+  "Claude 钥匙串暂不可读；处理系统授权后请手动刷新，不会自动反复弹窗。": "Der Zugriff auf den Claude-Schlüsselbund ist nicht verfügbar. Erteilen Sie die Systemberechtigung und aktualisieren Sie manuell; Berechtigungsabfragen werden nicht automatisch wiederholt.",
+  "Claude 联网查询暂时失败；保留的数值仅为历史快照。": "Die Claude-Online-Abfrage ist vorübergehend fehlgeschlagen. Beibehaltene Werte sind nur historische Momentaufnahmen.",
+  "Claude 服务要求稍后重试，手动刷新也会遵守等待时间。": "Der Claude-Dienst verlangt eine Wartezeit vor dem nächsten Versuch. Auch manuelle Aktualisierungen halten diese Wartezeit ein.",
+  "Claude 登录或服务端数据格式暂不兼容，未提供的额度保持未知。": "Das Format der Claude-Anmeldung oder Serverantwort wird derzeit nicht unterstützt. Nicht bereitgestellte Kontingente bleiben unbekannt.",
+  "当前平台暂不支持读取 Claude 桌面登录；仍显示本地记录。": "Auf dieser Plattform kann die Anmeldung der Claude-Desktop-App derzeit nicht gelesen werden. Lokale Aufzeichnungen werden weiterhin angezeigt.",
+  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Claude-Online-Abfragen sind ausgeschaltet. Es werden nur lokale Aufzeichnungen angezeigt."
 }

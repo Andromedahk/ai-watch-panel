@@ -86,6 +86,7 @@ class ClaudeStatusReader {
     this.codeIdentityPath = env.CLAUDE_CONFIG_DIR ? paths.join(this.paths.config, '.claude.json') : paths.join(home, '.claude.json');
     this.codeIdentityRoot = env.CLAUDE_CONFIG_DIR ? this.paths.config : home;
     this.desktopActivityReader = options.desktopActivityReader || require('./claude-desktop.cjs').readDesktopActivity;
+    this.usageReader = options.usageReader || new (require('./claude-usage.cjs').ClaudeUsageReader)({ paths: this.paths, platform: this.platform });
     this.desktopPlanCache = null; this.desktopPlanCacheFile = null; this.persistedDesktopPlan = null;
     if (options.desktopPlanCacheFile) this.setDesktopPlanCacheFile(options.desktopPlanCacheFile);
   }
@@ -97,10 +98,17 @@ class ClaudeStatusReader {
     if (!['desktop', 'code'].includes(source)) throw new TypeError('Invalid Claude source');
     if (source === this.source) return;
     this.source = source; this.generation++; this.desktopPlanCache = null; this.persistedDesktopPlan = null;
+    this.usageReader.clearSource();
+  }
+  setNetworkAllowed(value) {
+    if (typeof value !== 'boolean') throw new TypeError('Invalid Claude network setting');
+    if (this.usageReader.allowed === value) return;
+    this.generation++; this.usageReader.setAllowed(value);
   }
   async requestActivityAccess() {
     const result = await this.desktopActivityReader(null, { platform: this.platform, requestAccess: true });
-    return { trusted: result.trusted === true, supported: result.supported === true };
+    return { trusted: result.trusted === true ? true : result.trusted === false ? false : null, supported: result.supported === true,
+      ...(require('./claude-desktop.cjs').ACTIVITY_PROBE_ERRORS.includes(result.probeError) ? { probeError: result.probeError } : {}) };
   }
   async restoreDesktopPlan(identityKey, now) {
     if (!this.desktopPlanCacheFile) return null;
@@ -162,8 +170,9 @@ class ClaudeStatusReader {
     if (plan.observedAt) await this.persistDesktopPlan(identityKey, plan);
     return plan;
   }
-  async poll(processes, now = Date.now()) {
+  async poll(processes, now = Date.now(), force = false) {
     const source = this.source, generation = this.generation;
+    const networkPromise = this.usageReader.poll(source, now, force);
     const { desktop, config } = this.paths;
     const desktopProcess = processes?.find(p => /(?:^|[/\\])Claude(?:\.exe)?$/.test(p.command));
     const desktopOpen = Boolean(desktopProcess);
@@ -178,7 +187,7 @@ class ClaudeStatusReader {
     finally { buffer?.fill(0); }
     const identity = await require('./claude-desktop.cjs').readDesktopIdentity(desktop, usagePayload, now);
     let plan = source === 'code' ? await readClaudePlan(config, this.platform, now) : await this.readDesktopPlan(identity, now);
-    let desktopActivity = { activity: 'unknown', trusted: false, supported: this.platform === 'darwin', plan: null };
+    let desktopActivity = { activity: 'unknown', trusted: null, supported: this.platform === 'darwin', plan: null };
     if (source === 'desktop' && desktopOpen) desktopActivity = await this.desktopActivityReader(desktopProcess.pid, { platform: this.platform });
     if (source === 'desktop' && desktopActivity.plan && ['Free', 'Pro', 'Max', 'Max 5×', 'Max 20×', 'Team', 'Enterprise'].includes(desktopActivity.plan)) {
       plan = { name: desktopActivity.plan, status: '桌面界面', stale: false, observedAt: new Date(now).toISOString() };
@@ -190,6 +199,11 @@ class ClaudeStatusReader {
       if (!plan.name || !identity || !codeIdentity || codeIdentity.account.toLowerCase() !== identity.account.toLowerCase()
         || codeIdentity.org.toLowerCase() !== identity.org.toLowerCase()) usage = null;
     } else if (!identity) usage = null;
+    const network = await networkPromise;
+    // A successful empty server window clears older local windows. Expired
+    // authorization must never be masked by a previously cached allowance.
+    if (network.usage) { usage = network.usage; plan = network.plan; }
+    else if (network.state === 'auth') { usage = null; plan = { name: null }; }
     let names = []; let failed = false;
     const sessions = path.join(config, 'sessions');
     try { names = (await fs.readdir(sessions)).filter(n => /^\d+\.json$/.test(n)); }
@@ -232,17 +246,19 @@ class ClaudeStatusReader {
     if (this.taskDetailsEnabled && source === 'desktop' && ['running', 'idle'].includes(desktopActivity.activity)) {
       taskDetails.unshift(taskDetail({ title: null, state: desktopActivity.activity, updatedAt: now, operation: desktopActivity.activity === 'running' ? 'agentMessage' : undefined }, { now, live: true }));
     }
-    const result = { id: 'claude', claudeSource: source, source: usage || values.length || plan.name || desktopActivity.trusted ? 'cache' : 'unavailable',
+    const result = { id: 'claude', claudeSource: source, source: network.usage && network.state === 'ready' ? 'account' : usage || values.length || plan.name || desktopActivity.trusted ? 'cache' : 'unavailable',
       connection: processes === null ? 'error' : source === 'desktop' ? desktopOpen || values.length ? 'ready' : 'offline' : values.length || pids.size > classified.size ? 'ready' : 'offline',
       activity, activeTasks, task, plan, ...(this.taskDetailsEnabled ? { taskDetails: taskDetails.slice(0, 8) } : {}),
       quotas: usage?.quotas || [], observedAt: usage?.observedAt || plan.observedAt || null, surfaces,
-      activityAccessRequired: source === 'desktop' && desktopOpen && desktopActivity.supported && !desktopActivity.trusted,
+      activityAccessRequired: source === 'desktop' && desktopOpen && desktopActivity.supported && desktopActivity.trusted === false,
+      ...(source === 'desktop' ? { activityAccessState: !desktopActivity.supported ? 'unsupported' : desktopActivity.trusted === true ? 'granted' : desktopActivity.trusted === false ? 'denied' : 'unknown' } : {}),
+      ...(source === 'desktop' && require('./claude-desktop.cjs').ACTIVITY_PROBE_ERRORS.includes(desktopActivity.probeError) ? { activityProbeError: desktopActivity.probeError } : {}),
       activityObservedAt: source === 'desktop' && ['running', 'idle'].includes(desktopActivity.activity) ? new Date(now).toISOString()
         : values.length ? new Date(Math.max(...values.map(s => s.at))).toISOString() : null,
       activityDetail: source === 'desktop'
         ? '桌面普通聊天由 macOS 辅助功能只读发送和停止按钮；桌面 Code 会话单独校验进程和十分钟时效。后台或不可见聊天无法确认时保持未知。'
         : '仅监看终端 Code 会话，校验进程和十分钟时效；桌面 Code 不计入终端任务。',
-      detail: source === 'desktop'
+      detail: network.state !== 'disabled' ? network.detail : source === 'desktop'
         ? '桌面额度来自当前登录账号的本地用量快照。套餐读取匹配账号和组织的桌面套餐快照，历史档位会标记为历史；Free 或未提供窗口的额度保持未知。'
         : '终端套餐只读取有效的文件型登录；额度仅复用账号和组织均一致的桌面用量快照，无法匹配时保持未知。' };
     if (generation !== this.generation) return { id: 'claude', claudeSource: this.source, source: 'unavailable', connection: 'unavailable', activity: 'unknown', activeTasks: 0, task: '当前任务状态未知', plan: { name: null }, quotas: [], observedAt: null };

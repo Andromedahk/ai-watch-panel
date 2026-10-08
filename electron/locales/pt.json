@@ -430,5 +430,19 @@
   "清理缓存": "Limpar cache",
   "已清理缓存 · {p0} MB": "Cache limpa · {p0} MB",
   "缓存清理失败，请重试": "Não foi possível limpar a cache. Tente novamente.",
-  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Limpa a cache de renderização e rede, mantendo definições e imagens. A cache de disco restante será limpa no próximo arranque."
+  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Limpa a cache de renderização e rede, mantendo definições e imagens. A cache de disco restante será limpa no próximo arranque.",
+  "已授权，暂无法读取活动": "Acesso concedido; atividade indisponível",
+  "活动读取失败": "Não foi possível ler a atividade",
+  "联网查询 Claude 额度": "Consultar cotas do Claude online",
+  "复用所选客户端的本地登录": "Usar o login local do cliente selecionado",
+  "仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。": "Consulta planos e cotas apenas nos serviços oficiais do Claude. O macOS pode solicitar acesso às Chaves. As credenciais não são salvas no painel; desativar esta opção interrompe as consultas.",
+  "使用所选客户端的本地登录，查询 Claude 官方额度和套餐。": "Usa o login local do cliente selecionado para consultar as cotas e o plano oficiais do Claude.",
+  "未找到所选客户端的有效登录，请在该客户端重新登录。": "Nenhum login válido foi encontrado para o cliente selecionado. Entre novamente nesse cliente.",
+  "Claude 登录已失效，请在所选客户端重新登录。": "Seu login do Claude expirou. Entre novamente no cliente selecionado.",
+  "Claude 钥匙串暂不可读；处理系统授权后请手动刷新，不会自动反复弹窗。": "O acesso às Chaves do Claude está indisponível. Resolva a permissão do sistema e atualize manualmente; os pedidos de permissão não serão repetidos automaticamente.",
+  "Claude 联网查询暂时失败；保留的数值仅为历史快照。": "A consulta online do Claude falhou temporariamente. Os valores mantidos são apenas registros históricos.",
+  "Claude 服务要求稍后重试，手动刷新也会遵守等待时间。": "O serviço do Claude exige uma espera antes de tentar novamente. A atualização manual também respeita esse prazo.",
+  "Claude 登录或服务端数据格式暂不兼容，未提供的额度保持未知。": "O formato de login ou da resposta do servidor Claude ainda não é compatível. As cotas não fornecidas permanecem desconhecidas.",
+  "当前平台暂不支持读取 Claude 桌面登录；仍显示本地记录。": "Esta plataforma ainda não permite ler o login do Claude para desktop. Os registros locais continuam sendo exibidos.",
+  "已关闭 Claude 联网查询，当前仅显示本地记录。": "As consultas online do Claude estão desativadas. Somente os registros locais são exibidos."
 }

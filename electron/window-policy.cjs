@@ -73,6 +73,7 @@ function validPreferences(value) {
     qwenKeychainAllowed: value?.qwenKeychainAllowed === true,
     kimiSource: isKimiSource(value?.kimiSource) ? value.kimiSource : 'code',
     claudeSource: isClaudeSource(value?.claudeSource) ? value.claudeSource : 'desktop',
+    claudeNetworkAllowed: value?.claudeNetworkAllowed === true,
     cacheCleanupPending: value?.cacheCleanupPending === true,
     kimiWorkApp: validProviderApps({ kimi: value?.kimiWorkApp }).kimi || null,
     animeMode: value?.animeMode === true,

@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('panel', {
   setQwenAccess: (allowed) => ipcRenderer.invoke('panel:qwen-access', allowed),
   setKimiSource: (source) => ipcRenderer.invoke('panel:kimi-source', source),
   setClaudeSource: (source) => ipcRenderer.invoke('panel:claude-source', source),
+  setClaudeNetworkAccess: (allowed) => ipcRenderer.invoke('panel:claude-network-access', allowed),
   requestClaudeActivityAccess: () => ipcRenderer.invoke('panel:claude-activity-access'),
   clearCache: () => ipcRenderer.invoke('panel:clear-cache'),
   setAnimeMode: (enabled) => ipcRenderer.invoke('panel:anime-mode', enabled),

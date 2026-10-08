@@ -430,5 +430,19 @@
   "清理缓存": "Vider le cache",
   "已清理缓存 · {p0} MB": "Cache vidé · {p0} MB",
   "缓存清理失败，请重试": "Impossible de vider le cache. Réessayez.",
-  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Vide les caches de rendu et de réseau, en conservant les réglages et images. Le cache disque restant sera vidé au prochain lancement."
+  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Vide les caches de rendu et de réseau, en conservant les réglages et images. Le cache disque restant sera vidé au prochain lancement.",
+  "已授权，暂无法读取活动": "Accès autorisé ; activité indisponible",
+  "活动读取失败": "Impossible de lire l’activité",
+  "联网查询 Claude 额度": "Consulter les quotas Claude en ligne",
+  "复用所选客户端的本地登录": "Utiliser la connexion locale du client sélectionné",
+  "仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。": "Consulte les forfaits et quotas uniquement auprès des services officiels de Claude. macOS peut demander l’accès au Trousseau. Les identifiants ne sont pas enregistrés dans le panneau ; désactiver cette option arrête les requêtes.",
+  "使用所选客户端的本地登录，查询 Claude 官方额度和套餐。": "Utilise la connexion locale du client sélectionné pour consulter les quotas et le forfait officiels de Claude.",
+  "未找到所选客户端的有效登录，请在该客户端重新登录。": "Aucune connexion valide n’a été trouvée pour le client sélectionné. Reconnectez-vous dans ce client.",
+  "Claude 登录已失效，请在所选客户端重新登录。": "Votre connexion Claude a expiré. Reconnectez-vous dans le client sélectionné.",
+  "Claude 钥匙串暂不可读；处理系统授权后请手动刷新，不会自动反复弹窗。": "L’accès au Trousseau de Claude est indisponible. Accordez l’autorisation système puis actualisez manuellement ; les demandes d’autorisation ne seront pas répétées automatiquement.",
+  "Claude 联网查询暂时失败；保留的数值仅为历史快照。": "La consultation en ligne de Claude a temporairement échoué. Les valeurs conservées sont uniquement des instantanés historiques.",
+  "Claude 服务要求稍后重试，手动刷新也会遵守等待时间。": "Le service Claude impose un délai avant une nouvelle tentative. L’actualisation manuelle respecte également ce délai.",
+  "Claude 登录或服务端数据格式暂不兼容，未提供的额度保持未知。": "Le format de connexion ou de réponse du serveur Claude n’est pas encore pris en charge. Les quotas non fournis restent inconnus.",
+  "当前平台暂不支持读取 Claude 桌面登录；仍显示本地记录。": "Cette plateforme ne permet pas encore de lire la connexion de Claude pour ordinateur. Les données locales restent affichées.",
+  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Les requêtes en ligne de Claude sont désactivées. Seules les données locales sont affichées."
 }

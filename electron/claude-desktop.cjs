@@ -223,16 +223,38 @@ async function readDesktopPlan(root, identity, now) {
 function nativeHelperPath() {
   return path.join(__dirname.replace(/app\.asar(?=[/\\])/, 'app.asar.unpacked'), 'native', 'bin', 'claude-desktop-status');
 }
-async function readDesktopActivity(pid, { platform = process.platform, requestAccess = false, run = execute } = {}) {
-  if (platform !== 'darwin') return { trusted: false, supported: false, activity: 'unknown', plan: null };
-  if (!requestAccess && (!Number.isInteger(pid) || pid < 1)) return { trusted: false, supported: true, activity: 'unknown', plan: null };
-  try {
-    const { stdout } = await run(nativeHelperPath(), requestAccess ? ['--request-access'] : [String(pid)],
-      { timeout: 1800, maxBuffer: 2048, encoding: 'utf8' });
-    const result = JSON.parse(stdout);
-    if (typeof result.trusted !== 'boolean' || !['running', 'idle', 'unknown'].includes(result.activity)
-      || (result.plan !== null && !['Free', 'Pro', 'Max', 'Max 5×', 'Max 20×', 'Team', 'Enterprise'].includes(result.plan))) throw new Error('Unexpected helper output');
-    return { trusted: result.trusted, supported: true, activity: result.activity, plan: result.plan, complete: result.complete === true };
-  } catch { return { trusted: false, supported: true, activity: 'unknown', plan: null }; }
+const ACTIVITY_PROBE_ERRORS = Object.freeze(['invalid-pid', 'unsupported-platform', 'helper-missing', 'helper-blocked', 'timeout', 'helper-failed', 'invalid-output', 'permission-check-failed', 'helper-access-denied']);
+function unknownActivity(probeError, supported = true) {
+  return { trusted: null, supported, activity: 'unknown', plan: null, probeError };
 }
-module.exports = { readAnalyticsLog, readAnalyticsTable, snappy, maskedChecksum, normalizeDesktopPlanEvents, readDesktopIdentity, readDesktopPlan, readDesktopActivity, maskedCRC };
+function executionProbeError(error) {
+  if (error?.code === 'ENOENT') return 'helper-missing';
+  if (['EACCES', 'EPERM', 'ENOEXEC'].includes(error?.code)) return 'helper-blocked';
+  if (['ETIMEDOUT', 'ERR_CHILD_PROCESS_TIMEOUT'].includes(error?.code)
+    || (error?.killed === true && error?.signal === 'SIGTERM')) return 'timeout';
+  if (error?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return 'invalid-output';
+  return 'helper-failed';
+}
+async function readDesktopActivity(pid, { platform = process.platform, requestAccess = false, run = execute } = {}) {
+  if (platform !== 'darwin') return unknownActivity('unsupported-platform', false);
+  if (!requestAccess && (!Number.isInteger(pid) || pid < 1 || pid > 2147483647)) return unknownActivity('invalid-pid');
+  let stdout;
+  try {
+    ({ stdout } = await run(nativeHelperPath(), requestAccess ? ['--request-access'] : [String(pid)],
+      { timeout: 1800, maxBuffer: 2048, encoding: 'utf8' }));
+  } catch (error) {
+    // Execution failure cannot establish the application's accessibility grant.
+    // Never propagate child-process messages, argv, paths or stderr to the UI.
+    return unknownActivity(executionProbeError(error));
+  }
+  try {
+    if (typeof stdout !== 'string' || Buffer.byteLength(stdout) > 2048) return unknownActivity('invalid-output');
+    const result = JSON.parse(stdout);
+    if (!result || Array.isArray(result) || typeof result.trusted !== 'boolean' || typeof result.complete !== 'boolean'
+      || !['running', 'idle', 'unknown'].includes(result.activity)
+      || (result.plan !== null && !['Free', 'Pro', 'Max', 'Max 5×', 'Max 20×', 'Team', 'Enterprise'].includes(result.plan))
+      || (result.trusted === false && (result.activity !== 'unknown' || result.plan !== null || result.complete !== false))) return unknownActivity('invalid-output');
+    return { trusted: result.trusted, supported: true, activity: result.activity, plan: result.plan, complete: result.complete };
+  } catch { return unknownActivity('invalid-output'); }
+}
+module.exports = { ACTIVITY_PROBE_ERRORS, readAnalyticsLog, readAnalyticsTable, snappy, maskedChecksum, normalizeDesktopPlanEvents, readDesktopIdentity, readDesktopPlan, readDesktopActivity, maskedCRC };

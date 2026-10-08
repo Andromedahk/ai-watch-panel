@@ -85,7 +85,7 @@ class LocalStatusReader {
     deepseekReader = new DeepSeekBalanceReader({ home }),
     deepseekActivityReader = new DeepSeekActivityReader({ home }), claudeReader = new ClaudeStatusReader({ home }),
     zcodeReader = new ZcodeStatusReader({ home }), kimiReader = new KimiStatusReader({ home }),
-    kimiWorkReader = new KimiWorkStatusReader({ home }), kimiSource = 'code', claudeSource = 'desktop',
+    kimiWorkReader = new KimiWorkStatusReader({ home }), kimiSource = 'code', claudeSource = 'desktop', claudeNetworkAllowed = false,
     qwenReader = new QwenStatusReader({ home }), workbuddyReader = new WorkBuddyStatusReader({ home }),
     codexQuotaReader = new CodexQuotaReader({ home, codexHome }), runCommand = execute, requestLocal = postLocal } = {}) {
     this.home = home;
@@ -101,6 +101,8 @@ class LocalStatusReader {
     this.claudeReader = claudeReader;
     this.claudeSource = isClaudeSource(claudeSource) ? claudeSource : 'desktop'; this.claudeGeneration = 0;
     this.claudeReader.setSource?.(this.claudeSource);
+    this.claudeNetworkAllowed = claudeNetworkAllowed === true;
+    this.claudeReader.setNetworkAllowed?.(this.claudeNetworkAllowed);
     this.zcodeReader = zcodeReader; this.kimiReader = kimiReader;
     this.kimiWorkReader = kimiWorkReader; this.kimiSource = isKimiSource(kimiSource) ? kimiSource : 'code'; this.kimiGeneration = 0;
     this.qwenReader = qwenReader; this.workbuddyReader = workbuddyReader;
@@ -130,6 +132,14 @@ class LocalStatusReader {
     this.current = { ...this.current, claude: { ...unavailable('claude'), claudeSource: source,
       task: '正在核对所选客户端', detail: '来源已切换，等待新的套餐和额度。' } };
   }
+  setClaudeNetworkAllowed(allowed) {
+    if (typeof allowed !== 'boolean') throw new Error('Invalid Claude network setting');
+    if (allowed === this.claudeNetworkAllowed) return;
+    this.claudeNetworkAllowed = allowed; this.claudeGeneration++;
+    this.claudeReader.setNetworkAllowed(allowed);
+    // Discard allowance and task metadata from the previous network generation.
+    this.current = { ...this.current, claude: { ...unavailable('claude'), claudeSource: this.claudeSource } };
+  }
   clearKimiCache(reader) {
     reader.cache = null; reader.planCache = null;
     if (reader.error !== 'rate') reader.nextAt = 0;
@@ -146,7 +156,7 @@ class LocalStatusReader {
     const kimiGeneration = this.kimiGeneration;
     const kimiSource = this.kimiSource;
     const claudeGeneration = this.claudeGeneration, claudeSource = this.claudeSource;
-    const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseek(list, force), this.claudeReader.poll(list), this.zcodeReader.poll(list, Date.now(), force),
+    const results = await Promise.allSettled([this.codex(list, force), this.antigravity(list, force), this.deepseek(list, force), this.claudeReader.poll(list, Date.now(), force), this.zcodeReader.poll(list, Date.now(), force),
       kimiSource === 'work' ? this.kimiWorkReader.poll(list, Date.now(), force) : this.kimiReader.poll(list), this.qwenReader.poll(list, force), this.workbuddyReader.poll(list, force)]);
     const sampledAt = new Date().toISOString();
     const next = { sampledAt };

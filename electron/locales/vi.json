@@ -430,5 +430,19 @@
   "清理缓存": "Xóa bộ nhớ đệm",
   "已清理缓存 · {p0} MB": "Đã xóa bộ nhớ đệm · {p0} MB",
   "缓存清理失败，请重试": "Không thể xóa bộ nhớ đệm. Hãy thử lại.",
-  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Xóa bộ nhớ đệm hiển thị và mạng, giữ lại cài đặt và hình ảnh. Bộ nhớ đệm trên đĩa còn lại sẽ được xóa vào lần mở tiếp theo."
+  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Xóa bộ nhớ đệm hiển thị và mạng, giữ lại cài đặt và hình ảnh. Bộ nhớ đệm trên đĩa còn lại sẽ được xóa vào lần mở tiếp theo.",
+  "已授权，暂无法读取活动": "Đã cấp quyền; chưa đọc được hoạt động",
+  "活动读取失败": "Không thể đọc hoạt động",
+  "联网查询 Claude 额度": "Truy vấn hạn mức Claude trực tuyến",
+  "复用所选客户端的本地登录": "Dùng phiên đăng nhập cục bộ của ứng dụng đã chọn",
+  "仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。": "Chỉ truy vấn gói và hạn mức từ dịch vụ Claude chính thức. macOS có thể yêu cầu quyền truy cập Chuỗi khóa. Thông tin xác thực không được lưu trong bảng; tắt tùy chọn này sẽ dừng truy vấn.",
+  "使用所选客户端的本地登录，查询 Claude 官方额度和套餐。": "Dùng phiên đăng nhập cục bộ của ứng dụng đã chọn để truy vấn hạn mức và gói chính thức của Claude.",
+  "未找到所选客户端的有效登录，请在该客户端重新登录。": "Không tìm thấy phiên đăng nhập hợp lệ của ứng dụng đã chọn. Hãy đăng nhập lại trong ứng dụng đó.",
+  "Claude 登录已失效，请在所选客户端重新登录。": "Phiên đăng nhập Claude đã hết hạn. Hãy đăng nhập lại trong ứng dụng đã chọn.",
+  "Claude 钥匙串暂不可读；处理系统授权后请手动刷新，不会自动反复弹窗。": "Chưa thể truy cập Chuỗi khóa của Claude. Hãy xử lý quyền hệ thống rồi làm mới thủ công; lời nhắc cấp quyền sẽ không tự động lặp lại.",
+  "Claude 联网查询暂时失败；保留的数值仅为历史快照。": "Truy vấn Claude trực tuyến tạm thời thất bại. Các giá trị được giữ lại chỉ là ảnh chụp dữ liệu trước đây.",
+  "Claude 服务要求稍后重试，手动刷新也会遵守等待时间。": "Dịch vụ Claude yêu cầu chờ trước khi thử lại. Làm mới thủ công cũng tuân theo thời gian chờ này.",
+  "Claude 登录或服务端数据格式暂不兼容，未提供的额度保持未知。": "Định dạng đăng nhập hoặc phản hồi máy chủ Claude hiện chưa được hỗ trợ. Hạn mức không được cung cấp vẫn là chưa rõ.",
+  "当前平台暂不支持读取 Claude 桌面登录；仍显示本地记录。": "Nền tảng hiện tại chưa hỗ trợ đọc phiên đăng nhập Claude trên máy tính. Dữ liệu cục bộ vẫn được hiển thị.",
+  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Đã tắt truy vấn Claude trực tuyến. Hiện chỉ hiển thị dữ liệu cục bộ."
 }

@@ -14,6 +14,7 @@ export type PanelState = Preferences & {
   qwenKeychainAllowed: boolean;
   kimiSource: KimiSource;
   claudeSource: ClaudeSource;
+  claudeNetworkAllowed: boolean;
   animeMode: boolean; layout: Layout; windowLayout: 'single' | 'double';
   language: Language; resolvedLanguage?: Exclude<Language, 'system'>;
   theme: Theme; resolvedTheme: 'light' | 'dark';
@@ -30,6 +31,8 @@ export type LocalProviderStatus = {
   waitingTasks?: number; waitingReason?: 'input' | 'approval' | 'both'; attentionAvailable?: boolean;
   accessRequired?: boolean;
   activityAccessRequired?: boolean;
+  activityAccessState?: 'granted' | 'denied' | 'unknown' | 'unsupported';
+  activityProbeError?: 'invalid-pid' | 'unsupported-platform' | 'helper-missing' | 'helper-blocked' | 'timeout' | 'helper-failed' | 'invalid-output' | 'permission-check-failed' | 'helper-access-denied';
   kimiSource?: KimiSource;
   claudeSource?: ClaudeSource;
   activityDetail?: string; activityObservedAt?: string | null;
@@ -60,6 +63,7 @@ declare global {
       setQwenAccess(allowed: boolean): Promise<PanelState>;
       setKimiSource(source: KimiSource): Promise<PanelState>;
       setClaudeSource(source: ClaudeSource): Promise<PanelState>;
+      setClaudeNetworkAccess(allowed: boolean): Promise<PanelState>;
       requestClaudeActivityAccess(): Promise<LocalStatus>;
       clearCache(): Promise<{ freedBytes: number }>;
       setAnimeMode(enabled: boolean): Promise<PanelState>;

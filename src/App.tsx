@@ -17,7 +17,7 @@ const previewState: PanelState = {
   trayAvailable: false, stored: false,
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
-  kimiSource: 'code', claudeSource: 'desktop', layout: 'single', windowLayout: 'single',
+  kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, layout: 'single', windowLayout: 'single',
   animeMode: readAnimeMode(),
   language: window.panel ? 'zh-CN' : readLanguage(),
   theme: window.panel ? 'system' : readTheme(),
@@ -214,7 +214,7 @@ function ProviderCard({ provider, index, image, anime = false, onOpen, launchBus
       </div>}
     </div>
     {fullscreen && <TaskDetails provider={provider} testing={testing} />}
-    <div className="task-line" title={local?.activityDetail || local?.detail}><span className={`status-dot ${provider.running ? 'active' : ''} ${local?.activity === 'unknown' ? 'unknown' : local?.activity === 'waiting' ? 'waiting' : ''}`} /><span>{local?.activityAccessRequired ? t('待授权') : provider.task}</span><span className="task-status">{phase}</span></div>
+    <div className="task-line" title={local?.activityDetail || local?.detail}><span className={`status-dot ${provider.running ? 'active' : ''} ${local?.activity === 'unknown' ? 'unknown' : local?.activity === 'waiting' ? 'waiting' : ''}`} /><span>{local?.activityAccessRequired ? t('待授权') : local?.activity === 'unknown' && local.activityProbeError && local.activityProbeError !== 'unsupported-platform' ? t(local.activityAccessState === 'granted' ? '已授权，暂无法读取活动' : '活动读取失败') : provider.task}</span><span className="task-status">{phase}</span></div>
   </section>;
 }
 
@@ -250,6 +250,7 @@ export default function App() {
   const [qwenAccessSaving, setQwenAccessSaving] = useState(false);
   const [kimiSourceSaving, setKimiSourceSaving] = useState(false);
   const [claudeSourceSaving, setClaudeSourceSaving] = useState(false);
+  const [claudeNetworkSaving, setClaudeNetworkSaving] = useState(false);
   const [cacheClearing, setCacheClearing] = useState(false);
   const storeLabel = state.platform === 'darwin' ? t("收纳到菜单栏") : t("收纳到托盘");
   const storeHint = state.trayAvailable ? t("{p0}，后台继续监看", { p0: storeLabel }) : state.desktop ? t("系统托盘暂不可用") : t("桌面版支持菜单栏与托盘收纳");
@@ -382,6 +383,13 @@ export default function App() {
       setNotice(t('Claude 来源已保存'));
     } catch { setNotice(t('来源切换失败，请重试')); }
     finally { setClaudeSourceSaving(false); }
+  }
+  async function changeClaudeNetworkAccess(allowed: boolean) {
+    if (claudeNetworkSaving || !window.panel) return;
+    setClaudeNetworkSaving(true);
+    try { setState(await window.panel.setClaudeNetworkAccess(allowed)); setNotice(''); }
+    catch { setNotice(t('保存失败，请重试')); }
+    finally { setClaudeNetworkSaving(false); }
   }
 
   async function changeLanguage(language: Language) {
@@ -610,6 +618,8 @@ export default function App() {
         <fieldset className="appearance-settings"><legend>{t('Claude 数据来源')}</legend>
           <div className="segmented" aria-label={t('Claude 数据来源')}>{(['desktop', 'code'] as const).map(source => <button key={source} className={state.claudeSource === source ? 'selected' : ''} aria-pressed={state.claudeSource === source} disabled={claudeSourceSaving} onClick={() => void changeClaudeSource(source)}>{source === 'desktop' ? 'Claude Desktop' : 'Claude Code'}</button>)}</div>
           <p className="appearance-hint">{t('桌面版与 Code 分开读取，切换后清除上个来源的套餐和状态。')}</p>
+          <label className="switch-row"><span>{t('联网查询 Claude 额度')}<small>{t('复用所选客户端的本地登录')}</small></span><input aria-label={t('联网查询 Claude 额度')} type="checkbox" checked={state.claudeNetworkAllowed} disabled={!state.desktop || claudeNetworkSaving} onChange={event => void changeClaudeNetworkAccess(event.target.checked)} /></label>
+          <p className="appearance-hint">{t('仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。')}</p>
           {state.claudeSource === 'desktop' && <><button className="dock-button" disabled={!state.desktop || claudeSourceSaving} onClick={async () => {
             if (!window.panel) return; setClaudeSourceSaving(true);
             try { setLocalStatus(await window.panel.requestClaudeActivityAccess()); }

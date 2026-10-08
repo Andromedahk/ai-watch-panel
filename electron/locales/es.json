@@ -430,5 +430,19 @@
   "清理缓存": "Borrar caché",
   "已清理缓存 · {p0} MB": "Caché borrada · {p0} MB",
   "缓存清理失败，请重试": "No se pudo borrar la caché. Inténtalo de nuevo.",
-  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Borra la caché de renderizado y red, conservando ajustes e imágenes. La caché de disco restante se borrará al volver a abrir."
+  "清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。": "Borra la caché de renderizado y red, conservando ajustes e imágenes. La caché de disco restante se borrará al volver a abrir.",
+  "已授权，暂无法读取活动": "Acceso concedido; actividad no disponible",
+  "活动读取失败": "No se pudo leer la actividad",
+  "联网查询 Claude 额度": "Consultar cuotas de Claude en línea",
+  "复用所选客户端的本地登录": "Usar el inicio de sesión local del cliente seleccionado",
+  "仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。": "Consulta planes y cuotas solo en los servicios oficiales de Claude. macOS puede solicitar acceso al Llavero. Las credenciales no se guardan en el panel; al desactivar esta opción se detienen las consultas.",
+  "使用所选客户端的本地登录，查询 Claude 官方额度和套餐。": "Usa el inicio de sesión local del cliente seleccionado para consultar las cuotas y el plan oficiales de Claude.",
+  "未找到所选客户端的有效登录，请在该客户端重新登录。": "No se encontró un inicio de sesión válido del cliente seleccionado. Vuelve a iniciar sesión en ese cliente.",
+  "Claude 登录已失效，请在所选客户端重新登录。": "Tu sesión de Claude ha caducado. Vuelve a iniciar sesión en el cliente seleccionado.",
+  "Claude 钥匙串暂不可读；处理系统授权后请手动刷新，不会自动反复弹窗。": "No se puede acceder al Llavero de Claude. Resuelve el permiso del sistema y actualiza manualmente; los avisos de permisos no se repetirán automáticamente.",
+  "Claude 联网查询暂时失败；保留的数值仅为历史快照。": "La consulta en línea de Claude ha fallado temporalmente. Los valores conservados son solo capturas históricas.",
+  "Claude 服务要求稍后重试，手动刷新也会遵守等待时间。": "El servicio de Claude requiere una espera antes de reintentar. La actualización manual también respeta ese plazo.",
+  "Claude 登录或服务端数据格式暂不兼容，未提供的额度保持未知。": "El formato de inicio de sesión o de respuesta del servidor de Claude aún no es compatible. Las cuotas no proporcionadas siguen siendo desconocidas.",
+  "当前平台暂不支持读取 Claude 桌面登录；仍显示本地记录。": "Esta plataforma todavía no permite leer el inicio de sesión de Claude de escritorio. Los registros locales se siguen mostrando.",
+  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Las consultas en línea de Claude están desactivadas. Solo se muestran los registros locales."
 }

@@ -1,6 +1,6 @@
 {
   "name": "ai-watch-panel",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "A cross-platform vertical AI activity and quota panel",
   "private": true,
   "type": "module",
@@ -70,7 +70,7 @@
       "target": [
         "zip"
       ],
-      "identity": null
+      "identity": "-"
     },
     "win": {
       "target": [

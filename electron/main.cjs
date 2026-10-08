@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, systemPreferences } = require('electron');
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
 const { traySummary } = require('./tray-summary.cjs');
@@ -11,10 +11,18 @@ const { requestZcodeJson } = require('./zcode-account-api.cjs');
 const { WindowLayout } = require('./window-layout.cjs');
 const { taskDetail } = require('./task-details.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
+const { ClaudeStatusReader } = require('./claude-status.cjs');
+const { createClaudeActivityBridge } = require('./claude-activity-bridge.cjs');
+const { readDesktopActivity } = require('./claude-desktop.cjs');
 const { ProviderLauncher } = require('./provider-launcher.cjs');
 const { cleanupOrphanedHelpers } = require('./orphan-helpers.cjs');
 const { clearStartupDiskCaches, clearSessionCaches } = require('./app-cache.cjs');
-const statusReader = new LocalStatusReader();
+const statusReader = new LocalStatusReader({ claudeReader: new ClaudeStatusReader({
+  desktopActivityReader: createClaudeActivityBridge({
+    permissionReader: prompt => systemPreferences.isTrustedAccessibilityClient(prompt),
+    readActivity: readDesktopActivity, platform: process.platform,
+  }),
+}) });
 // Electron's network stack follows the system proxy. The API reader owns the fixed URL.
 statusReader.kimiWorkReader.request = token => requestKimiWorkSubscription(token, { transport: electronTransport(net) });
 statusReader.zcodeReader.accountReader.request = (family, kind, token) => requestZcodeJson(family, kind, token, { transport: electronTransport(net) });
@@ -181,6 +189,7 @@ else {
     statusReader.claudeReader.setDesktopPlanCacheFile(path.join(app.getPath('userData'), 'claude-desktop-plan.json'));
     statusReader.setKimiSource(preferences.kimiSource);
     statusReader.setClaudeSource(preferences.claudeSource);
+    statusReader.setClaudeNetworkAllowed(!fixtureMode && preferences.claudeNetworkAllowed);
     statusReader.qwenReader.setKeychainAllowed(!fixtureMode && preferences.qwenKeychainAllowed);
     nativeTheme.themeSource = preferences.theme;
     const display = screen.getPrimaryDisplay();
@@ -270,7 +279,7 @@ else {
     });
     handle('panel:configure', (value) => {
       const next = validPreferences({ ...value, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
-        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
+        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -338,6 +347,23 @@ else {
     handle('panel:claude-activity-access', async () => {
       if (!fixtureMode && preferences.claudeSource === 'desktop') await statusReader.claudeReader.requestActivityAccess();
       return refreshLocalStatus(true);
+    });
+    handle('panel:claude-network-access', async (value) => {
+      if (typeof value !== 'boolean') throw new Error('Invalid Claude network setting');
+      const previous = preferences.claudeNetworkAllowed;
+      preferences.claudeNetworkAllowed = value;
+      try { savePreferences(); } catch (error) { preferences.claudeNetworkAllowed = previous; throw error; }
+      const pending = statusReader.pending;
+      // Synthetic UI profiles must never read real credentials or prompt the keychain.
+      statusReader.setClaudeNetworkAllowed(!fixtureMode && value);
+      if (!fixtureMode) {
+        statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), claude: statusReader.current.claude };
+        window.webContents.send('panel:status-changed', statusSnapshot);
+      }
+      emitState();
+      if (pending) await pending.catch(() => {});
+      await refreshLocalStatus(true);
+      return currentState();
     });
     handle('panel:claude-source', async (value) => {
       if (!isClaudeSource(value)) throw new Error('Invalid Claude source');
