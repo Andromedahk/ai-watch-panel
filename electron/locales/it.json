@@ -397,5 +397,6 @@
   "此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。": "Questa build non include un widget nativo firmato; usa una versione firmata che includa l’estensione widget.",
   "macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。": "macOS decide quando aggiornare; i widget mostrano l’ora di campionamento e contrassegnano i record obsoleti come storici.",
   "仅保留桌面小组件": "Mantieni solo i widget desktop",
-  "隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。": "Nascondi il pannello, il Dock e l’icona della barra dei menu mentre il monitoraggio continua in background. Fai clic su un widget o riapri AI Watch per ripristinare."
+  "隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。": "Nascondi il pannello, il Dock e l’icona della barra dei menu mentre il monitoraggio continua in background. Fai clic su un widget o riapri AI Watch per ripristinare.",
+  "总览跟随“监看模块”的选择和排序。": "La panoramica segue la selezione e l’ordine in «Moduli di monitoraggio»."
 }

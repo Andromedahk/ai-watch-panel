@@ -526,6 +526,7 @@ export default function App() {
       <div className="settings-content">
         {state.platform === 'darwin' && <fieldset className="appearance-settings"><legend>{t('桌面小组件')}</legend>
           <p className="appearance-hint">{t('在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。')}</p>
+          <p className="appearance-hint">{t('总览跟随“监看模块”的选择和排序。')}</p>
           <label className="switch-row"><span>{t('同步小组件')}<small>{t('仅共享额度摘要与状态')}</small></span><input type="checkbox" aria-label={t('同步小组件')} checked={state.widgetsEnabled} disabled={!state.widgetsAvailable || widgetsSaving} onChange={async event => {
             const enabled = event.target.checked;
             setWidgetsSaving(true);

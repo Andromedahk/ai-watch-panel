@@ -8,7 +8,7 @@ if (process.platform !== 'darwin') throw new Error('Native widget acceptance req
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-widgets-'));
 const snapshotPath = path.join(profile, 'widget-snapshot.json');
 await writeFile(path.join(profile, 'preferences.json'), JSON.stringify({ theme: 'dark', kimiSource: 'work',
-  enabledProviders: ['codex', 'deepseek', 'zcode', 'kimi'] }));
+  enabledProviders: ['claude', 'codex', 'deepseek', 'zcode', 'kimi'] }));
 const launch = enabled => electron.launch({ args: ['.'], env: { ...process.env,
   AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: 'fixture', AI_WATCH_TEST_WIDGETS: enabled ? '1' : '0' } });
 let app;
@@ -25,13 +25,35 @@ try {
   await page.getByRole('button', { name: '打开配置', exact: true }).click();
   await page.getByRole('checkbox', { name: '同步小组件', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: '同步小组件', exact: true })).toBeChecked();
-  await expect.poll(async () => JSON.parse(await readFile(snapshotPath, 'utf8')).rows.length).toBe(4);
+  await expect.poll(async () => JSON.parse(await readFile(snapshotPath, 'utf8')).rows.length).toBe(5);
   const initial = JSON.parse(await readFile(snapshotPath, 'utf8'));
   assert.equal(initial.isTestData, true); assert.equal(initial.theme, 'dark');
   assert.equal(initial.rows.find(row => row.id === 'kimi').name, 'Kimi Work');
   assert.equal(initial.rows.find(row => row.id === 'kimi').activity, 'unknown');
   assert.equal(initial.rows.find(row => row.id === 'codex').remaining, 75);
   assert.doesNotMatch(JSON.stringify(initial), /task|detail|token|providerApps|kimiWorkApp/);
+  // Home module controls are also the overview's selection; no second widget list exists.
+  for (const name of ['DeepSeek Harness', 'Claude Code']) {
+    const checkbox = page.getByRole('checkbox', { name: `启用 ${name}`, exact: true });
+    await checkbox.click();
+    await expect(checkbox).not.toBeChecked();
+  }
+  const widgetOrder = async () => JSON.parse(await readFile(snapshotPath, 'utf8')).rows.map(row => row.id);
+  const homeOrder = () => page.locator('.provider-card').evaluateAll(cards => cards.map(card => card.dataset.provider));
+  await expect.poll(widgetOrder).toEqual(['codex', 'zcode', 'kimi']);
+  await page.getByRole('button', { name: '关闭配置', exact: true }).click();
+  await expect.poll(homeOrder).toEqual(['codex', 'zcode', 'kimi']);
+  await page.locator('.provider-card[data-provider="kimi"]').focus();
+  await page.keyboard.press('Alt+ArrowUp');
+  await expect.poll(homeOrder).toEqual(['codex', 'kimi', 'zcode']);
+  await expect.poll(widgetOrder).toEqual(['codex', 'kimi', 'zcode']);
+  await app.close(); app = await launch(true); page = await app.firstWindow();
+  await expect.poll(homeOrder).toEqual(['codex', 'kimi', 'zcode']);
+  await expect.poll(widgetOrder).toEqual(['codex', 'kimi', 'zcode']);
+  await page.getByRole('button', { name: '打开配置', exact: true }).click();
+  for (const name of ['DeepSeek Harness', 'Claude Code']) {
+    await expect(page.getByRole('checkbox', { name: `启用 ${name}`, exact: true })).not.toBeChecked();
+  }
   // A publication failure during an ordinary refresh must reach the open settings.
   await app.evaluate(({ app }) => {
     const { WidgetPublisher } = process.getBuiltinModule('node:module').createRequire(app.getAppPath() + '/electron/main.cjs')('./widget-publisher.cjs');
@@ -79,7 +101,7 @@ try {
   await assert.rejects(access(snapshotPath));
   assert.equal(JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).widgetsEnabled, false);
   await assert.rejects(page.evaluate(() => window.panel.widgetBackground()));
-  console.log('Widget settings, isolated snapshots, background polling, recovery, source, preferences and clearing passed. Native gallery/signing not exercised.');
+  console.log('Widget settings, home module selection/order/restart, isolated snapshots, background polling, recovery, source, preferences and clearing passed. Native gallery/signing not exercised.');
 } finally {
   await app?.close();
   await rm(profile, { recursive: true, force: true });
