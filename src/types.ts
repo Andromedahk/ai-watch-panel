@@ -6,6 +6,8 @@ export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: bo
 export type PanelState = Preferences & {
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
   trayAvailable: boolean; stored: boolean;
+  widgetsEnabled: boolean; widgetsAvailable: boolean; widgetSyncError: boolean;
+  widgetBackground: boolean; widgetLastPublishedAt: string | null;
   providerOrder: ProviderId[];
   enabledProviders: ProviderId[];
   qwenKeychainAllowed: boolean;
@@ -47,6 +49,8 @@ declare global {
       setLocked(locked: boolean): Promise<PanelState>;
       setCollapsed(collapsed: boolean): Promise<PanelState>;
       store(): Promise<PanelState>;
+      setWidgetsEnabled(enabled: boolean): Promise<PanelState>;
+      widgetBackground(): Promise<PanelState>;
       configure(preferences: Preferences): Promise<PanelState>;
       setOrder(order: ProviderId[]): Promise<PanelState>;
       setEnabled(ids: ProviderId[]): Promise<PanelState>;

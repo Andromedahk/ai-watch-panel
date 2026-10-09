@@ -388,5 +388,14 @@
   "代码审查": "Revisione codice",
   "周期未知": "Quota sconosciuta",
   "未命名模型": "Quota modello",
-  "排序": "Riordina"
+  "排序": "Riordina",
+  "桌面小组件": "Widget desktop",
+  "在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。": "Fai clic con il pulsante destro sul desktop, scegli «Modifica widget», cerca AI Watch e aggiungi la panoramica o un singolo strumento.",
+  "同步小组件": "Sincronizza widget",
+  "仅共享额度摘要与状态": "Condividi solo riepiloghi delle quote e stato",
+  "小组件同步失败，请重试": "Sincronizzazione del widget non riuscita. Riprova.",
+  "此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。": "Questa build non include un widget nativo firmato; usa una versione firmata che includa l’estensione widget.",
+  "macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。": "macOS decide quando aggiornare; i widget mostrano l’ora di campionamento e contrassegnano i record obsoleti come storici.",
+  "仅保留桌面小组件": "Mantieni solo i widget desktop",
+  "隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。": "Nascondi il pannello, il Dock e l’icona della barra dei menu mentre il monitoraggio continua in background. Fai clic su un widget o riapri AI Watch per ripristinare."
 }

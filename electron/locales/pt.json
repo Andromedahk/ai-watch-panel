@@ -388,5 +388,14 @@
   "代码审查": "Revisão de código",
   "周期未知": "Quota desconhecida",
   "未命名模型": "Quota do modelo",
-  "排序": "Ordenar"
+  "排序": "Ordenar",
+  "桌面小组件": "Widgets de ambiente de trabalho",
+  "在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。": "Clique com o botão direito no ambiente de trabalho, escolha «Editar widgets», procure AI Watch e adicione a visão geral ou uma ferramenta individual.",
+  "同步小组件": "Sincronizar widgets",
+  "仅共享额度摘要与状态": "Partilhar apenas resumos de quota e estado",
+  "小组件同步失败，请重试": "Não foi possível sincronizar o widget. Tente novamente.",
+  "此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。": "Esta compilação não inclui um widget nativo assinado; use uma versão assinada que inclua a extensão de widgets.",
+  "macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。": "O macOS decide quando atualizar; os widgets mostram a hora da amostragem e marcam os registos desatualizados como históricos.",
+  "仅保留桌面小组件": "Manter apenas widgets de ambiente de trabalho",
+  "隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。": "Oculte o painel, a Dock e o ícone da barra de menus enquanto a monitorização continua em segundo plano. Clique num widget ou reabra o AI Watch para restaurar."
 }

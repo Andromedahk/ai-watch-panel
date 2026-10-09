@@ -388,5 +388,14 @@
   "代码审查": "Đánh giá mã",
   "周期未知": "Chưa rõ hạn mức",
   "未命名模型": "Hạn mức mô hình",
-  "排序": "Sắp xếp"
+  "排序": "Sắp xếp",
+  "桌面小组件": "Tiện ích màn hình nền",
+  "在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。": "Nhấp chuột phải vào màn hình nền, chọn “Chỉnh sửa tiện ích”, tìm AI Watch rồi thêm phần tổng quan hoặc một công cụ riêng lẻ.",
+  "同步小组件": "Đồng bộ tiện ích",
+  "仅共享额度摘要与状态": "Chỉ chia sẻ tóm tắt hạn mức và trạng thái",
+  "小组件同步失败，请重试": "Không thể đồng bộ tiện ích. Vui lòng thử lại.",
+  "此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。": "Bản dựng này không có tiện ích gốc đã ký; hãy dùng phiên bản đã ký có phần mở rộng tiện ích.",
+  "macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。": "macOS quyết định thời điểm làm mới; tiện ích hiển thị thời gian lấy mẫu và đánh dấu bản ghi cũ là lịch sử.",
+  "仅保留桌面小组件": "Chỉ giữ tiện ích màn hình nền",
+  "隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。": "Ẩn bảng điều khiển, Dock và biểu tượng thanh menu trong khi vẫn tiếp tục theo dõi nền. Nhấp vào tiện ích hoặc mở lại AI Watch để khôi phục."
 }

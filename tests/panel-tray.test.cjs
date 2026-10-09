@@ -124,3 +124,43 @@ test('later store and quit take priority over a pending macOS Dock show', async 
   assert.equal(await quitting, false);
   assert.equal(f.visible, false);
 });
+
+test('widget background mode removes both icons and activation restores the existing window', async () => {
+  const f = fixture('darwin');
+  assert.equal(f.panel.storeForWidgets(), true);
+  assert.equal(f.panel.available, false); assert.equal(f.panel.widgetBackground, true);
+  assert.equal(f.visible, false); assert.ok(f.calls.includes('hide-dock'));
+  let prevented = false;
+  f.panel.handleClose({ preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(await f.panel.restore(), true);
+  assert.equal(f.panel.available, true); assert.equal(f.panel.widgetBackground, false);
+  assert.equal(f.visible, true);
+  f.panel.dispose();
+  assert.equal(f.panel.storeForWidgets(), false);
+  assert.equal(fixture('win32').panel.storeForWidgets(), false);
+});
+
+test('later widget background request wins against an in-flight restoration', async () => {
+  let resolve;
+  const f = fixture('darwin', { dockShow: () => new Promise(done => { resolve = done; }) });
+  f.panel.storeForWidgets();
+  const restoring = f.panel.restore();
+  f.panel.storeForWidgets(); resolve();
+  assert.equal(await restoring, false); assert.equal(f.visible, false); assert.equal(f.panel.available, false);
+  f.panel.dispose();
+});
+
+test('a delayed Dock activation is retried once and a later restore cancels it', async () => {
+  const f = fixture('darwin');
+  f.panel.app.dock.isVisible = () => true;
+  f.panel.storeForWidgets();
+  assert.equal(f.calls.filter(call => call === 'hide-dock').length, 1);
+  f.advance(1100);
+  assert.equal(f.calls.filter(call => call === 'hide-dock').length, 2);
+  assert.equal(f.timers.size, 0);
+  await f.panel.restore();
+  f.panel.storeForWidgets(); await f.panel.restore();
+  assert.equal(f.timers.size, 0);
+  f.panel.dispose();
+});
