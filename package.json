@@ -28,7 +28,12 @@
     "test:kimi-work": "node scripts/verify-kimi-work.mjs",
     "test:live-kimi-zcode": "node scripts/verify-live-kimi-zcode.mjs",
     "test:quotas": "node scripts/verify-codex-quota.mjs",
-    "test:i18n": "node scripts/verify-i18n.mjs"
+    "test:i18n": "node scripts/verify-i18n.mjs",
+    "build:widgets": "node scripts/build-widgets.mjs",
+    "pack:mac:widgets": "node scripts/pack-widgets.mjs",
+    "test:widgets": "node scripts/verify-widgets.mjs",
+    "preview:widgets": "node scripts/preview-widgets.mjs",
+    "test:widgets:bundle": "node scripts/verify-widget-bundle.mjs"
   },
   "dependencies": {
     "big.js": "^7.0.1",

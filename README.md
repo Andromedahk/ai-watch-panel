@@ -4,6 +4,8 @@ macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vi
 
 > v0.16.0 新增 17 种界面语言及阿拉伯语 / 希伯来语 RTL 布局。主面板、设置、测试模式与收纳菜单同步切换；保留一模块一项的额度速览和现有本地接入。
 
+开发分支新增 **macOS 原生桌面小组件**：总览与八种工具额度卡片，沿用现有配色与圆角风格。小组件扩展需要仓库发布者签名；普通本地构建仍可使用原面板。
+
 <img src="docs/screenshots/panel.png" width="220" alt="AI Watch 固定顶部与四卡首屏预览" />
 
 文档截图使用合成测试数据，顶部或卡片标有“测试”，不包含真实账户数据。
@@ -27,6 +29,41 @@ macOS 上的 AI 工具监看面板。使用 **Electron + React + TypeScript + Vi
 | Kimi（Code / Work） | 可选择 Code 独立额度或 Work 会员共享积分；活动按所选来源读取 |
 | Qwen（千问） | 助手图片、套餐、剩余积分 / 额度及可确认的本地活动 |
 | WorkBuddy | 助手图片、套餐、各积分池剩余数量及本机任务状态 |
+
+## macOS 原生桌面小组件
+
+需要 **macOS 14 或更高版本**及包含原生 WidgetKit 扩展的签名构建。首次打开该版本后，在桌面右键选择 **编辑小组件 → AI Watch**。提供一个总览及 Claude、Codex、Antigravity、DeepSeek、ZCode、Kimi、千问、WorkBuddy 八个独立小组件；总览支持小 / 中 / 大尺寸，单个工具支持小 / 中尺寸。总览遵循面板的启用模块和排序；Kimi 跟随设置中的 Work / Code 来源。
+
+在 **配置 → 监看模块** 取消勾选不使用的工具，例如 Claude Code、DeepSeek Harness，主页和总览都会隐藏这些工具；调整主页排序也会同步到总览。小组件使用这份已保存的选择，不另设启用列表，也不根据是否安装工具自动更改选择。系统小组件库仍提供全部独立工具类型，只有手动添加才会出现在桌面；已添加的独立卡片在对应模块关闭后显示“此提供商已停用”，不显示停用前的额度，可从桌面手动移除。上述变化由应用发布摘要并请求刷新，实际更新时间仍由 macOS 决定。
+
+在 **配置 → 桌面小组件** 开启“同步小组件”。点击“仅保留桌面小组件”会隐藏面板、Dock 和菜单栏图标，后台继续监看，避免菜单栏图标被屏幕顶部开孔遮挡。点击小组件或再次打开 AI Watch 恢复面板；恢复时菜单栏图标一并返回。后台模式只在本次运行有效，重启仍显示面板；同步开关会保存。关闭同步会删除共享快照并请求系统刷新，已添加的小组件显示打开应用同步的提示。
+
+小组件沿用现有深浅主题、品牌色、额度条与圆角层次，尺寸由系统的 widget family 决定。原面板仍保持 4.5 : 1 窗口比例和 0.5 : 1 : 1 : 1 : 1 首屏比例。小组件使用静态品牌标记，不共享自选图片、二次元图片或任务文本。
+
+- 主进程将现有采样结果转换为有界摘要，经原生桥原子写入 App Group；小组件不读取登录文件、不访问钥匙串、不新增账号请求。共享内容仅包含工具名称、主要额度 / 积分 / 余额摘要、状态、时间、主题和语言。
+- **系统决定刷新时间**，不能保证每 5 秒更新。主进程合并刷新请求；卡片显示采样时间，时间线预置过期状态，停止采样后会显示历史提示并取消运行状态，避免把旧快照当成实时结果。
+- 未登录、未知和禁用模块不会填入演示额度；历史值与真实零值分别显示。图库占位与开发预览明确标为测试数据。
+- 小组件固定提示提供中文和英文，其他语言使用英文提示；额度摘要沿用面板的 17 语言翻译。Windows / Linux 保留现有面板与托盘，本功能仅限 macOS。
+
+<img src="docs/screenshots/widgets-overview-dark.png" width="338" alt="原生小组件深色总览，合成测试数据" /> <img src="docs/screenshots/widgets-provider-light.png" width="158" alt="原生小组件浅色单工具卡片，合成测试数据" />
+
+以上为实际 SwiftUI 视图的合成渲染，标有“测试”，不是签名版系统桌面截图。
+
+### 本地开发与签名交付
+
+原生源码位于 `native/macos/`，通过 SwiftUI / WidgetKit 编译；Node-API 桥只加载到 Electron 主进程，renderer 继续使用 sandbox 与经过校验的 preload 接口。普通 `npm run build`、`npm run pack:mac` 不要求 Apple 签名，也不声称提供可用的小组件。
+
+```sh
+npm run build:widgets
+npm run build
+npm run test:widgets
+```
+
+`build:widgets` 编译原生扩展与桥，构建输出保存在忽略目录；`test:widgets` 使用独立临时 profile、合成额度和临时快照，检查开关、来源、隐藏、后台采样、恢复与设置持久化，不注册系统小组件，也不访问正式账号。原生预览与模型检查另见 [小组件开发说明](docs/MACOS-WIDGETS.md)。
+
+发布者使用 `npm run pack:mac:widgets` 生成包含扩展的签名应用，需要有效的 Apple 签名身份和对应团队 App Group。扩展嵌入应用 `Contents/PlugIns`；共享数据由系统定位容器，不拼接用户目录。缺少签名条件会阻止签名打包，不以临时签名冒充可用发布版。签名后的图库发现、桌面添加、共享数据和系统实际刷新必须由发布者在 macOS 上补充验收；本地编译、合成渲染或桥模拟通过不等同于这些系统验收。
+
+参考 Apple 的 [创建扩展](https://developer.apple.com/documentation/widgetkit/creating-a-widget-extension)、[App Group 容器权限](https://developer.apple.com/documentation/xcode/accessing-app-group-containers)与[刷新机制](https://developer.apple.com/documentation/widgetkit/keeping-a-widget-up-to-date)。
 
 ## 模块选择与屏幕外提醒
 
@@ -386,6 +423,15 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 额度窗口字段参考 OpenAI 官方 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server)。此版本短时启动本设备已经安装的官方 App Server，限定为初始化、账号读取和额度查询，完成后结束进程；本地会话记录作为后备。不会发起推理、批准操作、申请额度重置或发送消息；Antigravity 桌面接口按当前安装版本验证，其 CLI 的 [状态栏文档](https://antigravity.google/docs/cli/statusline) 作为后续适配参考。
 
 ## 更新记录
+
+### 未发布 · 2026-10-09
+
+- 新增 macOS 原生 WidgetKit 总览与八种工具额度小组件；沿用原有配色、额度条与圆角，Kimi 跟随 Work / Code 来源，原面板比例保持不变。
+- 增加可选的摘要同步和“仅保留桌面小组件”入口，隐藏面板、Dock 与菜单栏图标后继续采样；点击小组件或重新打开应用恢复。
+- 小组件设置明确总览与主页共用模块选择及排序；补充关闭 Claude / DeepSeek、主页排序和重启后的隔离 GUI 联动检查，并说明独立卡片需要手动添加或移除。
+- 使用主进程原生桥与 App Group 有界快照，明确测试 / 历史 / 未知状态，合并系统刷新请求；认证信息、自选图片和任务内容不进入共享数据。
+- 增加原生编译、签名打包入口与隔离配置验收。Apple 签名、图库注册及系统刷新验收由发布者完成，普通本地构建保持原有面板能力。
+- 本地已通过 263 项单元测试、22 项原生模型检查、原子写入 / 权限检查、ARM64 原生编译、Electron 原生桥加载、合成预览和小组件隔离 GUI 验收；x64 完成交叉编译，未进行 Intel 实机验收。原面板比例和菜单栏回归通过，后者使用居中放置测试窗口的本地副本，原版固定坐标测试未宣称通过。
 
 ### 0.16.0 · 2026-10-04
 

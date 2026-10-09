@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, na
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
 const { traySummary } = require('./tray-summary.cjs');
+const { WidgetPublisher, loadWidgetBridge } = require('./widget-publisher.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -39,11 +40,14 @@ async function refreshLocalStatus(force = false) {
   }
   if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
   panelTray?.updateMenu();
+  publishWidgets();
   return statusSnapshot;
 }
 
 let window;
 let panelTray;
+let widgetPublisher;
+let widgetHealth;
 let preferences;
 let collapsed = false;
 let expandedBounds;
@@ -83,13 +87,25 @@ function currentState() {
   const { providerApps: _privateLaunchPaths, kimiWorkApp: _privateWorkPath, ...publicPreferences } = preferences;
   return { ...publicPreferences, collapsed, desktop: true, platform: process.platform,
     trayAvailable: panelTray?.available === true, stored: panelTray?.stored === true,
+    widgetsAvailable: widgetPublisher?.available === true, widgetSyncError: widgetPublisher?.error === true,
+    widgetBackground: panelTray?.widgetBackground === true,
+    widgetLastPublishedAt: widgetPublisher?.lastPublishedAt || null,
     resolvedLanguage: currentLanguage().language,
     resolvedTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
 }
 function emitState() {
   panelTray?.updateMenu();
+  publishWidgets();
   if (window && !window.isDestroyed()) window.webContents.send('panel:changed', currentState());
+}
+function publishWidgets() {
+  widgetPublisher?.publish(statusSnapshot, { ...preferences, language: currentLanguage().language }, { isTestData: fixtureMode });
+  const health = `${widgetPublisher?.available === true}:${widgetPublisher?.error === true}`;
+  if (health !== widgetHealth) {
+    widgetHealth = health;
+    if (window && !window.isDestroyed()) window.webContents.send('panel:changed', currentState());
+  }
 }
 function updateAppearance() {
   if (!window || window.isDestroyed()) return;
@@ -144,9 +160,16 @@ function handle(channel, callback) {
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
+  // A widget may only reopen the panel; no URL can launch a provider or carry a path.
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    if (url === 'aiwatch://panel' || url === 'aiwatch://panel/') void panelTray?.restore();
+  });
   app.on('second-instance', () => { void panelTray?.restore(); });
   app.whenReady().then(() => {
     preferences = readPreferences();
+    widgetPublisher = new WidgetPublisher({ bridge: loadWidgetBridge({ app, fixtureMode,
+      fixtureWidgets: process.env.AI_WATCH_TEST_WIDGETS === '1' }) });
     statusReader.setKimiSource(preferences.kimiSource);
     statusReader.qwenReader.setKeychainAllowed(!fixtureMode && preferences.qwenKeychainAllowed);
     nativeTheme.themeSource = preferences.theme;
@@ -166,7 +189,7 @@ else {
     panelTray = new PanelTray({ app, window, Tray, Menu, nativeImage,
       getSummary: () => ({ rows: traySummary(statusSnapshot, { ...preferences, language: currentLanguage().language }), isTestData: fixtureMode }),
       getLanguage: () => currentLanguage().language,
-      onChange: emitState, onRefresh: () => refreshLocalStatus(true) });
+      onChange: () => { emitState(); buildApplicationMenu(); }, onRefresh: () => refreshLocalStatus(true) });
     window.on('close', event => panelTray.handleClose(event));
     nativeTheme.on('updated', updateAppearance);
     buildApplicationMenu();
@@ -217,6 +240,29 @@ else {
       if (!panelTray.store()) throw new Error('System tray unavailable');
       return currentState();
     });
+    handle('panel:widgets-enabled', async (value) => {
+      if (typeof value !== 'boolean') throw new Error('Invalid widget setting');
+      if (!widgetPublisher.available) throw new Error('Signed native widget build required');
+      const next = { ...preferences, widgetsEnabled: value, language: currentLanguage().language };
+      const synced = value ? widgetPublisher.publish(statusSnapshot, next, { isTestData: fixtureMode }) : widgetPublisher.clear();
+      if (!synced) throw new Error('Widget synchronization failed');
+      const previous = preferences.widgetsEnabled;
+      preferences.widgetsEnabled = value;
+      try { savePreferences(); } catch (error) {
+        preferences.widgetsEnabled = previous;
+        if (!previous) widgetPublisher.clear(); else publishWidgets();
+        throw error;
+      }
+      if (!value && panelTray.widgetBackground) await panelTray.restore();
+      emitState(); return currentState();
+    });
+    handle('panel:widget-background', () => {
+      if (!preferences.widgetsEnabled || !widgetPublisher.available || !widgetPublisher.publish(statusSnapshot,
+        { ...preferences, language: currentLanguage().language }, { isTestData: fixtureMode })) throw new Error('Widgets are not ready');
+      if (!panelTray.storeForWidgets()) throw new Error('Widget background mode unavailable');
+      buildApplicationMenu();
+      return currentState();
+    });
     handle('panel:language', (value) => {
       if (!isLanguage(value)) throw new Error('Invalid language');
       const previous = preferences.language; preferences.language = value;
@@ -225,7 +271,7 @@ else {
     });
     handle('panel:configure', (value) => {
       const next = validPreferences({ ...value, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
-        kimiSource: preferences.kimiSource, kimiWorkApp: preferences.kimiWorkApp, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
+        kimiSource: preferences.kimiSource, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();

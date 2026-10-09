@@ -69,6 +69,7 @@ function validPreferences(value) {
     theme: isTheme(value?.theme) ? value.theme : 'system',
     qwenKeychainAllowed: value?.qwenKeychainAllowed === true,
     kimiSource: isKimiSource(value?.kimiSource) ? value.kimiSource : 'code',
+    widgetsEnabled: value?.widgetsEnabled === true,
     kimiWorkApp: validProviderApps({ kimi: value?.kimiWorkApp }).kimi || null,
     animeMode: value?.animeMode === true,
     providerApps: validProviderApps(value?.providerApps),
