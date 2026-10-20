@@ -6,10 +6,19 @@ export type TaskDetail = { title: string | null; state: 'running' | 'waiting' | 
 export type KimiSource = 'code' | 'work';
 export type ClaudeSource = 'desktop' | 'code';
 export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: boolean };
+export type RelayAgentId = 'claude' | 'codex';
+export type RelayState = {
+  enabled: boolean; running: boolean; endpoint: string | null; agentCount: number;
+  queuedTasks: number; lastEventAt: string | null; error?: string;
+  agents: { id: RelayAgentId; available: boolean; enabled: boolean; busy: boolean; sessionId?: string; lastError?: string }[];
+};
+export type RelayTask = { id: string; from: RelayAgentId; to: RelayAgentId; subject: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'expired'; updatedAt: string | null };
 export type PanelState = Preferences & {
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
   trayAvailable: boolean; stored: boolean;
   widgetsEnabled: boolean; widgetsAvailable: boolean; widgetSyncError: boolean;
+  relayEnabled: boolean; relayAutoAgents: RelayAgentId[];
   widgetBackground: boolean; widgetLastPublishedAt: string | null;
   providerOrder: ProviderId[];
   enabledProviders: ProviderId[];
@@ -61,6 +70,14 @@ declare global {
       store(): Promise<PanelState>;
       setWidgetsEnabled(enabled: boolean): Promise<PanelState>;
       widgetBackground(): Promise<PanelState>;
+      getRelayState(): Promise<RelayState>;
+      getRelayTasks(): Promise<RelayTask[]>;
+      readRelayTranscript(taskId: string): Promise<string>;
+      setRelayEnabled(enabled: boolean): Promise<RelayState>;
+      setRelayAutoAgents(ids: RelayAgentId[]): Promise<RelayState>;
+      exportRelayConfig(agentId: RelayAgentId): Promise<{ exported: true }>;
+      openRelayArchive(): Promise<{ opened: true }>;
+      onRelayState(callback: (state: RelayState) => void): () => void;
       configure(preferences: Preferences): Promise<PanelState>;
       setOrder(order: ProviderId[]): Promise<PanelState>;
       setEnabled(ids: ProviderId[]): Promise<PanelState>;

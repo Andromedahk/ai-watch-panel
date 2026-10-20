@@ -1,5 +1,6 @@
 const path = require('node:path');
 const { isLanguage } = require('./i18n.cjs');
+const { isRelayAgents } = require('./relay-policy.cjs');
 const RATIO = 4.5;
 const COLLAPSED_WIDTH = 46;
 // Work-area changes from the Dock/menu bar are not monitor geometry changes.
@@ -76,6 +77,8 @@ function validPreferences(value) {
     claudeNetworkAllowed: value?.claudeNetworkAllowed === true,
     cacheCleanupPending: value?.cacheCleanupPending === true,
     widgetsEnabled: value?.widgetsEnabled === true,
+    relayEnabled: value?.relayEnabled === true,
+    relayAutoAgents: isRelayAgents(value?.relayAutoAgents) ? [...value.relayAutoAgents] : [],
     kimiWorkApp: validProviderApps({ kimi: value?.kimiWorkApp }).kimi || null,
     animeMode: value?.animeMode === true,
     layout: isLayout(value?.layout) ? value.layout : 'single',

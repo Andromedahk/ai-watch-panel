@@ -1,6 +1,6 @@
 {
   "name": "ai-watch-panel",
-  "version": "0.18.1",
+  "version": "0.19.0",
   "description": "A cross-platform vertical AI activity and quota panel",
   "private": true,
   "type": "module",
@@ -35,14 +35,22 @@
     "pack:mac:widgets": "node scripts/pack-widgets.mjs",
     "test:widgets": "node scripts/verify-widgets.mjs",
     "preview:widgets": "node scripts/preview-widgets.mjs",
-    "test:widgets:bundle": "node scripts/verify-widget-bundle.mjs"
+    "test:widgets:bundle": "node scripts/verify-widget-bundle.mjs",
+    "relay:start": "node scripts/agent-relay.mjs",
+    "relay:stdio": "node electron/relay/stdio.cjs",
+    "test:relay": "node --test tests/relay-*.test.cjs",
+    "test:relay:ui": "node scripts/verify-relay-ui.mjs",
+    "test:relay:live": "node scripts/verify-relay-live.mjs",
+    "test:relay:codex-live": "node scripts/verify-relay-codex-live.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "big.js": "^7.0.1",
     "lucide-react": "^0.577.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "yaml": "^2.9.1"
+    "yaml": "^2.9.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

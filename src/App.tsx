@@ -4,6 +4,7 @@ import packageInfo from '../package.json';
 import { providers as baseProviders, providerIds, animeImages as defaultAnimeImages } from './data';
 import { useVisibleCards } from './useVisibleCards';
 import { TestControls } from './TestControls';
+import { RelaySettings } from './RelaySettings';
 import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
 import Big from 'big.js';
@@ -16,6 +17,7 @@ const previewState: PanelState = {
   desktop: false, platform: 'browser', scaleFactor: window.devicePixelRatio,
   trayAvailable: false, stored: false,
   widgetsEnabled: false, widgetsAvailable: false, widgetSyncError: false, widgetBackground: false, widgetLastPublishedAt: null,
+  relayEnabled: false, relayAutoAgents: [],
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
   kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, layout: 'single', windowLayout: 'single',
@@ -600,6 +602,7 @@ export default function App() {
             <option value="single">{t('单列模式')}</option><option value="double">{t('双排模式')}</option><option value="fullscreen">{t('全屏模式')}</option>
           </select><p className="appearance-hint">{t('双排宽度加倍；全屏显示任务详情。Escape 退出全屏。')}</p>
         </fieldset>
+        <RelaySettings active={settingsOpen} onNotice={setNotice} />
         {state.platform === 'darwin' && <fieldset className="appearance-settings"><legend>{t('桌面小组件')}</legend>
           <p className="appearance-hint">{t('在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。')}</p>
           <p className="appearance-hint">{t('总览跟随“监看模块”的选择和排序。')}</p>

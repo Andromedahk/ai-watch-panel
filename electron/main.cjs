@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, systemPreferences, shell } = require('electron');
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
 const { traySummary } = require('./tray-summary.cjs');
@@ -18,6 +18,10 @@ const { readDesktopActivity } = require('./claude-desktop.cjs');
 const { ProviderLauncher } = require('./provider-launcher.cjs');
 const { cleanupOrphanedHelpers } = require('./orphan-helpers.cjs');
 const { clearStartupDiskCaches, clearSessionCaches } = require('./app-cache.cjs');
+const { AgentRelay, readRelayArchive } = require('./relay/server.cjs');
+const { AgentDispatcher } = require('./relay/dispatcher.cjs');
+const { exportClientConfiguration } = require('./relay/client-config.cjs');
+const { isRelayAgent, isRelayAgents, isRelayTaskId, relayEnvironmentAllowed, publicRelayState, publicRelayTasks } = require('./relay-policy.cjs');
 const statusReader = new LocalStatusReader({ claudeReader: new ClaudeStatusReader({
   desktopActivityReader: createClaudeActivityBridge({
     permissionReader: prompt => systemPreferences.isTrustedAccessibilityClient(prompt),
@@ -64,6 +68,14 @@ let window;
 let panelTray;
 let widgetPublisher;
 let widgetHealth;
+let agentRelay;
+let agentDispatcher;
+let relayTimer;
+let relayTickRunning = false;
+let relayOperation = Promise.resolve();
+let relayShuttingDown = false;
+let relayShutdownComplete = false;
+let relayServiceError;
 let preferences;
 let collapsed = false;
 let expandedBounds;
@@ -76,6 +88,57 @@ const devUrl = process.env.AI_WATCH_DEV_URL;
 // A separate profile lets the acceptance script exercise preferences safely.
 if (process.env.AI_WATCH_TEST_PROFILE) app.setPath('userData', process.env.AI_WATCH_TEST_PROFILE);
 const preferencePath = () => path.join(app.getPath('userData'), 'preferences.json');
+const relayDirectory = () => path.join(app.getPath('userData'), 'agent-relay');
+const relayFixtureAllowed = () => relayEnvironmentAllowed(process.env);
+
+function currentRelayState() {
+  const server = agentRelay?.getState() || {};
+  return publicRelayState({ ...server, ...(relayServiceError ? { error: relayServiceError } : {}) },
+    agentDispatcher?.getState() || { agents: ['claude', 'codex'].map(id => ({ id, enabled: preferences?.relayAutoAgents.includes(id) })) }, preferences?.relayEnabled);
+}
+function emitRelayState() {
+  if (window && !window.isDestroyed()) window.webContents.send('panel:relay-changed', currentRelayState());
+}
+function serializeRelay(operation) {
+  const pending = relayOperation.then(operation);
+  relayOperation = pending.catch(() => {});
+  return pending;
+}
+async function tickRelay() {
+  if (relayTickRunning || relayShuttingDown || !agentRelay?.getState().running || !agentDispatcher) return;
+  relayTickRunning = true;
+  try { await agentDispatcher.tick(); }
+  catch { relayServiceError = 'worker-unavailable'; }
+  finally { relayTickRunning = false; emitRelayState(); }
+}
+async function stopRelay() {
+  clearInterval(relayTimer); relayTimer = undefined;
+  const dispatcher = agentDispatcher;
+  try {
+    if (dispatcher) {
+      dispatcher.setEnabledAgents([]);
+      await dispatcher.stop();
+    }
+  } finally {
+    if (agentDispatcher === dispatcher) agentDispatcher = undefined;
+    await agentRelay?.stop();
+    emitRelayState();
+  }
+}
+async function startRelay() {
+  if (!relayFixtureAllowed()) throw new Error('Relay fixture requires isolated profile, status and explicit opt-in');
+  if (agentRelay?.getState().running) return;
+  relayServiceError = undefined;
+  agentRelay ??= new AgentRelay({ directory: relayDirectory(), port: fixtureMode ? 0 : 27841, onChange: emitRelayState });
+  await agentRelay.start();
+  agentDispatcher = new AgentDispatcher({ relay: agentRelay, directory: path.join(relayDirectory(), 'workers'),
+    onChange: emitRelayState, fixtureMode: fixtureMode || Boolean(process.env.AI_WATCH_TEST_PROFILE) });
+  agentDispatcher.setEnabledAgents(preferences.relayAutoAgents);
+  clearInterval(relayTimer);
+  relayTimer = setInterval(() => { void tickRelay(); }, 2000);
+  relayTimer.unref();
+  emitRelayState();
+}
 
 function readPreferences() {
   try { return validPreferences(JSON.parse(fs.readFileSync(preferencePath(), 'utf8'))); }
@@ -197,6 +260,9 @@ else {
   app.whenReady().then(async () => {
     await cleanupOrphanedHelpers({ packaged: app.isPackaged });
     preferences = readPreferences();
+    if (preferences.relayEnabled && relayFixtureAllowed()) {
+      try { await startRelay(); } catch { relayServiceError = 'relay-unavailable'; }
+    }
     if (preferences.cacheCleanupPending) {
       try {
         await clearStartupDiskCaches({ userData: app.getPath('userData') });
@@ -270,6 +336,75 @@ else {
     screen.on('display-removed', (_event, display) => { displayLayouts.delete(display.id); dock(); });
     handle('panel:state', currentState);
     handle('panel:status', () => statusSnapshot);
+    handle('panel:relay-state', currentRelayState);
+    handle('panel:relay-tasks', async () => {
+      try {
+        const tasks = agentRelay?.getState().running
+          ? await agentRelay.ownerListTasks({ limit: 50 })
+          : (await readRelayArchive({ directory: relayDirectory(), limit: 50 })).tasks;
+        return publicRelayTasks(tasks);
+      } catch { throw new Error('Relay archive unavailable'); }
+    });
+    handle('panel:relay-transcript', async taskId => {
+      if (!isRelayTaskId(taskId)) throw new Error('Invalid relay task');
+      try {
+        const transcript = agentRelay?.getState().running ? agentRelay.ownerReadTranscript(taskId)
+          : (await readRelayArchive({ directory: relayDirectory(), limit: 50 })).readTranscript(taskId);
+        if (typeof transcript !== 'string') throw new Error();
+        return transcript.slice(0, 65536);
+      } catch { throw new Error('Relay transcript unavailable'); }
+    });
+    handle('panel:relay-enabled', value => {
+      if (typeof value !== 'boolean') throw new Error('Invalid relay setting');
+      return serializeRelay(async () => {
+        if (relayShuttingDown) throw new Error('Relay is shutting down');
+        const previous = preferences.relayEnabled;
+        try {
+          if (value) await startRelay(); else await stopRelay();
+          preferences.relayEnabled = value; savePreferences(); relayServiceError = undefined;
+        } catch {
+          preferences.relayEnabled = previous;
+          if (!previous) await stopRelay().catch(() => {});
+          relayServiceError = 'relay-unavailable'; emitRelayState();
+          throw new Error('Relay setting failed');
+        }
+        emitState(); emitRelayState(); return currentRelayState();
+      });
+    });
+    handle('panel:relay-auto-agents', value => {
+      if (!isRelayAgents(value)) throw new Error('Invalid relay agents');
+      const ids = [...value];
+      return serializeRelay(() => {
+        if (relayShuttingDown) throw new Error('Relay is shutting down');
+        const previous = preferences.relayAutoAgents;
+        preferences.relayAutoAgents = ids;
+        try { savePreferences(); } catch { preferences.relayAutoAgents = previous; throw new Error('Relay setting failed'); }
+        agentDispatcher?.setEnabledAgents(ids);
+        emitState(); emitRelayState(); return currentRelayState();
+      });
+    });
+    handle('panel:relay-export', agentId => {
+      if (!isRelayAgent(agentId)) throw new Error('Invalid relay agent');
+      return serializeRelay(async () => {
+        if (!agentRelay?.getState().running) throw new Error('Relay is not running');
+        try {
+          await exportClientConfiguration({ relay: agentRelay, agentId, directory: path.join(relayDirectory(), 'client-config'),
+            runtimePath: process.execPath, bridgePath: path.join(__dirname, 'relay/stdio.cjs') });
+          // The bridge's credentials and generated configuration never cross IPC.
+          if (!fixtureMode && await shell.openPath(path.join(relayDirectory(), 'client-config', agentId))) throw new Error();
+        } catch { throw new Error('Relay configuration export failed'); }
+        return { exported: true };
+      });
+    });
+    handle('panel:relay-archive', async () => {
+      try {
+        const stat = await fs.promises.lstat(relayDirectory());
+        if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error();
+        if (!fixtureMode && await shell.openPath(relayDirectory())) throw new Error();
+      }
+      catch { throw new Error('Relay archive unavailable'); }
+      return { opened: true };
+    });
     handle('panel:clear-cache', async () => {
       const result = await clearSessionCaches({ session: window.webContents.session });
       if (!result.cleared.length) throw new Error('Cache cleanup unavailable');
@@ -325,7 +460,7 @@ else {
     });
     handle('panel:configure', (value) => {
       const next = validPreferences({ ...value, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
-        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
+        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, relayEnabled: preferences.relayEnabled, relayAutoAgents: preferences.relayAutoAgents, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -466,7 +601,15 @@ else {
     app.on('activate', () => { void panelTray.restore(); });
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => {
+  app.on('before-quit', event => {
+    if (agentRelay && !relayShutdownComplete) {
+      event.preventDefault();
+      if (!relayShuttingDown) {
+        relayShuttingDown = true; clearInterval(relayTimer);
+        void serializeRelay(stopRelay).catch(() => {}).finally(() => { relayShutdownComplete = true; app.quit(); });
+      }
+      return;
+    }
     panelTray?.dispose(); clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance);
     statusReader.codexAttention.close(); statusReader.codexQuotaReader.close();
     // Tear down Chromium's window/IPC while the host is still alive.

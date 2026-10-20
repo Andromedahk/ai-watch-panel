@@ -14,6 +14,18 @@ contextBridge.exposeInMainWorld('panel', {
   store: () => ipcRenderer.invoke('panel:store'),
   setWidgetsEnabled: (enabled) => ipcRenderer.invoke('panel:widgets-enabled', enabled),
   widgetBackground: () => ipcRenderer.invoke('panel:widget-background'),
+  getRelayState: () => ipcRenderer.invoke('panel:relay-state'),
+  getRelayTasks: () => ipcRenderer.invoke('panel:relay-tasks'),
+  readRelayTranscript: (taskId) => ipcRenderer.invoke('panel:relay-transcript', taskId),
+  setRelayEnabled: (enabled) => ipcRenderer.invoke('panel:relay-enabled', enabled),
+  setRelayAutoAgents: (ids) => ipcRenderer.invoke('panel:relay-auto-agents', ids),
+  exportRelayConfig: (agentId) => ipcRenderer.invoke('panel:relay-export', agentId),
+  openRelayArchive: () => ipcRenderer.invoke('panel:relay-archive'),
+  onRelayState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('panel:relay-changed', listener);
+    return () => ipcRenderer.removeListener('panel:relay-changed', listener);
+  },
   configure: (preferences) => ipcRenderer.invoke('panel:configure', preferences),
   setOrder: (order) => ipcRenderer.invoke('panel:order', order),
   setEnabled: (ids) => ipcRenderer.invoke('panel:enabled', ids),
