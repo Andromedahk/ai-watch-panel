@@ -1,3 +1,4 @@
+const { taskDetail } = require('./task-details.cjs');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
@@ -321,7 +322,8 @@ class QwenStatusReader {
       }
       this.events = next; this.activityBaseline = true;
       return { activity: running ? 'running' : completed ? 'idle' : 'unknown', activeTasks: running,
-        activityObservedAt: latest ? new Date(latest).toISOString() : null };
+        activityObservedAt: latest ? new Date(latest).toISOString() : null,
+        ...(this.taskDetailsEnabled ? { taskDetails: [...next.values()].sort((a,b) => (b.last?.at || 0) - (a.last?.at || 0)).slice(0,8).map(row => taskDetail({ state: row.verifiedAt && now - row.verifiedAt <= FRESH_MS && row.boundary?.type === 'turn_started' ? 'running' : row.boundary?.type === 'turn_completed' ? 'completed' : 'unknown', updatedAt: row.last?.at, operation: row.last?.type }, { now, live: !!row.verifiedAt, freshMs: FRESH_MS })) } : {}) };
     } catch { this.events.clear(); this.activityBaseline = false; return fallback; }
   }
   poll(processes, force = false) {

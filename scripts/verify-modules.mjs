@@ -87,7 +87,7 @@ try {
   }
   console.log('Module selection passed for every count from 0 through 8.');
   await page.getByRole('checkbox', { name: '测试模式', exact: true }).check();
-  await expect(page.getByRole('combobox')).toHaveCount(16);
+  await expect(page.locator('.test-provider select')).toHaveCount(16);
   await page.getByRole('button', { name: '全部待机', exact: true }).click();
   await activity('zcode', 'running'); await activity('kimi', 'running');
   await close(); await scroll('top');
@@ -182,7 +182,7 @@ try {
   await expect(card('workbuddy')).toHaveClass(/is-dragging/);
   await page.mouse.move(box.x + box.width / 2, view.y + view.height - 12, { steps: 12 });
   await expect.poll(() => viewport().evaluate(el => el.scrollTop), { timeout: 10000 }).toBeGreaterThan(firstHeight);
-  await expect(page.locator('.sort-hint')).toContainText('第 8 位', { timeout: 10000 });
+  await expect(page.locator('.sort-hint bdi')).toHaveText('8', { timeout: 10000 });
   await page.mouse.up(); await expect.poll(order).toEqual(all);
   await expect.poll(async () => (await state()).providerOrder).toEqual(all);
   assert.deepEqual((await state()).bounds, bounds);

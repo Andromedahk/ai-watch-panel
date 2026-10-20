@@ -1,4 +1,5 @@
 :root {
+  --ui-vw: 1vw;
   color-scheme: dark;
   --canvas: #111519;
   --surface: #14191f;
@@ -81,7 +82,7 @@
   --toast-bg: #303d48f5;
   --toast-border: #506174;
   --toast-text: #dee7ef;
-  --gutter: clamp(9px, 5.9vw, 23px);
+  --gutter: clamp(9px, calc(5.9 * var(--ui-vw)), 23px);
 }
 
 :root[data-theme="light"] {

@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as R
 import type { ProviderId } from './types';
 
 type Gesture = {
-  id: ProviderId; pointerId: number; x: number; y: number; clientY: number; root: HTMLElement;
-  order: ProviderId[]; rects: { top: number; height: number }[]; timer: number; frame: number;
-  scrollTop: number; active: boolean; offset: number; target: number;
+  id: ProviderId; pointerId: number; x: number; y: number; clientX: number; clientY: number; root: HTMLElement;
+  order: ProviderId[]; rects: { left: number; top: number; width: number; height: number }[]; timer: number; frame: number;
+  scrollTop: number; active: boolean; offset: number; offsetX: number; target: number;
 };
 function movedOrder(order: ProviderId[], id: ProviderId, target: number) {
   const next = order.filter(value => value !== id); next.splice(target, 0, id); return next;
@@ -28,10 +28,12 @@ export function useCardSort(order: ProviderId[], onCommit: (order: ProviderId[])
       const g = gesture.current; if (!g?.active) return;
       const from = g.order.indexOf(g.id), rect = g.rects[from];
       const delta = g.clientY - g.y + g.root.scrollTop - g.scrollTop;
-      g.offset = Math.max(g.rects[0].top - rect.top, Math.min(g.rects.at(-1)!.top - rect.top, delta));
+      g.offset = Math.max(Math.min(...g.rects.map(r => r.top)) - rect.top, Math.min(Math.max(...g.rects.map(r => r.top)) - rect.top, delta));
+      g.offsetX = Math.max(Math.min(...g.rects.map(r => r.left)) - rect.left, Math.min(Math.max(...g.rects.map(r => r.left)) - rect.left, g.clientX - g.x));
+      const centerX = rect.left + rect.width / 2 + g.offsetX;
       const center = rect.top + rect.height / 2 + g.offset;
-      g.target = g.rects.reduce((nearest, slot, index) => Math.abs(slot.top + slot.height / 2 - center)
-        < Math.abs(g.rects[nearest].top + g.rects[nearest].height / 2 - center) ? index : nearest, 0);
+      g.target = g.rects.reduce((nearest, slot, index) => Math.hypot(slot.left + slot.width / 2 - centerX, slot.top + slot.height / 2 - center)
+        < Math.hypot(g.rects[nearest].left + g.rects[nearest].width / 2 - centerX, g.rects[nearest].top + g.rects[nearest].height / 2 - center) ? index : nearest, 0);
       setDrag({ ...g });
     };
     updateRef.current = update;
@@ -41,7 +43,7 @@ export function useCardSort(order: ProviderId[], onCommit: (order: ProviderId[])
         if (Math.hypot(event.clientX - g.x, event.clientY - g.y) > 8) finish(false);
         return;
       }
-      event.preventDefault(); g.clientY = event.clientY; update();
+      event.preventDefault(); g.clientX = event.clientX; g.clientY = event.clientY; update();
     };
     const scroll = (event: Event) => {
       const g = gesture.current; if (!g || event.target !== g.root) return;
@@ -71,15 +73,15 @@ export function useCardSort(order: ProviderId[], onCommit: (order: ProviderId[])
 
   function start(event: ReactPointerEvent<HTMLElement>, id: ProviderId) {
     if (latest.current.disabled || gesture.current || !event.isPrimary || event.button !== 0
-      || (event.target as Element).closest('button, input, select, textarea, a, label, summary')) return;
+      || (event.target as Element).closest('button, input, select, textarea, a, label, summary, .task-details')) return;
     const root = event.currentTarget.parentElement;
     if (!root) return;
     const cards = [...root.querySelectorAll<HTMLElement>(':scope > .provider-card')];
     if (cards.length < 2 || cards.length !== latest.current.order.length) return;
     event.preventDefault();
-    const g: Gesture = { id, pointerId: event.pointerId, x: event.clientX, y: event.clientY, clientY: event.clientY, root,
-      order: [...latest.current.order], rects: cards.map(card => { const r = card.getBoundingClientRect(); return { top: r.top, height: r.height }; }),
-      timer: 0, frame: 0, scrollTop: root.scrollTop, active: false, offset: 0, target: latest.current.order.indexOf(id) };
+    const g: Gesture = { id, pointerId: event.pointerId, x: event.clientX, y: event.clientY, clientX: event.clientX, clientY: event.clientY, root,
+      order: [...latest.current.order], rects: cards.map(card => { const r = card.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; }),
+      timer: 0, frame: 0, scrollTop: root.scrollTop, active: false, offset: 0, offsetX: 0, target: latest.current.order.indexOf(id) };
     gesture.current = g;
     try { root.setPointerCapture(event.pointerId); } catch { gesture.current = null; return; }
     g.timer = window.setTimeout(() => {
@@ -101,7 +103,8 @@ export function useCardSort(order: ProviderId[], onCommit: (order: ProviderId[])
     const from = drag.order.indexOf(id), to = movedOrder(drag.order, drag.id, drag.target).indexOf(id);
     if (from < 0 || to < 0) return {};
     const offset = id === drag.id ? drag.offset : drag.rects[to].top - drag.rects[from].top;
-    return { transform: `translate3d(0, ${offset}px, 0)${id === drag.id ? ' scale(1.01)' : ''}` };
+    const offsetX = id === drag.id ? drag.offsetX : drag.rects[to].left - drag.rects[from].left;
+    return { transform: `translate3d(${offsetX}px, ${offset}px, 0)${id === drag.id ? ' scale(1.01)' : ''}` };
   }
   return { start, style, activeId: drag?.id, target: drag?.target, sorting: Boolean(drag) };
 }

@@ -12,4 +12,8 @@ if (process.platform === 'darwin') {
     stdio: 'inherit',
   });
   chmodSync(target, 0o755);
+  const claudeSource = resolve(repository, 'electron/native/claude-desktop-status.c');
+  const claudeTarget = resolve(repository, 'electron/native/bin/claude-desktop-status');
+  execFileSync('clang', ['-O2', '-Wall', '-Wextra', '-Werror', '-arch', 'arm64', '-arch', 'x86_64', claudeSource, '-o', claudeTarget, '-lproc', '-framework', 'ApplicationServices'], { stdio: 'inherit' });
+  chmodSync(claudeTarget, 0o755);
 }

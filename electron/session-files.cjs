@@ -56,7 +56,7 @@ function zstdFrames(input) {
   }
   return frames;
 }
-async function harnessEvents(input, compressed) {
+async function harnessEvents(input, compressed, details = false) {
   let decoded = 0; const events = [];
   const chunks = compressed ? zstdFrames(input).slice(-128).map(([a, b]) => input.subarray(a, b)) : [input];
   for (const chunk of chunks) {
@@ -70,13 +70,14 @@ async function harnessEvents(input, compressed) {
       if (!Number.isInteger(event.seq) || !Number.isFinite(event.time)) continue;
       // Only metadata leaves this reader. Message bodies, IDs, commands and paths are discarded.
       events.push({ type: event.type, seq: event.seq, time: event.time,
-        reason: event.type === 'turn/end' ? event.data?.reason?.kind : undefined });
+        reason: event.type === 'turn/end' ? event.data?.reason?.kind : undefined,
+        ...(details && event.type === 'session' ? { title: require('./task-details.cjs').safeText(event.title || event.data?.title) } : {}) });
       if (events.length > 100000) throw new Error('Too many events');
     }
   }
   // Cache only the state boundary, latest approval and final timestamp, never full history.
   const boundary = events.findLast(e => e.type === 'turn/start' || e.type === 'turn/end');
   const approval = events.findLast(e => e.type === 'approval/asked' || e.type === 'approval/decided');
-  return [...new Set([boundary, approval, events.at(-1)].filter(Boolean))].sort((a, b) => a.seq - b.seq);
+  return [...new Set([boundary, approval, ...(details ? [events.findLast(e => e.title), events.findLast(e => ['tool/start', 'tool/end'].includes(e.type))] : []), events.at(-1)].filter(Boolean))].sort((a, b) => a.seq - b.seq);
 }
 module.exports = { boundedFile, directories, zstdFrames, harnessEvents };

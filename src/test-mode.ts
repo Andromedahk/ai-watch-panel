@@ -102,6 +102,7 @@ export function makeTestStatus(config: TestConfig, at: string): LocalStatus {
       }
     }
     if (activity === 'offline') status.connection = 'offline';
+    status.taskDetails = [{ title: 'UI review · sample task', state: status.activity === 'offline' ? 'unknown' : status.activity, updatedAt: status.observedAt, stale: data === 'stale', source: 'cache', operation: 'fileChange', steps: 6, toolCalls: 3, progress: data === 'unknown' ? null : 65 }];
     result[id] = status;
   }
   return result;

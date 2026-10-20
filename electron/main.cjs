@@ -1,16 +1,28 @@
-const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, systemPreferences } = require('electron');
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
 const { traySummary } = require('./tray-summary.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
 const { requestKimiWorkSubscription } = require('./kimi-work-api.cjs');
 const { requestZcodeJson } = require('./zcode-account-api.cjs');
+const { WindowLayout } = require('./window-layout.cjs');
+const { taskDetail } = require('./task-details.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
+const { ClaudeStatusReader } = require('./claude-status.cjs');
+const { createClaudeActivityBridge } = require('./claude-activity-bridge.cjs');
+const { readDesktopActivity } = require('./claude-desktop.cjs');
 const { ProviderLauncher } = require('./provider-launcher.cjs');
-const statusReader = new LocalStatusReader();
+const { cleanupOrphanedHelpers } = require('./orphan-helpers.cjs');
+const { clearStartupDiskCaches, clearSessionCaches } = require('./app-cache.cjs');
+const statusReader = new LocalStatusReader({ claudeReader: new ClaudeStatusReader({
+  desktopActivityReader: createClaudeActivityBridge({
+    permissionReader: prompt => systemPreferences.isTrustedAccessibilityClient(prompt),
+    readActivity: readDesktopActivity, platform: process.platform,
+  }),
+}) });
 // Electron's network stack follows the system proxy. The API reader owns the fixed URL.
 statusReader.kimiWorkReader.request = token => requestKimiWorkSubscription(token, { transport: electronTransport(net) });
 statusReader.zcodeReader.accountReader.request = (family, kind, token) => requestZcodeJson(family, kind, token, { transport: electronTransport(net) });
@@ -28,9 +40,13 @@ async function refreshLocalStatus(force = false) {
     if (fixtureVariant === 'glow-attention') Object.assign(statusSnapshot.codex, { activity: 'waiting', activeTasks: 1, waitingTasks: 1, waitingReason: 'both', task: '合成测试 · 待回答 / 待授权' });
   }
   if (fixtureMode) {
+    if (preferences.layout === 'fullscreen') for (const id of PROVIDER_ORDER) statusSnapshot[id].taskDetails = [taskDetail({
+      title: 'UI review · sample task', state: statusSnapshot[id].activity, updatedAt: Date.now(), operation: 'fileChange', steps: 6, toolCalls: 3, progress: 65,
+    }, { live: true, source: 'local-api' })];
     statusSnapshot.sampledAt = new Date().toISOString();
     for (const id of PROVIDER_ORDER) statusSnapshot[id].sampledAt = statusSnapshot.sampledAt;
     statusSnapshot.kimi.kimiSource = preferences.kimiSource;
+    statusSnapshot.claude.claudeSource = preferences.claudeSource;
     if (preferences.kimiSource === 'work') Object.assign(statusSnapshot.kimi, {
       activity: 'unknown', activeTasks: 0, waitingTasks: 0, task: '合成测试 · Work 活动未知',
       quotas: [{ model: '共享积分', period: '订阅额度', remaining: 75, reset: '2099-01-01T00:00:00Z', resetKind: 'expiry' },
@@ -47,6 +63,7 @@ let panelTray;
 let preferences;
 let collapsed = false;
 let expandedBounds;
+let windowLayout;
 let lastDisplayId;
 const displayLayouts = new Map();
 let repositioning = false;
@@ -70,7 +87,7 @@ function buildApplicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ label: 'AI Watch', submenu: [
       { role: 'about', label: t('关于') + ' AI Watch' }, { type: 'separator' },
-      { label: t('展开 / 收起'), accelerator: 'CommandOrControl+Shift+B', click: () => setCollapsed(!collapsed) },
+      { label: t('展开 / 收起'), accelerator: 'CommandOrControl+Shift+B', click: () => { void setCollapsed(!collapsed).catch(() => {}); } },
       { label: t('收纳到菜单栏'), accelerator: 'CommandOrControl+Shift+H', enabled: panelTray.available, click: () => panelTray.store() },
       { label: t('额度速览'), accelerator: 'CommandOrControl+Shift+U', enabled: panelTray.available, click: () => panelTray.openMenu() },
       { label: t('重新贴边'), click: dock }, { type: 'separator' }, { role: 'quit', label: t('退出 AI Watch') },
@@ -80,7 +97,7 @@ function buildApplicationMenu() {
 }
 function currentState() {
   const display = screen.getDisplayMatching(window.getBounds());
-  const { providerApps: _privateLaunchPaths, kimiWorkApp: _privateWorkPath, ...publicPreferences } = preferences;
+  const { providerApps: _privateLaunchPaths, kimiWorkApp: _privateWorkPath, cacheCleanupPending: _cacheFlag, ...publicPreferences } = preferences;
   return { ...publicPreferences, collapsed, desktop: true, platform: process.platform,
     trayAvailable: panelTray?.available === true, stored: panelTray?.stored === true,
     resolvedLanguage: currentLanguage().language,
@@ -88,6 +105,13 @@ function currentState() {
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
 }
 function emitState() {
+  const details = preferences?.layout === 'fullscreen' && !collapsed;
+  if (statusReader.taskDetailsEnabled !== details) {
+    statusReader.setTaskDetailsEnabled(details);
+    statusSnapshot = statusReader.current;
+    if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
+    void refreshLocalStatus().catch(() => {});
+  }
   panelTray?.updateMenu();
   if (window && !window.isDestroyed()) window.webContents.send('panel:changed', currentState());
 }
@@ -102,20 +126,24 @@ function setBounds(bounds) {
   setTimeout(() => { repositioning = false; }, 100);
 }
 function dock() {
+  if (preferences.layout === 'fullscreen' || windowLayout?.transitioning) return;
   const display = screen.getDisplayMatching(window.getBounds());
   lastDisplayId = display.id;
-  setBounds(panelBounds(display.workArea, preferences.side, collapsed));
+  setBounds(panelBounds(display.workArea, preferences.side, collapsed, preferences.layout));
   if (!collapsed) expandedBounds = window.getBounds();
   emitState();
 }
 function lock() {
-  window.setAlwaysOnTop(preferences.locked, 'floating');
+  const pinned = preferences.locked && preferences.layout !== 'fullscreen' && !window.isFullScreen();
+  window.setAlwaysOnTop(pinned, 'floating');
   if (process.platform !== 'win32') {
-    window.setVisibleOnAllWorkspaces(preferences.locked, { visibleOnFullScreen: preferences.locked });
+    window.setVisibleOnAllWorkspaces(pinned, { visibleOnFullScreen: pinned });
   }
-  if (process.platform === 'darwin') window.setHiddenInMissionControl(preferences.locked);
+  if (process.platform === 'darwin') window.setHiddenInMissionControl(pinned);
 }
-function setCollapsed(value) {
+async function setCollapsed(value) {
+  await windowLayout?.pending;
+  if (value && preferences.layout === 'fullscreen') await windowLayout.change(preferences.windowLayout);
   if (collapsed === value) return;
   const display = screen.getDisplayMatching(window.getBounds());
   if (value) {
@@ -125,7 +153,7 @@ function setCollapsed(value) {
     setBounds({ ...old, width: newWidth, x: preferences.side === 'right' ? old.x + old.width - newWidth : old.x });
   } else {
     const current = window.getBounds();
-    const width = panelBounds(display.workArea).width;
+    const width = panelBounds({ ...display.workArea, height: current.height }, preferences.side, false, preferences.layout).width;
     setBounds(clampBounds({ ...current, width,
       x: preferences.side === 'right' ? current.x + current.width - width : current.x,
     }, display.workArea));
@@ -145,23 +173,38 @@ function handle(channel, callback) {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { void panelTray?.restore(); });
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    await cleanupOrphanedHelpers({ packaged: app.isPackaged });
     preferences = readPreferences();
+    if (preferences.cacheCleanupPending) {
+      try {
+        await clearStartupDiskCaches({ userData: app.getPath('userData') });
+        preferences.cacheCleanupPending = false; savePreferences();
+      } catch {
+        // Cache maintenance is optional. A rejected profile root or transient
+        // failure must not prevent startup; retain the request for a safe retry.
+        preferences.cacheCleanupPending = true;
+      }
+    }
+    statusReader.claudeReader.setDesktopPlanCacheFile(path.join(app.getPath('userData'), 'claude-desktop-plan.json'));
     statusReader.setKimiSource(preferences.kimiSource);
+    statusReader.setClaudeSource(preferences.claudeSource);
+    statusReader.setClaudeNetworkAllowed(!fixtureMode && preferences.claudeNetworkAllowed);
     statusReader.qwenReader.setKeychainAllowed(!fixtureMode && preferences.qwenKeychainAllowed);
     nativeTheme.themeSource = preferences.theme;
     const display = screen.getPrimaryDisplay();
     for (const item of screen.getAllDisplays()) displayLayouts.set(item.id, displayGeometry(item));
     lastDisplayId = display.id;
     window = new BrowserWindow({
-      ...panelBounds(display.workArea, preferences.side), title: 'AI Watch',
-      frame: false, resizable: false, maximizable: false, fullscreenable: false,
+      ...panelBounds(display.workArea, preferences.side, false, preferences.layout === 'fullscreen' ? preferences.windowLayout : preferences.layout), title: 'AI Watch',
+      frame: false, resizable: false, maximizable: false, fullscreenable: true,
       show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#111519' : '#edf1f5', autoHideMenuBar: true,
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),
         contextIsolation: true, nodeIntegration: false, sandbox: true,
       },
     });
+    windowLayout = new WindowLayout({ window, screen, getPreferences: () => preferences, save: savePreferences, changed: emitState, pin: lock, setBounds });
     if (process.platform === 'win32') app.setAppUserModelId('app.aiwatch.panel');
     panelTray = new PanelTray({ app, window, Tray, Menu, nativeImage,
       getSummary: () => ({ rows: traySummary(statusSnapshot, { ...preferences, language: currentLanguage().language }), isTestData: fixtureMode }),
@@ -171,7 +214,7 @@ else {
     nativeTheme.on('updated', updateAppearance);
     buildApplicationMenu();
     lock();
-    window.once('ready-to-show', () => window.show());
+    window.once('ready-to-show', () => { window.show(); if (preferences.layout === 'fullscreen') void windowLayout.change('fullscreen').catch(() => {}); });
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     window.webContents.on('will-navigate', (event, url) => {
       if (url !== window.webContents.getURL()) event.preventDefault();
@@ -181,11 +224,11 @@ else {
       window.loadURL(devUrl);
     } else window.loadFile(path.join(__dirname, '../dist/index.html'));
     window.on('move', () => {
-      if (repositioning) return;
+      if (repositioning || windowLayout.transitioning || preferences.layout === 'fullscreen') return;
       const target = screen.getDisplayMatching(window.getBounds());
       if (target.id !== lastDisplayId) {
         lastDisplayId = target.id;
-        const dimensions = panelBounds(target.workArea, preferences.side, collapsed);
+        const dimensions = panelBounds(target.workArea, preferences.side, collapsed, preferences.layout);
         setBounds(clampBounds({ ...window.getBounds(), width: dimensions.width, height: dimensions.height, y: target.workArea.y }, target.workArea));
       }
       if (!collapsed) expandedBounds = window.getBounds();
@@ -204,14 +247,25 @@ else {
     screen.on('display-removed', (_event, display) => { displayLayouts.delete(display.id); dock(); });
     handle('panel:state', currentState);
     handle('panel:status', () => statusSnapshot);
+    handle('panel:clear-cache', async () => {
+      const result = await clearSessionCaches({ session: window.webContents.session });
+      if (!result.cleared.length) throw new Error('Cache cleanup unavailable');
+      preferences.cacheCleanupPending = true; savePreferences();
+      return { freedBytes: result.freedBytes };
+    });
     handle('panel:refresh', () => refreshLocalStatus(true));
     handle('panel:lock', (value) => {
       if (typeof value !== 'boolean') throw new Error('Invalid lock state');
       preferences.locked = value; lock(); savePreferences(); emitState(); return currentState();
     });
-    handle('panel:collapse', (value) => {
+    handle('panel:layout', async value => {
+      if (!isLayout(value)) throw new Error('Invalid layout');
+      if (collapsed) await setCollapsed(false);
+      await windowLayout.change(value); return currentState();
+    });
+    handle('panel:collapse', async (value) => {
       if (typeof value !== 'boolean') throw new Error('Invalid collapse state');
-      setCollapsed(value); return currentState();
+      await setCollapsed(value); return currentState();
     });
     handle('panel:store', () => {
       if (!panelTray.store()) throw new Error('System tray unavailable');
@@ -224,8 +278,8 @@ else {
       buildApplicationMenu(); emitState(); return currentState();
     });
     handle('panel:configure', (value) => {
-      const next = validPreferences({ ...value, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
-        kimiSource: preferences.kimiSource, kimiWorkApp: preferences.kimiWorkApp, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
+      const next = validPreferences({ ...value, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
+        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -290,6 +344,41 @@ else {
       if (!fixtureMode) void refreshLocalStatus().catch(() => {});
       return currentState();
     });
+    handle('panel:claude-activity-access', async () => {
+      if (!fixtureMode && preferences.claudeSource === 'desktop') await statusReader.claudeReader.requestActivityAccess();
+      return refreshLocalStatus(true);
+    });
+    handle('panel:claude-network-access', async (value) => {
+      if (typeof value !== 'boolean') throw new Error('Invalid Claude network setting');
+      const previous = preferences.claudeNetworkAllowed;
+      preferences.claudeNetworkAllowed = value;
+      try { savePreferences(); } catch (error) { preferences.claudeNetworkAllowed = previous; throw error; }
+      const pending = statusReader.pending;
+      // Synthetic UI profiles must never read real credentials or prompt the keychain.
+      statusReader.setClaudeNetworkAllowed(!fixtureMode && value);
+      if (!fixtureMode) {
+        statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), claude: statusReader.current.claude };
+        window.webContents.send('panel:status-changed', statusSnapshot);
+      }
+      emitState();
+      if (pending) await pending.catch(() => {});
+      await refreshLocalStatus(true);
+      return currentState();
+    });
+    handle('panel:claude-source', async (value) => {
+      if (!isClaudeSource(value)) throw new Error('Invalid Claude source');
+      const previous = preferences.claudeSource;
+      preferences.claudeSource = value;
+      try { savePreferences(); } catch (error) { preferences.claudeSource = previous; throw error; }
+      const pending = statusReader.pending;
+      statusReader.setClaudeSource(value);
+      statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), claude: statusReader.current.claude };
+      window.webContents.send('panel:status-changed', statusSnapshot);
+      emitState();
+      if (pending) await pending.catch(() => {});
+      await refreshLocalStatus(true);
+      return currentState();
+    });
     handle('panel:kimi-source', async (value) => {
       if (!isKimiSource(value)) throw new Error('Invalid Kimi source');
       const previous = preferences.kimiSource;
@@ -331,5 +420,10 @@ else {
     app.on('activate', () => { void panelTray.restore(); });
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { panelTray?.dispose(); clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance); statusReader.codexAttention.close(); statusReader.codexQuotaReader.close(); });
+  app.on('before-quit', () => {
+    panelTray?.dispose(); clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance);
+    statusReader.codexAttention.close(); statusReader.codexQuotaReader.close();
+    // Tear down Chromium's window/IPC while the host is still alive.
+    if (window && !window.isDestroyed()) window.destroy();
+  });
 }

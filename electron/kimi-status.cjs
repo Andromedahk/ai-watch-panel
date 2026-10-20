@@ -1,3 +1,4 @@
+const { taskDetail } = require('./task-details.cjs');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
@@ -235,7 +236,8 @@ class KimiStatusReader {
       } catch { incomplete = true; }
     }));
     return { activity: running.size ? 'running' : waiting.size ? 'waiting' : incomplete ? 'unknown' : live ? 'idle' : fallback.activity,
-      activeTasks: running.size, waitingTasks: waiting.size, live };
+      activeTasks: running.size, waitingTasks: waiting.size, live,
+      ...(this.taskDetailsEnabled ? { taskDetails: [...new Set([...waiting, ...running])].slice(0, 8).map(id => taskDetail({ state: waiting.has(id) ? 'waiting' : 'running' }, { now, live, source: 'local-api' })) } : {}) };
   }
   async poll(processes, now = Date.now()) {
     if (this.pending) return this.pending;
@@ -250,6 +252,7 @@ class KimiStatusReader {
       : this.planCache ? planStale ? 'cache' : 'account' : activity.live ? 'local-api' : 'unavailable',
       connection: activity.live || (this.cache && !stale) || (this.planCache && !planStale) ? 'ready' : ['login', 'expired'].includes(this.error) ? 'auth-required' : this.error ? 'error' : 'offline',
       activity: activity.activity, activeTasks: activity.activeTasks, waitingTasks: activity.waitingTasks,
+      ...(this.taskDetailsEnabled ? { taskDetails: activity.taskDetails || [] } : {}),
       task: activity.activeTasks ? `${activity.activeTasks} 项 Kimi 任务正在运行` : activity.waitingTasks ? `${activity.waitingTasks} 项任务等待回应`
         : activity.activity === 'idle' ? 'Kimi 本机服务暂无运行任务' : activity.activity === 'offline' ? 'Kimi Code 未运行' : 'Kimi 当前任务状态未知',
       quotas: (this.cache?.quotas || []).map(q => ({ ...q, stale: stale || Boolean(q.reset && Date.parse(q.reset) <= now) })),

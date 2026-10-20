@@ -187,3 +187,17 @@ test('Antigravity thinking levels merge without mixing model versions, choosing 
   ] } } }, base, base);
   assert.equal(uncertain[0].remaining, null); assert.equal(uncertain[0].reset, ''); assert.equal(uncertain[0].stale, true);
 });
+
+test('Antigravity merged thinking variants preserve ProtoJSON exhausted quotas as zero', () => {
+  const resetTime = new Date(base + 60000).toISOString();
+  const payload = { userStatus: { cascadeModelConfigData: { clientModelConfigs: [
+    { label: 'Claude Sonnet (High)', quotaInfo: { resetTime } },
+    { label: 'Claude Sonnet (Low)', quotaInfo: { remainingFraction: .4, resetTime } },
+    { label: 'Claude Opus (High)', quotaInfo: { resetTime } },
+    { label: 'Claude Opus (Low)', quotaInfo: {} },
+  ] } } };
+  const rows = normalizeAntigravityQuotas(payload, base, base);
+  assert.equal(rows.find(row => row.model === 'Claude Sonnet').remaining, 0);
+  assert.equal(rows.find(row => row.model === 'Claude Sonnet').reset, resetTime);
+  assert.equal(rows.find(row => row.model === 'Claude Opus').remaining, null);
+});

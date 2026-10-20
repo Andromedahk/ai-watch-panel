@@ -68,7 +68,7 @@ function summarize(id, status) {
     return `${text(primary.label) || '主要积分'} · ${stale ? '历史剩余' : '剩余'} ${value} ${text(primary.unit)}${stale ? '（非实时）' : ''}`;
   }
   if (quota) return quotaSummary(id, quota, status);
-  return id === 'claude' ? 'Code 额度暂不可用' : id === 'qwen' || id === 'workbuddy' ? '积分 / 额度未知' : '额度未知';
+  return id === 'claude' ? status?.claudeSource === 'desktop' ? '额度未知' : 'Code 额度暂不可用' : id === 'qwen' || id === 'workbuddy' ? '积分 / 额度未知' : '额度未知';
 }
 
 function translateSummary(value, i18n) {
@@ -90,7 +90,8 @@ function traySummary(snapshot, preferences) {
     const work = id === 'kimi' && preferences?.kimiSource === 'work';
     let status = snapshot?.[id];
     if (id === 'kimi' && status && (status.kimiSource || 'code') !== (work ? 'work' : 'code')) status = undefined;
-    const name = work ? 'Kimi Work' : id === 'qwen' && i18n.language !== 'zh-CN' ? i18n.language.startsWith('zh') ? '千問' : 'Qwen' : NAMES[id];
+    if (id === 'claude' && status && (status.claudeSource || 'code') !== (preferences?.claudeSource || 'code')) status = undefined;
+    const name = id === 'claude' && preferences?.claudeSource === 'desktop' ? 'Claude' : work ? 'Kimi Work' : id === 'qwen' && i18n.language !== 'zh-CN' ? i18n.language.startsWith('zh') ? '千問' : 'Qwen' : NAMES[id];
     return { id, label: `${i18n.dir === 'rtl' ? i18n.isolate(name) : name}    ${translateSummary(summarize(id, status), i18n)}` };
   });
 }

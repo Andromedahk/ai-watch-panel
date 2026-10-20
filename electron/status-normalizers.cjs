@@ -82,8 +82,14 @@ function normalizeAntigravityQuotas(payload, observedAt, now = Date.now()) {
   const models = payload?.userStatus?.cascadeModelConfigData?.clientModelConfigs;
   if (!Array.isArray(models)) return [];
   const quotas = models.slice(0, 100).map((model) => {
-    const fraction = number(model?.quotaInfo?.remainingFraction);
-    const resetAt = timestamp(model?.quotaInfo?.resetTime);
+    const info = model?.quotaInfo;
+    const resetAt = timestamp(info?.resetTime);
+    // The local service uses ProtoJSON, which omits an implicit scalar's default zero.
+    // A quota message with a valid reset time supplies the context for that omitted 0;
+    // an absent/empty message or an explicitly invalid fraction remains unknown.
+    const omittedZero = info && typeof info === 'object' && !Array.isArray(info)
+      && !Object.hasOwn(info, 'remainingFraction') && typeof info.resetTime === 'string' && resetAt !== null;
+    const fraction = omittedZero ? 0 : number(info?.remainingFraction);
     return { model: text(model?.label, '未命名模型'), period: '模型额度',
       remaining: fraction !== null && fraction >= 0 && fraction <= 1 ? percentage(fraction * 100) : null,
       reset: resetAt === null ? '' : new Date(resetAt).toISOString(),

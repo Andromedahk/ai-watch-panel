@@ -21,7 +21,7 @@ export function localizeStatus(status: LocalProviderStatus, i18n: I18n): LocalPr
   if (status.accessRequired || /权限|安全存储|授权/.test(status.detail)) detail = t('权限说明');
   else if (/格式|不兼容|协议/.test(status.detail)) detail = t('兼容说明');
   else if (/失败|限流|稍后重试/.test(status.detail)) detail = t('查询失败说明');
-  if (status.id === 'claude' && !status.quotas.length) detail = t('未提供 Code 额度');
+  if (status.id === 'claude' && !status.quotas.length) detail = t(status.claudeSource === 'desktop' ? '额度未知' : '未提供 Code 额度');
   if (status.id === 'deepseek' && status.connection === 'ready') detail = t('登录说明');
   if (status.source === 'unavailable' && !status.sampledAt) detail = t('尚未读取');
   const waiting = status.waitingReason === 'input' ? t('待回答') : status.waitingReason === 'approval' ? t('待授权') : t('待处理');
