@@ -444,5 +444,15 @@
   "Claude 服务要求稍后重试，手动刷新也会遵守等待时间。": "El servicio de Claude requiere una espera antes de reintentar. La actualización manual también respeta ese plazo.",
   "Claude 登录或服务端数据格式暂不兼容，未提供的额度保持未知。": "El formato de inicio de sesión o de respuesta del servidor de Claude aún no es compatible. Las cuotas no proporcionadas siguen siendo desconocidas.",
   "当前平台暂不支持读取 Claude 桌面登录；仍显示本地记录。": "Esta plataforma todavía no permite leer el inicio de sesión de Claude de escritorio. Los registros locales se siguen mostrando.",
-  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Las consultas en línea de Claude están desactivadas. Solo se muestran los registros locales."
+  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Las consultas en línea de Claude están desactivadas. Solo se muestran los registros locales.",
+  "桌面小组件": "Widgets de escritorio",
+  "在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。": "Haz clic con el botón derecho en el escritorio, elige «Editar widgets», busca AI Watch y añade la vista general o una herramienta individual.",
+  "同步小组件": "Sincronizar widgets",
+  "仅共享额度摘要与状态": "Comparte solo resúmenes de cuota y estado",
+  "小组件同步失败，请重试": "No se pudo sincronizar el widget. Inténtalo de nuevo.",
+  "此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。": "Esta compilación no incluye un widget nativo firmado; usa una versión firmada que incluya la extensión de widgets.",
+  "macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。": "macOS decide cuándo actualizar; los widgets muestran la hora de muestreo y marcan los registros obsoletos como históricos.",
+  "仅保留桌面小组件": "Conservar solo los widgets de escritorio",
+  "隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。": "Oculta el panel, el Dock y el icono de la barra de menús mientras la supervisión continúa en segundo plano. Haz clic en un widget o vuelve a abrir AI Watch para restaurarlo.",
+  "总览跟随“监看模块”的选择和排序。": "La vista general sigue la selección y el orden de «Módulos de supervisión»."
 }

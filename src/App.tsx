@@ -15,6 +15,7 @@ const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
   desktop: false, platform: 'browser', scaleFactor: window.devicePixelRatio,
   trayAvailable: false, stored: false,
+  widgetsEnabled: false, widgetsAvailable: false, widgetSyncError: false, widgetBackground: false, widgetLastPublishedAt: null,
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
   kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, layout: 'single', windowLayout: 'single',
@@ -252,6 +253,7 @@ export default function App() {
   const [claudeSourceSaving, setClaudeSourceSaving] = useState(false);
   const [claudeNetworkSaving, setClaudeNetworkSaving] = useState(false);
   const [cacheClearing, setCacheClearing] = useState(false);
+  const [widgetsSaving, setWidgetsSaving] = useState(false);
   const storeLabel = state.platform === 'darwin' ? t("收纳到菜单栏") : t("收纳到托盘");
   const storeHint = state.trayAvailable ? t("{p0}，后台继续监看", { p0: storeLabel }) : state.desktop ? t("系统托盘暂不可用") : t("桌面版支持菜单栏与托盘收纳");
   const providers = baseProviders.map(provider => provider.id === 'kimi' && state.kimiSource === 'work'
@@ -598,6 +600,27 @@ export default function App() {
             <option value="single">{t('单列模式')}</option><option value="double">{t('双排模式')}</option><option value="fullscreen">{t('全屏模式')}</option>
           </select><p className="appearance-hint">{t('双排宽度加倍；全屏显示任务详情。Escape 退出全屏。')}</p>
         </fieldset>
+        {state.platform === 'darwin' && <fieldset className="appearance-settings"><legend>{t('桌面小组件')}</legend>
+          <p className="appearance-hint">{t('在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。')}</p>
+          <p className="appearance-hint">{t('总览跟随“监看模块”的选择和排序。')}</p>
+          <label className="switch-row"><span>{t('同步小组件')}<small>{t('仅共享额度摘要与状态')}</small></span><input type="checkbox" aria-label={t('同步小组件')} checked={state.widgetsEnabled} disabled={!state.widgetsAvailable || widgetsSaving} onChange={async event => {
+            const enabled = event.target.checked;
+            setWidgetsSaving(true);
+            try { if (window.panel) setState(await window.panel.setWidgetsEnabled(enabled)); }
+            catch { setNotice(t('小组件同步失败，请重试')); }
+            finally { setWidgetsSaving(false); }
+          }} /></label>
+          {!state.widgetsAvailable && <p className="appearance-hint">{t('此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。')}</p>}
+          {state.widgetSyncError && <p className="appearance-hint" role="status">{t('小组件同步失败，请重试')}</p>}
+          <p className="appearance-hint">{t('macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。')}</p>
+          <button className="dock-button" disabled={!state.widgetsEnabled || !state.widgetsAvailable || widgetsSaving} onClick={async () => {
+            setWidgetsSaving(true);
+            try { if (window.panel) setState(await window.panel.widgetBackground()); }
+            catch { setNotice(t('小组件同步失败，请重试')); }
+            finally { setWidgetsSaving(false); }
+          }}>{t('仅保留桌面小组件')}</button>
+          <p className="appearance-hint">{t('隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。')}</p>
+        </fieldset>}
         <fieldset className="language-settings"><legend>{t('语言')}</legend>
           <select aria-label={t('语言')} value={state.language} disabled={languageSaving} onChange={event => void changeLanguage(event.target.value as Language)}>
             <option value="system">{t('跟随系统')}</option>

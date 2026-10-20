@@ -444,5 +444,15 @@
   "Claude 服务要求稍后重试，手动刷新也会遵守等待时间。": "Claude requires a delay before retrying. Manual refresh also respects this waiting period.",
   "Claude 登录或服务端数据格式暂不兼容，未提供的额度保持未知。": "The Claude sign-in or server response format is currently unsupported. Quotas not provided remain unknown.",
   "当前平台暂不支持读取 Claude 桌面登录；仍显示本地记录。": "This platform does not currently support reading the Claude desktop sign-in. Local records are still shown.",
-  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Claude online queries are off. Only local records are shown."
+  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Claude online queries are off. Only local records are shown.",
+  "桌面小组件": "Desktop widgets",
+  "在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。": "Right-click the desktop, choose \"Edit Widgets,\" search for AI Watch, then add the overview or an individual tool.",
+  "同步小组件": "Sync widgets",
+  "仅共享额度摘要与状态": "Share only quota summaries and status",
+  "小组件同步失败，请重试": "Widget sync failed. Please try again.",
+  "此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。": "This build does not include a signed native widget; use a signed version that includes the widget extension.",
+  "macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。": "macOS decides when to refresh; widgets show the sample time and mark stale records as historical.",
+  "仅保留桌面小组件": "Keep only desktop widgets",
+  "隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。": "Hide the panel, Dock, and menu bar icon while monitoring continues in the background. Click a widget or reopen AI Watch to restore.",
+  "总览跟随“监看模块”的选择和排序。": "The overview follows the selection and order in \"Monitor modules.\""
 }

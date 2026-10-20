@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>AIWatchAppGroup</key>
+  <string>__AI_WATCH_APP_GROUP__</string>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>AI Watch Widgets</string>
+  <key>CFBundleExecutable</key>
+  <string>AIWatchWidgets</string>
+  <key>CFBundleIdentifier</key>
+  <string>app.aiwatch.panel.widgets</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>AIWatchWidgets</string>
+  <key>CFBundlePackageType</key>
+  <string>XPC!</string>
+  <key>CFBundleShortVersionString</key>
+  <string>__AI_WATCH_VERSION__</string>
+  <key>CFBundleVersion</key>
+  <string>__AI_WATCH_BUILD_NUMBER__</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>14.0</string>
+  <key>NSExtension</key>
+  <dict>
+    <key>NSExtensionPointIdentifier</key>
+    <string>com.apple.widgetkit-extension</string>
+  </dict>
+</dict>
+</plist>

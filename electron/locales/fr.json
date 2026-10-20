@@ -444,5 +444,15 @@
   "Claude 服务要求稍后重试，手动刷新也会遵守等待时间。": "Le service Claude impose un délai avant une nouvelle tentative. L’actualisation manuelle respecte également ce délai.",
   "Claude 登录或服务端数据格式暂不兼容，未提供的额度保持未知。": "Le format de connexion ou de réponse du serveur Claude n’est pas encore pris en charge. Les quotas non fournis restent inconnus.",
   "当前平台暂不支持读取 Claude 桌面登录；仍显示本地记录。": "Cette plateforme ne permet pas encore de lire la connexion de Claude pour ordinateur. Les données locales restent affichées.",
-  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Les requêtes en ligne de Claude sont désactivées. Seules les données locales sont affichées."
+  "已关闭 Claude 联网查询，当前仅显示本地记录。": "Les requêtes en ligne de Claude sont désactivées. Seules les données locales sont affichées.",
+  "桌面小组件": "Widgets de bureau",
+  "在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。": "Cliquez avec le bouton droit sur le bureau, choisissez « Modifier les widgets », recherchez AI Watch, puis ajoutez la vue d’ensemble ou un outil individuel.",
+  "同步小组件": "Synchroniser les widgets",
+  "仅共享额度摘要与状态": "Partage uniquement les résumés de quota et l’état",
+  "小组件同步失败，请重试": "Échec de la synchronisation du widget. Réessayez.",
+  "此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。": "Cette version n’inclut pas de widget natif signé ; utilisez une version signée contenant l’extension de widget.",
+  "macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。": "macOS décide du moment de l’actualisation ; les widgets affichent l’heure d’échantillonnage et marquent les enregistrements obsolètes comme historiques.",
+  "仅保留桌面小组件": "Ne conserver que les widgets de bureau",
+  "隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。": "Masquez le panneau, le Dock et l’icône de la barre des menus tout en continuant la surveillance en arrière-plan. Cliquez sur un widget ou rouvrez AI Watch pour restaurer.",
+  "总览跟随“监看模块”的选择和排序。": "La vue d’ensemble suit la sélection et l’ordre des « Modules de suivi »."
 }

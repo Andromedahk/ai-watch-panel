@@ -1,18 +1,24 @@
 const path = require('node:path');
 const { createI18n } = require('./i18n.cjs');
 
-// Hiding preserves the renderer and readers. Without a tray, never hide the app.
+// Widget background mode has an explicit app-activation recovery route on macOS.
 class PanelTray {
   constructor({ app, window, Tray, Menu, nativeImage, platform = process.platform,
     onChange = () => {}, onRefresh = () => {}, getSummary = () => ({ rows: [], isTestData: false }), getLanguage = () => 'zh-CN', now = Date.now,
     schedule = setTimeout, cancel = clearTimeout }) {
-    Object.assign(this, { app, window, platform, onChange, now, schedule, cancel, getSummary, getLanguage, Menu, onRefresh });
+    Object.assign(this, { app, window, platform, onChange, now, schedule, cancel, getSummary, getLanguage, Menu, onRefresh, Tray, nativeImage });
     this.stored = false;
+    this.widgetBackground = false;
     this.quitting = false;
     this.revision = 0;
     this.lastDockHide = -Infinity;
     this.dockTimer = null;
     this.tray = null;
+    this.createTray();
+  }
+  createTray() {
+    if (this.available || this.quitting) return;
+    const { platform, Tray, nativeImage } = this;
     try {
       const assets = path.join(__dirname, 'assets');
       let icon = path.join(assets, platform === 'win32' ? 'tray.ico' : 'tray.png');
@@ -22,6 +28,7 @@ class PanelTray {
         icon.setTemplateImage(true);
       }
       this.tray = new Tray(icon);
+      this.menuSignature = null;
       this.updateMenu();
       if (platform === 'win32') {
         this.tray.on('click', () => this.openMenu());
@@ -77,6 +84,19 @@ class PanelTray {
     this.onChange();
     return true;
   }
+  storeForWidgets() {
+    if (this.platform !== 'darwin' || this.window.isDestroyed() || this.quitting) return false;
+    if (this.widgetBackground && this.stored) return true;
+    ++this.revision;
+    this.widgetBackground = true;
+    this.stored = true;
+    this.tray?.destroy();
+    this.tray = null;
+    this.window.hide();
+    this.hideDock();
+    this.onChange();
+    return true;
+  }
   hideDock() {
     const delay = Math.max(0, 1100 - (this.now() - this.lastDockHide));
     const hide = () => {
@@ -84,6 +104,15 @@ class PanelTray {
       if (!this.stored || this.quitting) return;
       this.app.dock.hide();
       this.lastDockHide = this.now();
+      // A freshly launched macOS app can finish its Dock activation after hide().
+      // Check the actual result once; restoration/quit cancels this work.
+      this.dockTimer = this.schedule(() => {
+        this.dockTimer = null;
+        if (this.stored && !this.quitting && this.app.dock.isVisible?.()) {
+          this.app.dock.hide();
+          this.lastDockHide = this.now();
+        }
+      }, 1100);
     };
     // Electron/macOS can ignore two dock.hide calls less than a second apart.
     if (delay) this.dockTimer = this.schedule(hide, delay);
@@ -100,6 +129,8 @@ class PanelTray {
     }
     // A later store or quit wins over a pending Dock restoration.
     if (revision !== this.revision || this.quitting || this.window.isDestroyed()) return false;
+    this.widgetBackground = false;
+    this.createTray();
     if (this.platform === 'win32') this.window.setSkipTaskbar(false);
     if (this.window.isMinimized()) this.window.restore();
     this.window.show();
@@ -109,6 +140,7 @@ class PanelTray {
     return true;
   }
   handleClose(event) {
+    if (!this.quitting && this.widgetBackground && this.storeForWidgets()) { event.preventDefault(); return; }
     if (this.quitting || !this.available) return;
     if (this.store()) event.preventDefault();
   }

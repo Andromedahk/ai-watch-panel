@@ -75,6 +75,7 @@ function validPreferences(value) {
     claudeSource: isClaudeSource(value?.claudeSource) ? value.claudeSource : 'desktop',
     claudeNetworkAllowed: value?.claudeNetworkAllowed === true,
     cacheCleanupPending: value?.cacheCleanupPending === true,
+    widgetsEnabled: value?.widgetsEnabled === true,
     kimiWorkApp: validProviderApps({ kimi: value?.kimiWorkApp }).kimi || null,
     animeMode: value?.animeMode === true,
     layout: isLayout(value?.layout) ? value.layout : 'single',
