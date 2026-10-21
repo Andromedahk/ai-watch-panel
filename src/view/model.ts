@@ -14,7 +14,7 @@ export type ProviderView = {
   plan: { show: boolean; label: string; full: string; state: string; stale: boolean; title: string };
   state: StateKind; stateLabel: string; task: string; taskTitle: string;
   source: string; sourceTitle: string; isLocal: boolean; observed: string;
-  metrics: Metrics; tightest: number | null; attention: boolean;
+  metrics: Metrics; tightest: number | null; attention: boolean; inferred: boolean; accessRequired: boolean;
 };
 
 /** Where each built-in portrait's face sits, as fractions of the square image. */
@@ -51,8 +51,8 @@ export function buildView(provider: Provider, i18n: I18n, testing: boolean): Pro
 
   const state: StateKind = !local ? provider.running ? 'running' : 'idle' : local.activity;
   const stateLabel = !local ? provider.running ? t('演示运行') : t('演示待机')
-    : { running: t('运行中'), idle: t('待机'), waiting: local.id === 'codex' ? local.waitingReason === 'input' ? t('待回答') : local.waitingReason === 'approval' ? t('待授权') : t('待处理') : t('待确认'), unknown: t('未知'), offline: t('离线') }[local.activity];
-  const task = local?.activityAccessRequired ? t('待授权') : local?.activity === 'unknown' && local.activityProbeError && local.activityProbeError !== 'unsupported-platform'
+    : { running: t('运行中'), idle: t('待机'), waiting: local.id === 'codex' || local.id === 'claude' ? local.waitingReason === 'input' ? t('待回答') : local.waitingReason === 'approval' ? t('待授权') : t('待处理') : t('待确认'), unknown: t('未知'), offline: t('离线') }[local.activity];
+  const task = local?.activityAccessRequired && local.activity !== 'running' ? t('辅助功能未授权，桌面状态未知') : local?.activity === 'unknown' && local.activityProbeError && local.activityProbeError !== 'unsupported-platform'
     ? t(local.activityAccessState === 'granted' ? '已授权，暂无法读取活动' : '活动读取失败') : provider.task;
 
   const plan = local?.plan;
@@ -99,5 +99,6 @@ export function buildView(provider: Provider, i18n: I18n, testing: boolean): Pro
     state, stateLabel, task, taskTitle: local?.activityDetail || local?.detail || task,
     source, sourceTitle, isLocal: Boolean(local), observed: local?.observedAt ? date(local.observedAt, { hour: '2-digit', minute: '2-digit' }) : '',
     metrics, tightest: known.length ? Math.min(...known) : null, attention: local?.activity === 'waiting',
+    inferred: Boolean(local?.activityInferred), accessRequired: Boolean(local?.activityAccessRequired),
   };
 }

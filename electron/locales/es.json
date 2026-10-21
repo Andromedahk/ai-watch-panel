@@ -487,5 +487,10 @@
   "休息 {p0}": "Descansan {p0}",
   "等你处理": "Te necesitan",
   "最紧额度": "Cuota más baja",
-  "最紧额度 {p0}": "Cuota más baja {p0}"
+  "最紧额度 {p0}": "Cuota más baja {p0}",
+  "授权辅助功能": "Conceder accesibilidad",
+  "辅助功能未授权，桌面状态未知": "Sin permiso de accesibilidad; estado de escritorio desconocido",
+  "授权辅助功能请使用桌面版": "Concede la accesibilidad desde la app de escritorio",
+  "请在系统设置的“辅助功能”中允许 AI Watch，然后回到面板": "Permite AI Watch en Accesibilidad de Ajustes del Sistema y vuelve al panel",
+  "第 {p0} 位": "Posición {p0}"
 }

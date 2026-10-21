@@ -42,9 +42,10 @@ function createClaudeActivityBridge({ permissionReader, readActivity = readDeskt
     if (result?.trusted === false) return unknown(true, 'helper-access-denied');
     if (result?.probeError) return unknown(true, PROBE_ERRORS.has(result.probeError) ? result.probeError : 'invalid-output');
     if (!result || Array.isArray(result) || result.trusted !== true || result.supported !== true
-      || typeof result.complete !== 'boolean' || !['running', 'idle', 'unknown'].includes(result.activity)
+      || typeof result.complete !== 'boolean' || !['running', 'idle', 'waiting', 'unknown'].includes(result.activity)
+      || ![undefined, null, 'approval', 'input'].includes(result.waiting) || ((result.activity === 'waiting') !== Boolean(result.waiting))
       || (result.plan !== null && !PLAN_NAMES.has(result.plan))) return unknown(true, 'invalid-output');
-    return { trusted: true, supported: true, activity: result.activity, plan: result.plan, complete: result.complete };
+    return { trusted: true, supported: true, activity: result.activity, ...(result.waiting ? { waiting: result.waiting } : {}), plan: result.plan, complete: result.complete };
   };
 }
 module.exports = { createClaudeActivityBridge, BRIDGE_PROBE_ERRORS };

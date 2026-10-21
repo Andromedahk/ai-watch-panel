@@ -41,6 +41,22 @@ static const char *const composer_labels[] = {
   "How can I help you today?", "今天我能帮您什么？", "今天我能幫您什麼？", "向 Claude 发送消息", "向 Claude 發送訊息",
   "输入您发送给 Claude 的提示词"
 };
+// Tool / connector permission prompts. Only an allow-type button establishes that
+// Claude is waiting for the user; a lone Deny/Cancel never does.
+static const char *const allow_labels[] = {
+  "Allow once", "Allow always", "Always allow", "Allow for this chat", "Allow for this session",
+  "允许一次", "始终允许", "总是允许", "本次对话允许", "允許一次", "一律允許", "永遠允許",
+  "1回だけ許可", "常に許可", "한 번 허용", "항상 허용",
+  "Einmal erlauben", "Immer erlauben", "Autoriser une fois", "Toujours autoriser", "Permitir una vez", "Permitir siempre",
+  "Permitir uma vez", "Sempre permitir", "Consenti una volta", "Consenti sempre", "Разрешить один раз", "Всегда разрешать",
+  "Дозволити один раз", "Завжди дозволяти", "Cho phép một lần", "Luôn cho phép", "एक बार अनुमति दें", "हमेशा अनुमति दें",
+  "אפשר פעם אחת", "אפשר תמיד", "السماح مرة واحدة", "السماح دائمًا"
+};
+// Questions Claude asks back (choice prompts). The identifiers are matched before labels.
+static const char *const question_labels[] = {
+  "Submit answer", "Submit answers", "Skip question", "提交回答", "提交答案", "跳过问题", "略過問題", "跳過問題",
+  "回答を送信", "質問をスキップ", "답변 제출", "질문 건너뛰기"
+};
 static const char *badge_plan(const char *text) {
   // Exact account-plan badges only. Marketing copy (upgrade, billing cancellation,
   // product/model names in chats) cannot establish the active subscription.
@@ -52,19 +68,30 @@ static const char *badge_plan(const char *text) {
   for (size_t index = 0; index < sizeof(labels) / sizeof(labels[0]); index++) if (strcmp(text, labels[index].text) == 0) return labels[index].plan;
   return NULL;
 }
-struct observation { bool stop; bool send; bool composer; bool complete; const char *plan; size_t visited; double deadline; };
+struct observation { bool stop; bool send; bool composer; bool approval; bool question; bool complete; const char *plan; size_t visited; double deadline;
+  AXUIElementRef deferred[4]; size_t deferred_count; bool in_messages; };
 static void inspect(AXUIElementRef element, unsigned int depth, bool in_account, struct observation *state) {
-  if (depth > 28 || state->visited++ >= 1600 || monotonic() >= state->deadline) { state->complete = false; return; }
-  char role[64] = "", label[2048] = "", identifier[256] = "";
+  if (depth > 32 || state->visited++ >= 4000 || monotonic() >= state->deadline) { state->complete = false; return; }
+  char role[64] = "", subrole[64] = "", label[2048] = "", identifier[256] = "";
   (void)text_attribute(element, kAXRoleAttribute, role, sizeof(role));
+  (void)text_attribute(element, kAXSubroleAttribute, subrole, sizeof(subrole));
   (void)text_attribute(element, CFSTR("AXIdentifier"), identifier, sizeof(identifier));
+  // The sidebar's conversation history can hold thousands of links and used to
+  // exhaust the node budget before the composer was reached. It never contains
+  // the send / stop / permission controls, so skip navigation landmarks entirely.
+  if (strcmp(subrole, "AXLandmarkNavigation") == 0) return;
   // Conversation message trees are irrelevant to the composer state and can
   // contain thousands of elements. Skip those subtrees before visiting children.
   if (strcmp(role, "AXGroup") == 0 || strcmp(role, "AXList") == 0) {
     (void)text_attribute(element, kAXDescriptionAttribute, label, sizeof(label));
     if (!label[0]) (void)text_attribute(element, kAXTitleAttribute, label, sizeof(label));
     if (strcmp(label, "Conversation messages") == 0 || strcmp(label, "Chat messages") == 0
-        || strcmp(label, "对话消息") == 0 || strcmp(label, "對話訊息") == 0 || strcmp(identifier, "chat-messages") == 0) return;
+        || strcmp(label, "对话消息") == 0 || strcmp(label, "對話訊息") == 0 || strcmp(identifier, "chat-messages") == 0) {
+      // Message trees are large; visit them only after the composer pass, and only
+      // for permission / question buttons that Claude places inline in the chat.
+      if (!state->in_messages && state->deferred_count < 4) { CFRetain(element); state->deferred[state->deferred_count++] = element; }
+      if (!state->in_messages) return;
+    }
     label[0] = '\0';
   }
   bool account = in_account || strcmp(identifier, "user-menu-button") == 0 || strcmp(identifier, "account-menu-button") == 0;
@@ -76,6 +103,10 @@ static void inspect(AXUIElementRef element, unsigned int depth, bool in_account,
     if (equals_any(label, send_labels, sizeof(send_labels) / sizeof(send_labels[0]))) state->send = true;
     if (strcmp(identifier, "send-button") == 0 || strcmp(identifier, "chat-send-button") == 0) state->send = true;
     if (strcmp(identifier, "stop-response-button") == 0 || strcmp(identifier, "stop-generation-button") == 0) state->stop = true;
+    if (equals_any(label, allow_labels, sizeof(allow_labels) / sizeof(allow_labels[0]))
+        || strcmp(identifier, "tool-permission-allow") == 0 || strcmp(identifier, "permission-allow-button") == 0) state->approval = true;
+    if (equals_any(label, question_labels, sizeof(question_labels) / sizeof(question_labels[0]))
+        || strcmp(identifier, "ask-user-question-submit") == 0) state->question = true;
   } else if (strcmp(role, "AXTextArea") == 0) {
     (void)text_attribute(element, kAXDescriptionAttribute, label, sizeof(label));
     if (equals_any(label, composer_labels, sizeof(composer_labels) / sizeof(composer_labels[0]))
@@ -86,13 +117,13 @@ static void inspect(AXUIElementRef element, unsigned int depth, bool in_account,
     (void)text_attribute(element, kAXValueAttribute, label, sizeof(label));
     const char *plan = badge_plan(label); if (plan != NULL) state->plan = plan;
   }
-  if (state->stop) return;
+  if (state->stop && (state->approval || state->question)) return;
   CFTypeRef children = NULL;
   if (AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, &children) == kAXErrorSuccess
       && children != NULL && CFGetTypeID(children) == CFArrayGetTypeID()) {
     CFIndex count = CFArrayGetCount((CFArrayRef)children);
     for (CFIndex index = 0; index < count; index++) {
-      if (monotonic() >= state->deadline || state->visited >= 1600) { state->complete = false; break; }
+      if (monotonic() >= state->deadline || state->visited >= 4000) { state->complete = false; break; }
       CFTypeRef child = CFArrayGetValueAtIndex((CFArrayRef)children, index);
       if (child != NULL && CFGetTypeID(child) == AXUIElementGetTypeID()) inspect((AXUIElementRef)child, depth + 1, account, state);
     }
@@ -117,7 +148,7 @@ static void inspect_application(AXUIElementRef app, struct observation *state) {
   if (has_windows) {
     CFIndex count = CFArrayGetCount((CFArrayRef)windows);
     for (CFIndex index = 0; index < count; index++) {
-      if (monotonic() >= state->deadline || state->visited >= 1600) { state->complete = false; break; }
+      if (monotonic() >= state->deadline || state->visited >= 4000) { state->complete = false; break; }
       CFTypeRef window = CFArrayGetValueAtIndex((CFArrayRef)windows, index);
       if (window != NULL && CFGetTypeID(window) == AXUIElementGetTypeID()) inspect((AXUIElementRef)window, 0, false, state);
       else state->complete = false;
@@ -135,21 +166,36 @@ int main(int argc, char **argv) {
     trusted = AXIsProcessTrustedWithOptions(options); CFRelease(options);
   } else trusted = AXIsProcessTrusted();
   if (!trusted || request) {
-    (void)printf("{\"trusted\":%s,\"activity\":\"unknown\",\"plan\":null,\"complete\":false}\n", trusted ? "true" : "false"); return 0;
+    (void)printf("{\"trusted\":%s,\"activity\":\"unknown\",\"waiting\":null,\"plan\":null,\"complete\":false}\n", trusted ? "true" : "false"); return 0;
   }
   char *end = NULL; long number = argc == 2 ? strtol(argv[1], &end, 10) : 0;
   char process_name[64] = "";
   if (number < 1 || number > 2147483647 || end == NULL || *end != '\0'
       || proc_name((int)number, process_name, sizeof(process_name)) <= 0 || strcmp(process_name, "Claude") != 0) {
-    (void)printf("{\"trusted\":true,\"activity\":\"unknown\",\"plan\":null,\"complete\":false}\n"); return 0;
+    (void)printf("{\"trusted\":true,\"activity\":\"unknown\",\"waiting\":null,\"plan\":null,\"complete\":false}\n"); return 0;
   }
   AXUIElementRef app = AXUIElementCreateApplication((pid_t)number);
   (void)AXUIElementSetMessagingTimeout(app, 0.05f);
-  struct observation state = { false, false, false, true, NULL, 0, monotonic() + 0.75 };
-  inspect_application(app, &state); CFRelease(app);
-  const char *activity = state.stop ? "running"
-    : state.complete && (state.send || state.composer) && !state.stop ? "idle" : "unknown";
-  (void)printf("{\"trusted\":true,\"activity\":\"%s\",\"plan\":", activity);
+  struct observation state = { false, false, false, false, false, true, NULL, 0, monotonic() + 1.0, { NULL, NULL, NULL, NULL }, 0, false };
+  inspect_application(app, &state);
+  // Composer state is decided by the first pass alone; the message pass may run out
+  // of budget on long chats without turning a known idle composer into unknown.
+  bool composer_complete = state.complete;
+  state.in_messages = true; state.visited = 0; state.deadline = monotonic() + 0.4;
+  for (size_t index = 0; index < state.deferred_count; index++) {
+    if (!state.approval && !state.question && monotonic() < state.deadline) inspect(state.deferred[index], 0, false, &state);
+    CFRelease(state.deferred[index]);
+  }
+  state.complete = composer_complete;
+  CFRelease(app);
+  // A visible permission or question prompt outranks everything: Claude is paused
+  // on the user even though the Stop button may still be shown.
+  const char *waiting = state.approval ? "approval" : state.question ? "input" : NULL;
+  const char *activity = waiting != NULL ? "waiting" : state.stop ? "running"
+    : state.complete && (state.send || state.composer) ? "idle" : "unknown";
+  (void)printf("{\"trusted\":true,\"activity\":\"%s\",\"waiting\":", activity);
+  if (waiting != NULL) (void)printf("\"%s\"", waiting); else (void)printf("null");
+  (void)printf(",\"plan\":");
   if (state.plan != NULL && (state.send || state.composer)) (void)printf("\"%s\"", state.plan); else (void)printf("null");
   (void)printf(",\"complete\":%s}\n", state.complete ? "true" : "false");
   return 0;

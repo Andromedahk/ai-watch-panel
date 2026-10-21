@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, shell, systemPreferences } = require('electron');
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
 const { traySummary } = require('./tray-summary.cjs');
@@ -6,7 +6,7 @@ const { WidgetPublisher, loadWidgetBridge } = require('./widget-publisher.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, PROVIDER_ORDER } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, PROVIDER_ORDER, COLLAPSED_WIDTH } = require('./window-policy.cjs');
 const { requestKimiWorkSubscription } = require('./kimi-work-api.cjs');
 const { requestZcodeJson } = require('./zcode-account-api.cjs');
 const { WindowLayout } = require('./window-layout.cjs');
@@ -165,7 +165,7 @@ async function setCollapsed(value) {
   if (value) {
     expandedBounds = window.getBounds();
     const old = expandedBounds;
-    const newWidth = 46;
+    const newWidth = COLLAPSED_WIDTH;
     setBounds({ ...old, width: newWidth, x: preferences.side === 'right' ? old.x + old.width - newWidth : old.x });
   } else {
     const current = window.getBounds();
@@ -398,7 +398,14 @@ else {
       return currentState();
     });
     handle('panel:claude-activity-access', async () => {
-      if (!fixtureMode && preferences.claudeSource === 'desktop') await statusReader.claudeReader.requestActivityAccess();
+      if (!fixtureMode && preferences.claudeSource === 'desktop') {
+        const result = await statusReader.claudeReader.requestActivityAccess();
+        // macOS only prompts once per signature. A rebuilt ad hoc copy keeps a stale,
+        // switched-on entry that no longer matches, so open the pane to re-add it.
+        if (result.supported && result.trusted === false) {
+          await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility').catch(() => {});
+        }
+      }
       return refreshLocalStatus(true);
     });
     handle('panel:claude-network-access', async (value) => {

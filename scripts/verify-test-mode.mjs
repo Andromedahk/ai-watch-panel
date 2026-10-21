@@ -46,9 +46,11 @@ try {
   await select('Antigravity 测试任务状态', 'unknown');
   await select('DeepSeek Harness 测试任务状态', 'waiting');
   await view();
-  await expect(page.locator('.overview')).toContainText('1 项运行');
+  await expect(page.locator('.stat[data-kind="running"] strong')).toHaveText('1');
+  await expect(page.locator('.stat[data-kind="waiting"]')).toHaveAttribute('data-active', 'true');
+  await expect(page.locator('.attention')).toContainText('Codex');
   await expect(card('Codex').locator('.avatar')).toHaveAttribute('data-glow', 'attention');
-  await expect(card('Claude Code').locator('.task-status')).toHaveText('离线');
+  await expect(card('Claude').locator('.task-status')).toHaveText('离线');
   await expect(card('Antigravity').locator('.task-status')).toHaveText('未知');
   await expect(card('DeepSeek Harness').locator('.task-status')).toHaveText('待确认');
 
@@ -59,7 +61,7 @@ try {
     if (['unknown', 'stale'].includes(value)) await expect(card('Codex').locator('.quota-fill')).toHaveCount(0);
   }
   await configure(); await select('Claude Code 测试数据显示', 'free'); await view();
-  await expect(card('Claude Code')).toContainText('Code 额度暂不可用');
+  await expect(card('Claude')).toContainText('额度未知');
   for (const [value, text] of [['zero', '0.00'], ['tiny', '<0.01'], ['stale', '历史余额'], ['signed-out', '等待 Harness 登录'], ['unknown', '余额暂不可用'], ['error', '余额读取失败']]) {
     await configure(); await select('DeepSeek Harness 测试数据显示', value); await view();
     await expect(card('DeepSeek Harness')).toContainText(text);
@@ -67,10 +69,8 @@ try {
   await configure(); await select('DeepSeek Harness 测试数据显示', 'normal'); await view();
   await page.getByRole('button', { name: '切换余额币种' }).click();
   await expect(page.locator('.balance-total strong')).toHaveText('2.10');
-  const next = page.getByRole('button', { name: 'Antigravity 下一页额度' });
-  await next.click(); await next.click();
-  await expect(card('Antigravity').locator('.quota-pagination')).toHaveText('3/3');
-  await expect(next).toBeDisabled();
+  // The watch skin lists every allowance; there is no pagination to step through.
+  await expect(card('Antigravity').locator('.quota')).toHaveCount(7);
 
   // A manual UI refresh must not call the provider refresh bridge.
   await app.evaluate(({ ipcMain }) => {
@@ -81,7 +81,7 @@ try {
   await page.getByRole('button', { name: '刷新面板' }).click();
   await expect(page.getByRole('status')).toHaveText('测试画面已刷新');
   assert.equal(await app.evaluate(() => globalThis.testRefreshCalls), 0);
-  await expect(card('Antigravity').locator('.quota-pagination')).toHaveText('3/3');
+  await expect(card('Antigravity').locator('.quota')).toHaveCount(7);
   await expect(page.locator('.balance-total strong')).toHaveText('2.10');
   // Let the ordinary background sample arrive while manual selections remain in force.
   await expect(page.getByRole('status')).toBeHidden();
@@ -97,21 +97,21 @@ try {
   await expect.poll(() => card('Codex').locator('.avatar').evaluate(el => getComputedStyle(el, '::before').animationName)).toBe('none');
   await page.getByRole('button', { name: '收起面板' }).click();
   await expect(page.locator('.rail-providers .avatar[data-glow="running"]')).toHaveCount(4);
-  assert.equal((await page.evaluate(() => window.panel.getState())).bounds.width, 46);
+  assert.equal((await page.evaluate(() => window.panel.getState())).bounds.width, 64);
   await page.getByRole('button', { name: '测试模式设置' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('checkbox', { name: '测试模式', exact: true }).uncheck();
   await page.getByRole('button', { name: '关闭配置', exact: true }).click();
   await expect(main).toHaveAttribute('data-test-mode', 'false');
   await expect(card('Codex').locator('.task-line > span:nth-child(2)')).toHaveText(original.codex.task);
-  await expect(card('Antigravity').locator('.quota-pagination')).toHaveText('1/5');
+  await expect(card('Antigravity').locator('.quota')).toHaveCount(original.antigravity.quotas.length);
   await expect(page.locator('.balance-total strong')).toHaveText('13.57');
 
   await configure(); await page.getByRole('checkbox', { name: '测试模式', exact: true }).check(); await view();
   await page.reload();
   await expect(main).toHaveAttribute('data-test-mode', 'false');
   await expect(card('Codex').locator('.task-line > span:nth-child(2)')).toHaveText(original.codex.task);
-  console.log('Manual test mode passed: modal drag policy, scenarios, quota bounds, balance states, pagination, refresh isolation, collapse, disabled animation, live restore, reload reset.');
+  console.log('Manual test mode passed: modal drag policy, scenarios, quota bounds, balance states, full allowance list, refresh isolation, collapse, disabled animation, live restore, reload reset.');
 } finally {
   await app.close(); await rm(profile, { recursive: true, force: true });
 }

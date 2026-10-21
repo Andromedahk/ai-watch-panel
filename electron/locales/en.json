@@ -487,5 +487,10 @@
   "休息 {p0}": "Resting {p0}",
   "等你处理": "Needs you",
   "最紧额度": "Tightest quota",
-  "最紧额度 {p0}": "Tightest quota {p0}"
+  "最紧额度 {p0}": "Tightest quota {p0}",
+  "授权辅助功能": "Grant Accessibility",
+  "辅助功能未授权，桌面状态未知": "Accessibility not granted; desktop status unknown",
+  "授权辅助功能请使用桌面版": "Grant Accessibility from the desktop app",
+  "请在系统设置的“辅助功能”中允许 AI Watch，然后回到面板": "Allow AI Watch under Accessibility in System Settings, then return to the panel",
+  "第 {p0} 位": "Position {p0}"
 }

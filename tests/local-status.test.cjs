@@ -323,3 +323,9 @@ test('switching Kimi sources away and back discards cache written by the superse
   await pending; assert.equal(code.cache, null); assert.equal(code.nextAt, 0);
   assert.equal((await reader.poll()).kimi.plan.name, 'New'); assert.equal(calls, 2);
 });
+
+test('process list keeps pid, decimal CPU (either separator) and paths with spaces', () => {
+  const { parseProcessList } = require('../electron/local-status.cjs');
+  assert.deepEqual(parseProcessList('  12  3.5 /Applications/Claude.app/Contents/MacOS/Claude\n 13 0,0 /A B/c\nbad line\n'),
+    [{ pid: 12, cpu: 3.5, command: '/Applications/Claude.app/Contents/MacOS/Claude' }, { pid: 13, cpu: 0, command: '/A B/c' }]);
+});

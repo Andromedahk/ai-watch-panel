@@ -82,6 +82,8 @@ try {
 
   const rainbow = page.locator('.provider-card[data-provider="antigravity"] .avatar-halo > span');
   await expect(rainbow).toHaveCount(1);
+  // Antigravity lists every model, so at 200×900 its card starts below the fold; bring it into view first.
+  await page.locator('.provider-card[data-provider="antigravity"]').evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
   await expect.poll(() => pseudoAnimation(rainbow)).toEqual({ name: 'halo-spectrum', state: 'running', duration: '10s' });
   const spectrum = await rainbow.evaluate(element => {
     const style = getComputedStyle(element, '::before');
@@ -93,13 +95,15 @@ try {
   assert.match(spectrum.background, /conic-gradient/);
   assert.equal(spectrum.willChange, 'transform');
   assert.deepEqual(spectrum.declarations, ['transform']);
+  await page.locator('.provider-viewport').evaluate(element => { element.scrollTop = 0; });
+  await expect(claude).toHaveAttribute('data-animation-paused', 'false');
   // Only an explicit permission denial may request another grant. Execution
   // failures and granted-but-unreadable windows need distinct user feedback.
   const snapshot = await page.evaluate(() => window.panel.getStatus());
   for (const [access, error, expected] of [
     ['granted', 'timeout', '已授权，暂无法读取活动'],
     ['unknown', 'invalid-output', '活动读取失败'],
-    ['denied', undefined, '待授权'],
+    ['denied', undefined, '辅助功能未授权'],
   ]) {
     const status = { ...snapshot, claude: { ...snapshot.claude, activity: 'unknown', activeTasks: 0,
       activityAccessState: access, activityAccessRequired: access === 'denied', activityProbeError: error } };
@@ -107,7 +111,9 @@ try {
       BrowserWindow.getAllWindows()[0].webContents.send('panel:status-changed', value);
     }, status);
     await expect(claude.locator('.task-line')).toContainText(expected);
-    if (access !== 'denied') await expect(claude.locator('.task-line')).not.toContainText('待授权');
+    // A denial swaps the source tag for a one-click button that opens the Accessibility pane.
+    await expect(claude.locator('.task-line .grant-access')).toHaveCount(access === 'denied' ? 1 : 0);
+    if (access !== 'denied') await expect(claude.locator('.task-line')).not.toContainText('未授权');
   }
   await page.evaluate(() => window.panel.refreshStatus());
   await expect(avatar).toHaveAttribute('data-glow', 'running');
@@ -117,7 +123,7 @@ try {
   await expect(claude).toHaveAttribute('data-animation-paused', 'true');
   await expect(avatar).toHaveAttribute('data-glow', 'running');
   await expect.poll(() => pseudoAnimation(avatar)).toEqual({ name: 'logo-breathe', state: 'paused', duration: '5s' });
-  await expect.poll(() => claude.locator('.status-dot.active').evaluate(element => getComputedStyle(element).animationPlayState)).toBe('paused');
+  await expect.poll(() => claude.locator('.status-dot.active').evaluateAll(elements => elements.every(element => getComputedStyle(element).animationPlayState === 'paused'))).toBe(true);
   await expect.poll(() => pseudoAnimation(rainbow)).toEqual({ name: 'halo-spectrum', state: 'paused', duration: '10s' });
   const hiddenLight = page.locator('.hidden-activity-light[data-provider="claude"]');
   await expect(hiddenLight).toHaveAttribute('data-glow', 'running');

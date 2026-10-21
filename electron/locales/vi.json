@@ -487,5 +487,10 @@
   "休息 {p0}": "Nghỉ {p0}",
   "等你处理": "Chờ bạn",
   "最紧额度": "Hạn mức thấp nhất",
-  "最紧额度 {p0}": "Hạn mức thấp nhất {p0}"
+  "最紧额度 {p0}": "Hạn mức thấp nhất {p0}",
+  "授权辅助功能": "Cấp quyền Trợ năng",
+  "辅助功能未授权，桌面状态未知": "Chưa cấp quyền Trợ năng; không rõ trạng thái ứng dụng",
+  "授权辅助功能请使用桌面版": "Hãy cấp quyền Trợ năng từ ứng dụng máy tính",
+  "请在系统设置的“辅助功能”中允许 AI Watch，然后回到面板": "Cho phép AI Watch trong mục Trợ năng của Cài đặt hệ thống rồi quay lại bảng",
+  "第 {p0} 位": "Vị trí {p0}"
 }

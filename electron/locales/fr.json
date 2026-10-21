@@ -487,5 +487,10 @@
   "休息 {p0}": "Au repos {p0}",
   "等你处理": "Vous attendent",
   "最紧额度": "Quota le plus bas",
-  "最紧额度 {p0}": "Quota le plus bas {p0}"
+  "最紧额度 {p0}": "Quota le plus bas {p0}",
+  "授权辅助功能": "Autoriser l’accessibilité",
+  "辅助功能未授权，桌面状态未知": "Accessibilité non autorisée ; état de l’app inconnu",
+  "授权辅助功能请使用桌面版": "Autorisez l’accessibilité depuis l’app de bureau",
+  "请在系统设置的“辅助功能”中允许 AI Watch，然后回到面板": "Autorisez AI Watch dans Accessibilité des Réglages Système, puis revenez au panneau",
+  "第 {p0} 位": "Position {p0}"
 }

@@ -20,6 +20,40 @@
 
 ---
 
+## 2026-10-21 · Claude（Anthropic，Claude App 云端会话，模型配置 claude-opus-5-5）· 验收脚本重写与 Claude Desktop 状态
+
+- 分支：`claude/ui-redesign`（同一 worktree，接在 `dee20fe` 之后）。
+- 目的：按人类要求重写受新界面影响的验收脚本并确认运行无异常；解决 Claude Desktop 运行状态识别不到的问题；Claude 提问 / 请求授权时显示与龙娘（Codex）相同的提示。
+- 诊断：
+  - 实机面板显示 Claude “待授权”。
+  - 根因是 ad hoc 签名在每次打包后都会变化，系统辅助功能授权因此失效，辅助程序读不到窗口。
+- 操作：
+  - `electron/native/claude-desktop-status.c`：识别工具授权按钮和提问卡片，输出 `waiting: approval | input`；跳过侧边导航；节点上限 4000、深度 32；消息区第二轮扫描。
+  - `electron/claude-desktop.cjs`、`claude-activity-bridge.cjs`、`claude-status.cjs`：接受 `waiting` 状态与原因，等待优先于运行；无辅助功能时按渲染进程 CPU 负载推测运行（`activityInferred`）。
+  - `electron/local-status.cjs`：进程列表带 CPU，新增 `parseProcessList`。
+  - `electron/main.cjs`：授权请求未获准时打开系统设置辅助功能页；收起宽度改用 `COLLAPSED_WIDTH`。
+  - `src/view/*`、`src/App.tsx`、`src/types.ts`：
+    - Claude 的等待标签改为与 Codex 一致，加红色光效。
+    - 新增授权按钮。
+    - 恢复品牌呼吸色和 Antigravity 彩色光环。
+    - 积分显示“另有 N 项”。
+    - 修正窄窗口下的标题和标签布局。
+    - 总览提醒头像不再进入无障碍树。
+  - 17 个语言目录各新增 5 条文字。
+  - 新增两项 Claude 单元测试和一项 `parseProcessList` 测试。
+  - 按新界面重写 13 个 Electron 验收脚本。
+  - README 更新 Desktop 活动说明与更新记录。
+- 验证：
+  - `tsc --noEmit`、`vite build` 通过，`node --test tests/*.test.cjs` 全部通过。
+  - 在云端 Linux 的 xvfb 下，13 个重写脚本加未改动的 `kimi-work` 共 14 个 Electron 验收脚本全部通过，`desktop` 的 `glow-running` / `glow-attention` 变体也通过。
+- 未完成 / 需要人类决定：
+  - C 辅助程序未在 macOS 编译。需要重新打包并实机确认：Claude 提问、工具授权、普通生成三种状态的识别结果，以及“授权辅助功能”按钮的跳转。
+  - 重新打包后需要在辅助功能里移除并重新添加 AI Watch。要长期稳定保留授权，仍需 Developer ID 签名。
+  - `verify-widgets`、`verify-widget-bundle` 需要 macOS，未运行。`verify-live-kimi-zcode` 读取真实账号，未运行。
+  - 脚本生成的 `docs/screenshots/*.png` 为云端 Linux 渲染结果，未提交；README 截图仍是旧界面。
+
+---
+
 ## 2026-10-21 · Claude（Anthropic，Claude App 云端会话，模型配置 claude-opus-5-5）· 界面重做
 
 - 分支：`claude/ui-redesign`，从 `claude/ui-polish` 继续（基于 `main`），使用独立 git worktree，未触碰 `codex/agent-mcp-relay` 的工作区。

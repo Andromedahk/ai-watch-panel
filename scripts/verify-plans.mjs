@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const planIds = ['claude', 'codex', 'antigravity', 'zcode', 'kimi', 'qwen', 'workbuddy'];
-const names = { claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity', zcode: 'ZCode', kimi: 'Kimi Code', qwen: 'Qwen（千问）', workbuddy: 'WorkBuddy' };
+const names = { claude: 'Claude', codex: 'Codex', antigravity: 'Antigravity', zcode: 'ZCode', kimi: 'Kimi Code', qwen: 'Qwen（千问）', workbuddy: 'WorkBuddy' };
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-plans-'));
 // Both a separate profile and fixture mode are mandatory. No real login, credential or account API is used.
 const app = await electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: 'fixture' } });
@@ -110,17 +110,16 @@ try {
         assert.ok(item.plan.left >= item.identity.left - 1 && item.plan.right <= item.identity.right + 1, context);
         assert.ok(item.plan.bottom <= item.heading.bottom + 1, context);
       }
+      // Credit pools are tiles: the figure sits above its label, inside the tile and the card.
       for (const row of item.rows) {
         assert.equal(row.overflow, false, context);
-        assert.ok(row.label.right + 3 <= row.amount.left, context);
-        assert.ok(Math.min(row.label.bottom, row.amount.bottom) > Math.max(row.label.top, row.amount.top), context);
-        assert.ok(row.value.width > 0 && row.value.right <= item.card.right, context);
-        assert.ok(row.box.top >= item.content.top && row.box.bottom <= item.footer.top, context);
+        assert.ok(row.value.bottom <= row.label.top + 1, context);
+        assert.ok(row.value.width > 0 && row.value.right <= item.card.right && row.label.right <= row.box.right + 1, context);
+        assert.ok(row.box.top >= item.content.top - 1 && row.box.bottom <= item.footer.top, context);
       }
       if (item.rows.length > 1) {
-        assert.ok(item.rows[1].box.top >= item.rows[0].box.bottom, context);
-        assert.ok(item.rows[1].label.top - item.rows[0].label.bottom >= 4, context);
-        assert.ok(parseFloat(item.rows[1].separator) > 0, context);
+        const [a, b] = item.rows.map(row => row.box);
+        assert.ok(b.left >= a.right || b.top >= a.bottom, context);
       }
     }
   }
@@ -135,18 +134,13 @@ try {
       await scroll(true);
       for (const id of ['qwen', 'workbuddy']) {
         const region = previewCard(id);
-        await expect(region.locator('.quota-pagination')).toHaveText('1/2');
-        for (const label of await region.locator('.credit-amount > span').all()) {
-          await expect(label).toHaveText('剩余');
-          await expect(label).toBeVisible();
-          await expect(label).not.toHaveClass(/sr-only/);
-        }
-        const first = await region.locator('.credit-label').allTextContents();
-        await region.getByRole('button', { name: `${names[id]} 下一页额度`, exact: true }).click();
-        await expect(region.locator('.quota-pagination')).toHaveText('2/2');
-        assert.equal(new Set([...first, ...await region.locator('.credit-label').allTextContents()]).size, 4);
-        await checkGeometry(size, appearance);
-        await region.getByRole('button', { name: `${names[id]} 上一页额度`, exact: true }).click();
+        // Two pools are visible; the remaining two stay reachable through the overflow summary.
+        const more = region.locator('.more-quotas');
+        await expect(more).toHaveText('另有 2 项');
+        await expect(more).toBeVisible();
+        const first = await region.locator('.credit-label').evaluateAll(els => els.map(el => el.firstChild.textContent));
+        const rest = (await more.getAttribute('title')).split('\n').map(line => line.split(' · ')[0]);
+        assert.equal(new Set([...first, ...rest]).size, 4);
       }
       await expect(preview.locator('.toast')).toBeHidden();
       if (size.height === 1440) {
@@ -160,7 +154,7 @@ try {
     }
   }
   assert.equal((await page.evaluate(() => window.panel.getState())).qwenKeychainAllowed, false);
-  console.log('Plan UI checks passed: seven header tiers, five newly supported plans, unknown without guessed Free, Claude quota absence independent of tier, historical and expired states, separate labels and values, row separators, pagination, eight loaded logos, no heading/content/footer overlap at 320×1440 and 200×900 in both themes. Fixture-only; Qwen access remains off.');
+  console.log('Plan UI checks passed: seven header tiers, five newly supported plans, unknown without guessed Free, Claude quota absence independent of tier, historical and expired states, separate labels and values, credit tiles with an overflow summary, eight loaded logos, no heading/content/footer overlap at 320×1440 and 200×900 in both themes. Fixture-only; Qwen access remains off.');
 } finally {
   await preview?.close();
   await app.close();

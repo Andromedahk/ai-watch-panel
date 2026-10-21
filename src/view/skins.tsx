@@ -89,9 +89,11 @@ export type Summary = { running: number; waiting: ProviderView[]; tightest: { vi
 export function summarize(views: ProviderView[]): Summary {
   let tightest: Summary['tightest'] = null;
   for (const view of views) if (view.tightest !== null && (!tightest || view.tightest < tightest.value)) tightest = { view, value: view.tightest };
-  const running = views.filter(view => view.state === 'running').length;
+  // Count running tasks, not cards: one assistant can run several and still be waiting on you.
+  const running = views.reduce((total, view) => total + (view.provider.local ? view.provider.local.activeTasks || 0 : view.state === 'running' ? 1 : 0), 0);
   const waiting = views.filter(view => view.attention);
-  return { running, waiting, tightest, idle: views.length - running - waiting.length, total: views.length };
+  const busy = views.filter(view => view.state === 'running' || view.attention).length;
+  return { running, waiting, tightest, idle: views.length - busy, total: views.length };
 }
 
 /** The summary under the header; each skin phrases the same three facts its own way. */
@@ -102,8 +104,8 @@ export function Overview({ skin, summary, live, stamp, badge, onOpen, image, ani
   const { t, number, percent } = useI18n();
   const first = summary.waiting[0];
   const tight = summary.tightest;
-  const attention = first && <div className="attention" role="status">
-    <LaunchAvatar view={first} image={image(first)} anime={anime} crop={skin === 'watch' && anime ? 'bust' : 'face'} onOpen={() => onOpen(first)} />
+  const attention = first && <div className="attention" aria-live="polite" aria-label={t('等你处理')}>
+    <LaunchAvatar view={first} image={image(first)} anime={anime} crop={skin === 'watch' && anime ? 'bust' : 'face'} onOpen={() => onOpen(first)} mirror />
     <button type="button" className="attention-text" onClick={() => onReveal(first)}>
       <span className="attention-kicker">{first.stateLabel}{summary.waiting.length > 1 ? ` · +${number(summary.waiting.length - 1)}` : ''}</span>
       <strong>{t('{p0} 在等你', { p0: first.name })}</strong>

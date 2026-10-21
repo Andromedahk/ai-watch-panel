@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
 import { GripVertical } from 'lucide-react';
 import { animeImages } from '../data';
 import { useI18n } from '../i18n';
@@ -6,10 +6,15 @@ import type { Provider, Skin } from '../types';
 import { creditNumber, faceFocus, LOW, money, type ProviderView, type QuotaRow } from './model';
 
 export type Crop = 'face' | 'bust' | 'logo';
+/** Asks macOS for the accessibility grant that Claude Desktop activity needs. */
+export const GrantAccessContext = createContext<(() => void) | null>(null);
+/** Codex (龙娘) and Claude prompts glow red; other waiting providers keep their own breathing color. */
+export const RED_ALERT = new Set(['codex', 'claude']);
+export function glowOf(view: ProviderView) { return view.attention ? RED_ALERT.has(view.id) ? 'attention' : 'running' : view.state === 'running' ? 'running' : 'off'; }
 const ZOOM = 1.45;
 
 /** Square portrait or logo. Built-in anime art is cropped around the face so small frames show a face, not a fringe. */
-export function Portrait({ provider, image, anime, crop = 'face' }: { provider: Provider; image?: string; anime: boolean; crop?: Crop }) {
+export function Portrait({ provider, image, anime, crop = 'face', glow }: { provider: Provider; image?: string; anime: boolean; crop?: Crop; glow?: string }) {
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [image, anime]);
@@ -21,7 +26,9 @@ export function Portrait({ provider, image, anime, crop = 'face' }: { provider: 
     const top = Math.max(-(ZOOM - 1) * 100, Math.min(0, 45 - focus * ZOOM * 100));
     style = { width: `${ZOOM * 100}%`, height: `${ZOOM * 100}%`, left: `${-(ZOOM - 1) * 50}%`, top: `${top}%` };
   }
-  return <div className="avatar" data-provider={provider.id} data-anime={anime} data-crop={mode} data-default-image={!image && !anime}>
+  return <div className="avatar" data-provider={provider.id} data-glow={glow} data-anime={anime} data-crop={mode} data-default-image={!image && !anime}>
+    {/* Antigravity keeps its slowly turning spectrum ring instead of a single-color halo. */}
+    {provider.id === 'antigravity' && glow && glow !== 'off' && <span className="avatar-halo" aria-hidden="true"><span /></span>}
     <div className="avatar-face">
       {failed ? <span className="avatar-fallback">{provider.name.slice(0, 1)}</span>
         : <img src={src} style={style} alt={t('{p0} 助手图片', { p0: provider.name })} draggable={false} onError={() => setFailed(true)} />}
@@ -29,12 +36,15 @@ export function Portrait({ provider, image, anime, crop = 'face' }: { provider: 
   </div>;
 }
 
-export function LaunchAvatar({ view, image, anime, crop, busy, onOpen, children }: {
+export function LaunchAvatar({ view, image, anime, crop, busy, onOpen, children, mirror }: {
   view: ProviderView; image?: string; anime: boolean; crop?: Crop; busy?: boolean; onOpen: () => void; children?: ReactNode;
+  /** A pointer-only duplicate (e.g. the attention banner) that stays out of the tab order and accessibility tree. */
+  mirror?: boolean;
 }) {
   const { t } = useI18n();
-  return <button type="button" className="avatar-launch" aria-label={t('打开 {p0}', { p0: view.name })} title={t('打开 {p0}', { p0: view.name })} disabled={busy} onClick={onOpen}>
-    <Portrait provider={view.provider} image={image} anime={anime} crop={crop} />
+  return <button type="button" className="avatar-launch" aria-label={mirror ? undefined : t('打开 {p0}', { p0: view.name })} aria-hidden={mirror || undefined} tabIndex={mirror ? -1 : undefined}
+    title={t('打开 {p0}', { p0: view.name })} disabled={busy} onClick={onOpen}>
+    <Portrait provider={view.provider} image={image} anime={anime} crop={crop} glow={glowOf(view)} />
     {children}
   </button>;
 }
@@ -114,6 +124,7 @@ export function Credits({ view, limit = 99 }: { view: ProviderView; limit?: numb
       <strong className="credit-value"><bdi dir="ltr">{item.remaining === null ? '—' : number(creditNumber(item.remaining), { maximumFractionDigits: 2, useGrouping: language !== 'zh-CN' })}</bdi></strong>
       <span className="credit-label credit-amount">{item.label}<small>{stale ? t('历史') : item.remaining === null ? t('未知') : item.unit}</small></span>
     </div>)}
+    {items.length > limit && <span className="more-quotas" title={items.slice(limit).map(item => `${item.label} · ${item.remaining === null ? t('剩余未知') : t('剩余 {p0} {p1}', { p0: item.remaining, p1: item.unit })}`).join('\n')}>{t('另有 {p0} 项', { p0: number(items.length - limit) })}</span>}
   </div>;
 }
 
@@ -130,7 +141,10 @@ export function headline(view: ProviderView, number: (value: string | number, op
 }
 
 export function TaskLine({ view, children }: { view: ProviderView; children?: ReactNode }) {
-  return <div className="task-line" title={view.taskTitle}><span className={`status-dot ${dotClass(view)}`} aria-hidden="true" /><span className="task-text">{view.task}</span>{children}</div>;
+  const { t } = useI18n();
+  const grant = useContext(GrantAccessContext);
+  return <div className="task-line" title={view.taskTitle} data-inferred={view.inferred || undefined}><span className={`status-dot ${dotClass(view)}`} aria-hidden="true" /><span className="task-text">{view.task}</span>
+    {view.accessRequired && grant ? <button type="button" className="grant-access" onClick={grant}>{t('授权辅助功能')}</button> : children}</div>;
 }
 
 export function SourceTag({ view }: { view: ProviderView }) {

@@ -249,3 +249,34 @@ test('Explicit authorization requests preserve unknown permission and discard un
   reader.desktopActivityReader = async () => ({ trusted: null, supported: true, activity: 'unknown', plan: null, probeError: 'PRIVATE_DIAGNOSTIC' });
   assert.deepEqual(await reader.requestActivityAccess(), { trusted: null, supported: true });
 });
+
+test('Desktop permission and question prompts become a Codex-style waiting state', async t => {
+  const probe = stdout => readDesktopActivity(10, { platform: 'darwin', run: async () => ({ stdout }) });
+  const approval = await probe(JSON.stringify({ trusted: true, activity: 'waiting', waiting: 'approval', plan: null, complete: true }));
+  assert.equal(approval.activity, 'waiting'); assert.equal(approval.waiting, 'approval');
+  for (const bad of [{ activity: 'waiting', waiting: null }, { activity: 'running', waiting: 'input' }, { activity: 'waiting', waiting: 'PRIVATE' }]) {
+    const result = await probe(JSON.stringify({ trusted: true, plan: null, complete: true, ...bad }));
+    assert.equal(result.activity, 'unknown'); assert.equal(result.probeError, 'invalid-output');
+  }
+  for (const [waiting, label] of [['approval', '授权'], ['input', '回答']]) {
+    const { reader, process } = await fixture(t, { desktopActivityReader: async () => ({ trusted: true, supported: true, activity: 'waiting', waiting, plan: null, complete: true }) });
+    const result = await reader.poll(process, now);
+    assert.equal(result.activity, 'waiting'); assert.equal(result.waitingReason, waiting); assert.equal(result.waitingTasks, 1);
+    assert.match(result.task, new RegExp(label));
+  }
+});
+
+test('Without accessibility, sustained renderer load is reported as an inferred reply', async t => {
+  const { reader, process } = await fixture(t);
+  const renderer = cpu => ({ pid: 9, cpu, command: '/Applications/Claude.app/Contents/Frameworks/Claude Helper (Renderer).app/Contents/MacOS/Claude Helper (Renderer)' });
+  let result = await reader.poll([...process, renderer(40)], now);
+  assert.notEqual(result.activity, 'running');
+  result = await reader.poll([...process, renderer(35)], now + 5000);
+  assert.equal(result.activity, 'running'); assert.equal(result.activityInferred, true); assert.match(result.task, /推测/);
+  result = await reader.poll([...process, renderer(1)], now + 10000);
+  assert.notEqual(result.activity, 'running'); assert.equal(result.activityInferred, undefined);
+  // A different app's renderer never counts as Claude.
+  const fresh = await fixture(t);
+  const other = { pid: 8, cpu: 90, command: '/Applications/Other.app/Contents/Frameworks/Claude Helper (Renderer).app/Contents/MacOS/Claude Helper (Renderer)' };
+  await fresh.reader.poll([...fresh.process, other], now); assert.notEqual((await fresh.reader.poll([...fresh.process, other], now + 5000)).activity, 'running');
+});

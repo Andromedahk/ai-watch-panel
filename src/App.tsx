@@ -8,7 +8,7 @@ import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
 import { I18nContext, useI18n, createI18n, readLanguage, languages, localizeProvider, localizeStatus, type Language } from './i18n';
 import { buildView } from './view/model';
-import { Portrait } from './view/parts';
+import { GrantAccessContext, Portrait, RED_ALERT } from './view/parts';
 import { Overview, ProviderCard, RailItem, summarize } from './view/skins';
 import type { LocalStatus, PanelState, Preferences, Provider, ProviderId, Theme, KimiSource, ClaudeSource, Layout, Skin } from './types';
 const providers = baseProviders;
@@ -202,6 +202,11 @@ export default function App() {
       else { localStorage.setItem('ai-watch:skin', value); setState(current => ({ ...current, skin: value })); }
     } catch { setNotice(t('界面风格保存失败，请重试')); }
     finally { setSkinSaving(false); }
+  }
+  async function grantClaudeAccess() {
+    if (!window.panel || testMode) { setNotice(t('授权辅助功能请使用桌面版')); return; }
+    try { setLocalStatus(await window.panel.requestClaudeActivityAccess()); setNotice(t('请在系统设置的“辅助功能”中允许 AI Watch，然后回到面板')); }
+    catch { setNotice(t('保存失败，请重试')); }
   }
   async function openProvider(provider: Provider) {
     if (testMode) { if (state.collapsed) await collapse(false); setNotice(t("测试模式：已模拟打开 {p0}", { p0: provider.name })); return; }
@@ -438,7 +443,7 @@ export default function App() {
   ];
   const section = (id: string) => modal.current?.querySelector<HTMLElement>(`[data-section="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
-  return <I18nContext.Provider value={i18n}><main lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
+  return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={state.desktop ? () => void grantClaudeAccess() : null}><main lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
     {state.collapsed ? <aside className="collapsed-rail" aria-label={t('收起的监看面板')}>
       <button className="rail-expand" title={t('展开面板')} aria-label={t('展开面板')} onClick={() => collapse(false)}>{state.side === 'right' ? <ArrowLeftToLine size={18} /> : <ArrowRightToLine size={18} />}</button>
       <div className="rail-counts" title={t('运行中 {p0} · 等你处理 {p1}', { p0: summary.running, p1: summary.waiting.length })}>
@@ -484,13 +489,13 @@ export default function App() {
     </div>}
     {!state.collapsed && !settingsOpen && !sorting.sorting && hiddenActive.length > 0 && <div className="hidden-activity" aria-label={t('屏幕外模块活动')}>
       {hiddenActive.map(provider => <button key={provider.id} className="hidden-activity-light" data-provider={provider.id} style={{ '--accent': provider.color } as CSSProperties}
-        data-glow={provider.local?.activity === 'waiting' ? 'attention' : 'running'}
+        data-glow={provider.local?.activity === 'waiting' && RED_ALERT.has(provider.id) ? 'attention' : 'running'}
         aria-label={t('{p0} {p1}，点击查看', { p0: provider.name, p1: provider.local?.activity === 'waiting' ? '等待处理' : '正在运行' })}
         title={t('{p0} · {p1} · 点击查看', { p0: provider.name, p1: provider.local?.activity === 'waiting' ? '等待处理' : '正在运行' })}
         onClick={() => revealProvider(provider.id)}><span className="sr-only">{provider.name}</span></button>)}
     </div>}
     <span id="card-sort-help" className="sr-only">{t('长按卡片拖动排序；Escape 取消。Alt 加方向键按行列排序。')}</span>
-    {sorting.sorting && <div className="sort-hint" role="status" title={t('排序说明')}>{t('排序')} · <bdi dir="ltr">{number((sorting.target ?? 0) + 1)}</bdi></div>}
+    {sorting.sorting && <div className="sort-hint" role="status" title={t('排序说明')}>{t('排序')} · {t('第 {p0} 位', { p0: (sorting.target ?? 0) + 1 })}</div>}
     <dialog ref={modal} className="settings-dialog" aria-labelledby="settings-title" onCancel={() => setSettingsOpen(false)}>
       <div className="settings-heading"><h2 id="settings-title">{t('面板配置')}</h2><button className="icon-button" aria-label={t('关闭配置')} onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
       <nav className="settings-nav" aria-label={t('配置分区')}>
@@ -609,5 +614,5 @@ export default function App() {
     </dialog>
     <input ref={fileInput} className="hidden-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void readFile(event.target.files?.[0]); event.target.value = ''; }} />
     {notice && !settingsOpen && <div className="toast" role="status">{notice}</div>}
-  </main></I18nContext.Provider>;
+  </main></GrantAccessContext.Provider></I18nContext.Provider>;
 }

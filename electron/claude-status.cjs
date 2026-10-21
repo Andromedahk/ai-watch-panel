@@ -64,6 +64,17 @@ async function readClaudePlan(config, platform, now) {
     finally { buffer.fill(0); }
   } catch { return { name: null }; }
 }
+// Claude Desktop's chat renderer is near-idle (< 3 %) unless it is streaming a reply,
+// animating the thinking indicator or the user is interacting with it. Two
+// consecutive busy samples are treated as a likely reply in progress; this is an
+// inference used only when the accessibility probe cannot answer.
+const RENDERER = /[/\\]Claude\.app[/\\]Contents[/\\]Frameworks[/\\]Claude Helper \(Renderer\)\.app[/\\]/;
+const BUSY_CPU = 12;
+function rendererLoad(processes) {
+  if (!Array.isArray(processes)) return null;
+  const rows = processes.filter(p => RENDERER.test(p.command) && Number.isFinite(p.cpu));
+  return rows.length ? Math.round(rows.reduce((total, p) => total + p.cpu, 0) * 10) / 10 : null;
+}
 function isDesktopEntry(entrypoint) {
   return ['claude-desktop', 'claude-desktop-3p', 'local-agent'].includes(entrypoint);
 }
@@ -87,7 +98,7 @@ class ClaudeStatusReader {
     this.codeIdentityRoot = env.CLAUDE_CONFIG_DIR ? this.paths.config : home;
     this.desktopActivityReader = options.desktopActivityReader || require('./claude-desktop.cjs').readDesktopActivity;
     this.usageReader = options.usageReader || new (require('./claude-usage.cjs').ClaudeUsageReader)({ paths: this.paths, platform: this.platform });
-    this.desktopPlanCache = null; this.desktopPlanCacheFile = null; this.persistedDesktopPlan = null;
+    this.desktopPlanCache = null; this.desktopPlanCacheFile = null; this.persistedDesktopPlan = null; this.loadSamples = [];
     if (options.desktopPlanCacheFile) this.setDesktopPlanCacheFile(options.desktopPlanCacheFile);
   }
   setDesktopPlanCacheFile(file) {
@@ -189,6 +200,10 @@ class ClaudeStatusReader {
     let plan = source === 'code' ? await readClaudePlan(config, this.platform, now) : await this.readDesktopPlan(identity, now);
     let desktopActivity = { activity: 'unknown', trusted: null, supported: this.platform === 'darwin', plan: null };
     if (source === 'desktop' && desktopOpen) desktopActivity = await this.desktopActivityReader(desktopProcess.pid, { platform: this.platform });
+    const load = source === 'desktop' && desktopOpen ? rendererLoad(processes) : null;
+    this.loadSamples = load === null ? [] : [...this.loadSamples, { at: now, load }].filter(s => now - s.at <= 20000).slice(-3);
+    const recent = this.loadSamples.slice(-2);
+    const inferredBusy = desktopActivity.activity === 'unknown' && recent.length === 2 && recent.every(s => s.load >= BUSY_CPU);
     if (source === 'desktop' && desktopActivity.plan && ['Free', 'Pro', 'Max', 'Max 5×', 'Max 20×', 'Team', 'Enterprise'].includes(desktopActivity.plan)) {
       plan = { name: desktopActivity.plan, status: '桌面界面', stale: false, observedAt: new Date(now).toISOString() };
     }
@@ -228,18 +243,24 @@ class ClaudeStatusReader {
     const sessionActive = values.filter(s => s.phase === 'running').length;
     // The visible Stop button can belong to a registered desktop Code session;
     // use the larger signal rather than double-counting the same task.
-    const activeTasks = Math.max(sessionActive, source === 'desktop' && desktopActivity.activity === 'running' ? 1 : 0);
-    const waiting = values.filter(s => s.phase === 'waiting').length;
+    const desktopRunning = source === 'desktop' && (desktopActivity.activity === 'running' || inferredBusy);
+    const activeTasks = Math.max(sessionActive, desktopRunning ? 1 : 0);
+    const desktopWaiting = source === 'desktop' && desktopActivity.activity === 'waiting' ? desktopActivity.waiting : null;
+    const sessionWaiting = values.filter(s => s.phase === 'waiting').length;
+    const waiting = sessionWaiting + (desktopWaiting ? 1 : 0);
+    const waitingReason = desktopWaiting && !sessionWaiting ? desktopWaiting : waiting ? 'both' : undefined;
     const incomplete = failed || (source === 'code' && classified.size < pids.size) || values.some(s => s.phase === 'unknown');
-    const activity = processes === null ? 'unknown' : activeTasks ? 'running' : waiting ? 'waiting'
+    // A question or permission prompt outranks a running task, as for Codex.
+    const activity = processes === null ? 'unknown' : waiting ? 'waiting' : activeTasks ? 'running'
       : incomplete ? 'unknown' : source === 'desktop'
         ? desktopOpen ? desktopActivity.activity === 'idle' ? 'idle' : 'unknown' : values.length ? 'idle' : 'offline'
         : values.length ? 'idle' : codeProcesses.length && classified.size < pids.size ? 'unknown' : 'offline';
     const surfaces = source === 'desktop'
       ? { desktop: values.length ? `桌面 ${values.length} 个 Code 会话` : desktopOpen ? '桌面已打开' : '桌面未运行', terminal: '终端独立接入' }
       : { desktop: '桌面独立接入', terminal: values.length ? `终端 ${values.length} 个会话` : pids.size > classified.size ? 'Code 进程缺少会话记录' : '终端无运行会话' };
-    const task = activeTasks ? source === 'desktop' && !sessionActive ? 'Claude 桌面正在生成回复' : source === 'desktop' ? `${activeTasks} 项桌面任务有近期活动` : `${activeTasks} 项 Code 任务有近期活动`
-      : waiting ? `${waiting} 项任务等待确认` : activity === 'idle' ? '已连接会话暂无运行任务'
+    const task = waiting ? desktopWaiting === 'approval' && !sessionWaiting ? 'Claude 在等你授权工具' : desktopWaiting === 'input' && !sessionWaiting ? 'Claude 在等你回答问题' : `${waiting} 项任务等你回答或确认`
+      : activeTasks ? source === 'desktop' && !sessionActive ? inferredBusy && desktopActivity.activity !== 'running' ? 'Claude 桌面可能正在生成回复（按进程负载推测）' : 'Claude 桌面正在生成回复' : source === 'desktop' ? `${activeTasks} 项桌面任务有近期活动` : `${activeTasks} 项 Code 任务有近期活动`
+      : activity === 'idle' ? '已连接会话暂无运行任务'
         : activity === 'offline' ? source === 'desktop' ? 'Claude 桌面未运行' : 'Claude Code 未运行'
           : source === 'desktop' ? '桌面当前任务状态未知' : 'Code 当前任务状态未知';
     const taskDetails = this.taskDetailsEnabled ? values.slice(0, 8).map(s => taskDetail({ title: s.title, state: s.phase, updatedAt: s.at }, { now, live: true })) : [];
@@ -248,15 +269,16 @@ class ClaudeStatusReader {
     }
     const result = { id: 'claude', claudeSource: source, source: network.usage && network.state === 'ready' ? 'account' : usage || values.length || plan.name || desktopActivity.trusted ? 'cache' : 'unavailable',
       connection: processes === null ? 'error' : source === 'desktop' ? desktopOpen || values.length ? 'ready' : 'offline' : values.length || pids.size > classified.size ? 'ready' : 'offline',
-      activity, activeTasks, task, plan, ...(this.taskDetailsEnabled ? { taskDetails: taskDetails.slice(0, 8) } : {}),
+      activity, activeTasks, task, plan, waitingTasks: waiting, ...(waitingReason ? { waitingReason } : {}),
+      ...(inferredBusy && desktopActivity.activity !== 'running' ? { activityInferred: true } : {}), ...(this.taskDetailsEnabled ? { taskDetails: taskDetails.slice(0, 8) } : {}),
       quotas: usage?.quotas || [], observedAt: usage?.observedAt || plan.observedAt || null, surfaces,
       activityAccessRequired: source === 'desktop' && desktopOpen && desktopActivity.supported && desktopActivity.trusted === false,
       ...(source === 'desktop' ? { activityAccessState: !desktopActivity.supported ? 'unsupported' : desktopActivity.trusted === true ? 'granted' : desktopActivity.trusted === false ? 'denied' : 'unknown' } : {}),
       ...(source === 'desktop' && require('./claude-desktop.cjs').ACTIVITY_PROBE_ERRORS.includes(desktopActivity.probeError) ? { activityProbeError: desktopActivity.probeError } : {}),
-      activityObservedAt: source === 'desktop' && ['running', 'idle'].includes(desktopActivity.activity) ? new Date(now).toISOString()
+      activityObservedAt: source === 'desktop' && (['running', 'idle', 'waiting'].includes(desktopActivity.activity) || inferredBusy) ? new Date(now).toISOString()
         : values.length ? new Date(Math.max(...values.map(s => s.at))).toISOString() : null,
       activityDetail: source === 'desktop'
-        ? '桌面普通聊天由 macOS 辅助功能只读发送和停止按钮；桌面 Code 会话单独校验进程和十分钟时效。后台或不可见聊天无法确认时保持未知。'
+        ? '桌面普通聊天由 macOS 辅助功能只读发送、停止和工具授权按钮；未授权或无法读取时，按 Claude 渲染进程的负载推测是否正在生成。桌面 Code 会话单独校验进程和十分钟时效。'
         : '仅监看终端 Code 会话，校验进程和十分钟时效；桌面 Code 不计入终端任务。',
       detail: network.state !== 'disabled' ? network.detail : source === 'desktop'
         ? '桌面额度来自当前登录账号的本地用量快照。套餐读取匹配账号和组织的桌面套餐快照，历史档位会标记为历史；Free 或未提供窗口的额度保持未知。'

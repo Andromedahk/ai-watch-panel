@@ -39,12 +39,14 @@ try {
       await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setBounds({width,height:width*4.5}),width);
       await page.waitForFunction(width=>innerWidth===width,width);
       const header = await page.locator('.overview').evaluate(element => {
-        const box=element.getBoundingClientRect(), text=element.querySelector('.running-summary').getBoundingClientRect(),time=element.querySelector('time').getBoundingClientRect();
-        return {inside:text.left>=box.left-1&&text.right<=box.right+1&&time.left>=box.left-1&&time.right<=box.right+1, separate:text.right<=time.left+1||time.right<=text.left+1};
+        const box=element.getBoundingClientRect(), inside=r=>r.left>=box.left-1&&r.right<=box.right+1;
+        const stats=[...element.querySelectorAll('.stat')].map(el=>el.getBoundingClientRect()), time=element.querySelector('time')?.getBoundingClientRect();
+        const separate=stats.every((a,i)=>stats.every((b,j)=>i===j||a.right<=b.left+1||b.right<=a.left+1||a.bottom<=b.top+1||b.bottom<=a.top+1));
+        return {inside:stats.every(inside)&&(!time||inside(time)), separate};
       });
       assert.ok(header.inside&&header.separate, `${id}/${width}: overview overlap`);
       const layout = await page.locator('.provider-card').evaluateAll(cards=>cards.map(card=>{
-        const box=card.getBoundingClientRect(),hero=card.querySelector('.card-heading').getBoundingClientRect(),avatar=card.querySelector('.avatar-launch').getBoundingClientRect(),identity=card.querySelector('.identity').getBoundingClientRect(),area=card.querySelector('.quota-area').getBoundingClientRect(),footer=card.querySelector('.task-line').getBoundingClientRect();
+        const box=card.getBoundingClientRect(),heading=card.querySelector('.card-heading'),hero=(getComputedStyle(heading).display==='contents'?card.querySelector('.identity'):heading).getBoundingClientRect(),avatar=card.querySelector('.avatar-launch').getBoundingClientRect(),identity=card.querySelector('.identity').getBoundingClientRect(),area=card.querySelector('.quota-area').getBoundingClientRect(),footer=card.querySelector('.task-line').getBoundingClientRect();
         const rightToLeft=document.documentElement.dir==='rtl';
         return { id:card.dataset.provider, width:box.width,
           ordered:rightToLeft?identity.right<=avatar.left+1:avatar.right<=identity.left+1,
@@ -75,8 +77,8 @@ try {
   await page.locator('.toolbar button').last().click();
   await page.locator('.test-toggle input').uncheck();
   await page.locator('.settings-heading button').click();
-  await page.locator('[data-provider="antigravity"] .quota-pagination button').last().click();
-  await expect(page.locator('[data-provider="antigravity"] .quota-pagination > span')).toContainText('2');
+  // Every Antigravity allowance stays listed in RTL as well.
+  await expect(page.locator('[data-provider="antigravity"] .quota-list > .quota')).toHaveCount(originalStatus.antigravity.quotas.length);
   await page.evaluate(()=>window.panel.store());
   await app.evaluate(({app})=>app.emit('activate'));
   await expect.poll(()=>page.evaluate(()=>window.panel.getState()).then(s=>s.stored)).toBe(false);
@@ -88,5 +90,5 @@ try {
   await expect(reopened.locator('html')).toHaveAttribute('dir','rtl');
   await expect(reopened.locator('main')).toHaveAttribute('data-test-mode','false');
   assert.equal((await reopened.evaluate(()=>window.panel.getState())).language,'ar');
-  console.log('i18n checks passed: 17 languages, native menu sync, persistence/restart, invalid-input rejection, 136 card layouts, RTL ordering, test mode, pagination, tray restore and unchanged provider selection.');
+  console.log('i18n checks passed: 17 languages, native menu sync, persistence/restart, invalid-input rejection, 136 card layouts, RTL ordering, test mode, full quota lists, tray restore and unchanged provider selection.');
 } finally { if(app)await app.close().catch(()=>{}); await rm(profile,{recursive:true,force:true}); }

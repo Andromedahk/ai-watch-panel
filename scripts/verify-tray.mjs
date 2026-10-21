@@ -41,7 +41,9 @@ try {
   await page.waitForFunction(() => innerWidth === 200 && innerHeight === 900);
   const original = await native();
   assert.equal(original.sandbox, true);
-  await page.getByRole('button', { name: 'Antigravity 下一页额度', exact: true }).click();
+  // Scroll part-way down so restoring can prove the reading position survives hiding.
+  await page.locator('.provider-viewport').evaluate(element => element.scrollTo({ top: 300, behavior: 'instant' }));
+  await expect.poll(() => page.locator('.provider-viewport').evaluate(element => element.scrollTop)).toBeGreaterThan(0);
   const scroll = await page.locator('.provider-viewport').evaluate(element => element.scrollTop);
   const before = await page.evaluate(() => window.panel.getStatus());
   await page.getByRole('button', { name: storeLabel, exact: true }).click();
@@ -57,7 +59,6 @@ try {
   assert.deepEqual(restored.bounds, original.bounds);
   assert.equal(restored.locked, true);
   assert.equal(await page.locator('.provider-viewport').evaluate(element => element.scrollTop), scroll);
-  assert.equal(await page.locator('[data-provider="antigravity"] .quota-pagination > span').innerText(), '2/5');
   assert.equal(await readFile(path.join(profile, 'preferences.json'), 'utf8'), originalPreferences);
 
   await page.evaluate(() => window.panel.setKimiSource('work'));
@@ -80,7 +81,7 @@ try {
   await page.getByRole('button', { name: '收起面板', exact: true }).click();
   await expect(page.locator('main')).toHaveClass(/collapsed/);
   const railBounds = (await native()).bounds;
-  assert.equal(railBounds.width, 46);
+  assert.equal(railBounds.width, 64);
   await page.getByRole('button', { name: storeLabel, exact: true }).click();
   await expect.poll(async () => (await native()).visible).toBe(false);
   await restore();
@@ -121,7 +122,7 @@ try {
   await page.evaluate(() => window.panel.quit()).catch(() => {});
   await closed;
   app = null;
-  console.log('Tray checks passed: native summary menu, one quota per enabled module, weekly selection, Kimi source/order/visibility changes, hidden background polling, restore, position/lock/scroll/pagination preservation, collapsed rail, close-to-tray, eight toolbar layouts, sandbox and exit while hidden.');
+  console.log('Tray checks passed: native summary menu, one quota per enabled module, weekly selection, Kimi source/order/visibility changes, hidden background polling, restore, position/lock/scroll preservation, collapsed rail, close-to-tray, eight toolbar layouts, sandbox and exit while hidden.');
 } finally {
   await app?.close().catch(() => {});
   await rm(profile, { recursive: true, force: true });

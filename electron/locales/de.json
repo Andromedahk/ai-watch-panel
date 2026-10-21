@@ -487,5 +487,10 @@
   "休息 {p0}": "Pausieren {p0}",
   "等你处理": "Warten auf dich",
   "最紧额度": "Knappstes Kontingent",
-  "最紧额度 {p0}": "Knappstes Kontingent {p0}"
+  "最紧额度 {p0}": "Knappstes Kontingent {p0}",
+  "授权辅助功能": "Bedienungshilfen erlauben",
+  "辅助功能未授权，桌面状态未知": "Bedienungshilfen nicht erlaubt; Desktop-Status unbekannt",
+  "授权辅助功能请使用桌面版": "Bedienungshilfen in der Desktop-App erlauben",
+  "请在系统设置的“辅助功能”中允许 AI Watch，然后回到面板": "AI Watch in den Systemeinstellungen unter „Bedienungshilfen“ erlauben und zum Panel zurückkehren",
+  "第 {p0} 位": "Position {p0}"
 }

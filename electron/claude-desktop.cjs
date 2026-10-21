@@ -241,7 +241,7 @@ async function readDesktopActivity(pid, { platform = process.platform, requestAc
   let stdout;
   try {
     ({ stdout } = await run(nativeHelperPath(), requestAccess ? ['--request-access'] : [String(pid)],
-      { timeout: 1800, maxBuffer: 2048, encoding: 'utf8' }));
+      { timeout: 2500, maxBuffer: 2048, encoding: 'utf8' }));
   } catch (error) {
     // Execution failure cannot establish the application's accessibility grant.
     // Never propagate child-process messages, argv, paths or stderr to the UI.
@@ -251,10 +251,11 @@ async function readDesktopActivity(pid, { platform = process.platform, requestAc
     if (typeof stdout !== 'string' || Buffer.byteLength(stdout) > 2048) return unknownActivity('invalid-output');
     const result = JSON.parse(stdout);
     if (!result || Array.isArray(result) || typeof result.trusted !== 'boolean' || typeof result.complete !== 'boolean'
-      || !['running', 'idle', 'unknown'].includes(result.activity)
+      || !['running', 'idle', 'waiting', 'unknown'].includes(result.activity)
+      || ![undefined, null, 'approval', 'input'].includes(result.waiting) || ((result.activity === 'waiting') !== Boolean(result.waiting))
       || (result.plan !== null && !['Free', 'Pro', 'Max', 'Max 5×', 'Max 20×', 'Team', 'Enterprise'].includes(result.plan))
       || (result.trusted === false && (result.activity !== 'unknown' || result.plan !== null || result.complete !== false))) return unknownActivity('invalid-output');
-    return { trusted: result.trusted, supported: true, activity: result.activity, plan: result.plan, complete: result.complete };
+    return { trusted: result.trusted, supported: true, activity: result.activity, ...(result.waiting ? { waiting: result.waiting } : {}), plan: result.plan, complete: result.complete };
   } catch { return unknownActivity('invalid-output'); }
 }
 module.exports = { ACTIVITY_PROBE_ERRORS, readAnalyticsLog, readAnalyticsTable, snappy, maskedChecksum, normalizeDesktopPlanEvents, readDesktopIdentity, readDesktopPlan, readDesktopActivity, maskedCRC };
