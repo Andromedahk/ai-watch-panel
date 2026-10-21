@@ -13,8 +13,24 @@ try {
   let page = await app.firstWindow();
   const ready = () => page.waitForFunction(() => Boolean(document.querySelector('main')?.getAttribute('data-sampled-at')));
   await ready();
+  await page.bringToFront();
+  // Keep offscreen checks independent of the current display's native work-area height.
+  await page.setViewportSize({ width: 360, height: 900 });
+  await expect.poll(() => page.evaluate(() => [innerWidth, innerHeight])).toEqual([360, 900]);
   const card = id => page.locator(`.provider-card[data-provider="${id}"]`);
   const light = id => page.locator(`.hidden-activity-light[data-provider="${id}"]`);
+  const visibilityRatio = id => card(id).evaluate(el => new Promise(resolve => {
+    const observer = new IntersectionObserver(([entry]) => {
+      observer.disconnect(); resolve(entry.intersectionRatio);
+    }, { root: el.parentElement, threshold: [0, .6, 1] });
+    observer.observe(el);
+  }));
+  const expectVisibility = async visible => {
+    for (const id of Object.keys(names)) {
+      if (visible) await expect.poll(() => visibilityRatio(id)).toBeGreaterThanOrEqual(.6);
+      else await expect.poll(() => visibilityRatio(id)).toBeLessThan(.6);
+    }
+  };
   const settings = () => page.getByRole('button', { name: '打开配置', exact: true }).click();
   const qwenAccess = () => page.getByRole('checkbox', { name: '读取千问登录状态', exact: true });
   const close = async () => {
@@ -66,6 +82,7 @@ try {
   }
   await close();
   await page.locator('.provider-viewport').evaluate(el => el.scrollTo({ top: 0, behavior: 'instant' }));
+  await expectVisibility(false);
   await expect.poll(() => page.locator('.hidden-activity-light').evaluateAll(elements => elements.map(el => el.dataset.provider))).toEqual(['qwen', 'workbuddy']);
   for (const id of Object.keys(names)) {
     await expect(light(id)).toHaveAttribute('data-glow', 'running');
@@ -73,6 +90,7 @@ try {
     assert.equal(await light(id).evaluate(el => getComputedStyle(el, '::before').animationDuration), '5s');
   }
   await light('workbuddy').click();
+  await expectVisibility(true);
   await expect(light('workbuddy')).toHaveCount(0); await expect(light('qwen')).toHaveCount(0);
   await scrollBottom();
   for (const id of Object.keys(names)) {

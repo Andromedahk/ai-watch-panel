@@ -4,6 +4,7 @@ import { arch as hostArch } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Arch, Platform, build } from 'electron-builder';
+import { plistValue } from './widget-plist.cjs';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -56,15 +57,6 @@ function signingTeam(path) {
   const match = /^TeamIdentifier=([A-Z0-9]{10})$/m.exec(result.stderr);
   if (!match) fail('a packaged binary has no certificate-derived TeamIdentifier');
   return match[1];
-}
-
-function plistValue(plist, key, format = 'raw') {
-  return execFileSync('plutil', ['-extract', key, format, '-o', '-', '-'], {
-    cwd: repository,
-    input: plist,
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe'],
-  }).trim();
 }
 
 if (process.platform !== 'darwin') fail('signed widget packaging is macOS-only');

@@ -32,6 +32,10 @@ try {
       ? cards[3].querySelector('.balance-total')?.getAttribute('title') === `${snapshot.deepseek.balance.wallets[0].currency} ${snapshot.deepseek.balance.wallets[0].total}`
       : Boolean(cards[3].querySelector('.balance-empty')));
   }, expected);
+  // Dock/menu-bar visibility may change the work area after launch without a
+  // monitor geometry change. The panel preserves its position until redocked;
+  // explicitly exercise that action before comparing with the current area.
+  await page.evaluate(() => window.panel.dock());
   const native = await app.evaluate(({ BrowserWindow, screen }) => {
     const win = BrowserWindow.getAllWindows()[0];
     const display = screen.getDisplayMatching(win.getBounds());

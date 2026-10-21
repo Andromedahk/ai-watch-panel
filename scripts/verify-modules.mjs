@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const all = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi', 'qwen', 'workbuddy'];
-// The watch skin shows more cards per screen, so the lowest providers carry the hidden-activity checks.
 const names = { claude: 'Claude', codex: 'Codex', antigravity: 'Antigravity', deepseek: 'DeepSeek Harness', zcode: 'ZCode', kimi: 'Kimi Code', qwen: 'Qwen（千问）', workbuddy: 'WorkBuddy' };
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-modules-'));
 const launch = () => electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: 'fixture' } });
@@ -18,6 +17,18 @@ try {
   const light = id => page.locator(`.hidden-activity-light[data-provider="${id}"]`);
   const order = () => page.locator('.provider-card').evaluateAll(cards => cards.map(el => el.dataset.provider));
   const hiddenIds = () => page.locator('.hidden-activity-light').evaluateAll(lights => lights.map(el => el.dataset.provider));
+  const visibilityRatio = id => card(id).evaluate(el => new Promise(resolve => {
+    const observer = new IntersectionObserver(([entry]) => {
+      observer.disconnect(); resolve(entry.intersectionRatio);
+    }, { root: el.parentElement, threshold: [0, .6, 1] });
+    observer.observe(el);
+  }));
+  const expectVisibility = async (ids, visible) => {
+    for (const id of ids) {
+      if (visible) await expect.poll(() => visibilityRatio(id)).toBeGreaterThanOrEqual(.6);
+      else await expect.poll(() => visibilityRatio(id)).toBeLessThan(.6);
+    }
+  };
   const state = () => page.evaluate(() => window.panel.getState());
   const open = () => page.getByRole('button', { name: '打开配置', exact: true }).click();
   const close = async () => {
@@ -51,6 +62,9 @@ try {
   await ready(); await page.bringToFront();
   // Allow the native work area to settle before testing long-press gestures.
   await page.waitForTimeout(1000);
+  // Keep offscreen checks independent of the current display's native work-area height.
+  await page.setViewportSize({ width: 360, height: 900 });
+  await expect.poll(() => page.evaluate(() => [innerWidth, innerHeight])).toEqual([360, 900]);
   await expect.poll(order).toEqual(all);
   assert.deepEqual((await state()).enabledProviders, all);
   const bounds = (await state()).bounds;
@@ -100,6 +114,7 @@ try {
   await page.getByRole('button', { name: '全部待机', exact: true }).click();
   await activity('workbuddy', 'running'); await activity('kimi', 'running');
   await close(); await scroll('top');
+  await expectVisibility(['kimi', 'workbuddy'], false);
   await expect.poll(hiddenIds).toEqual(['kimi', 'workbuddy']);
   const lightStyle = id => light(id).evaluate(el => ({
     color: getComputedStyle(el).getPropertyValue('--halo-color').trim(),
@@ -120,6 +135,7 @@ try {
     const card = el.getBoundingClientRect(), view = el.parentElement.getBoundingClientRect();
     return card.top >= view.top - 1 && card.bottom <= view.bottom + 1;
   })).toBe(true);
+  await expectVisibility(['kimi', 'workbuddy'], true);
   await expect(light('kimi')).toHaveCount(0);
   await expect(light('workbuddy')).toHaveCount(0);
   for (const id of ['workbuddy', 'kimi']) {
@@ -145,9 +161,11 @@ try {
 
   // Waiting uses the provider color, except Codex waiting takes red precedence over running.
   await open(); await activity('workbuddy', 'waiting'); await activity('codex', 'mixed'); await close();
-  await scroll('bottom'); await expect(light('codex')).toHaveAttribute('data-glow', 'attention');
+  await scroll('bottom'); await expectVisibility(['codex'], false);
+  await expect(light('codex')).toHaveAttribute('data-glow', 'attention');
   assert.equal((await lightStyle('codex')).color, '#ff555f');
-  await light('codex').click(); await expect(light('codex')).toHaveCount(0);
+  await light('codex').click(); await expectVisibility(['codex'], true);
+  await expect(light('codex')).toHaveCount(0);
   await scroll('top'); await expect(light('workbuddy')).toHaveAttribute('data-glow', 'running');
   assert.equal((await lightStyle('workbuddy')).color, '#14c9a5');
   // Disable an active provider: no card or hidden-activity light remains for it.

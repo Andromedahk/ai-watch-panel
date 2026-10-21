@@ -71,7 +71,7 @@ npm run test:widgets
 
 `build:widgets` 编译原生扩展与桥，构建输出保存在忽略目录；`test:widgets` 使用独立临时 profile、合成额度和临时快照，检查开关、来源、隐藏、后台采样、恢复与设置持久化，不注册系统小组件，也不访问正式账号。原生预览与模型检查另见 [小组件开发说明](docs/MACOS-WIDGETS.md)。
 
-发布者使用 `npm run pack:mac:widgets` 生成包含扩展的签名应用，需要有效的 Apple 签名身份和对应团队 App Group。扩展嵌入应用 `Contents/PlugIns`；共享数据由系统定位容器，不拼接用户目录。缺少签名条件会阻止签名打包，不以临时签名冒充可用发布版。签名后的图库发现、桌面添加、共享数据和系统实际刷新必须由发布者在 macOS 上补充验收；本地编译、合成渲染或桥模拟通过不等同于这些系统验收。
+发布者使用 `npm run pack:mac:widgets` 生成包含扩展的签名应用，需要有效的 Apple 签名身份和对应团队 App Group。使用 Apple Development 身份时，主应用与扩展还需要匹配应用标识、团队、证书和 App Group 的有效 provisioning profile；只有签名校验通过不代表系统允许启动。扩展嵌入应用 `Contents/PlugIns`；共享数据由系统定位容器，不拼接用户目录。缺少签名条件会阻止签名打包，不以临时签名冒充可用发布版。签名后的图库发现、桌面添加、共享数据和系统实际刷新必须由发布者在 macOS 上补充验收；本地编译、合成渲染或桥模拟通过不等同于这些系统验收。
 
 参考 Apple 的 [创建扩展](https://developer.apple.com/documentation/widgetkit/creating-a-widget-extension)、[App Group 容器权限](https://developer.apple.com/documentation/xcode/accessing-app-group-containers)与[刷新机制](https://developer.apple.com/documentation/widgetkit/keeping-a-widget-up-to-date)。
 
@@ -446,6 +446,7 @@ npm run test:plans  # 七模块套餐、缺失与历史标记、积分横排及�
 npm run test:kimi-work  # Work / Code 来源切换、到期标签、模拟启动和重启保存
 AI_WATCH_LIVE_QA=1 npm run test:live-kimi-zcode  # 当前登录账号的真实额度；截图仅存 .local
 npm run test:anime  # 图标启动、双套图片、二次元布局、持久化及模拟启动隔离
+npm run test:skins  # 三种皮肤 × 明暗 × 普通 / 二次元 × 两种宽度，截图写入 .local/qa/skins
 npm run test:quotas  # Codex 官方窗口、历史值、登录清理与合并模型分页
 npm run test:i18n
 npm run test:layouts
@@ -460,7 +461,11 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 
 单元检查覆盖窗口策略、额度换算、缺失和过时数据、陈旧任务、只读 SQLite/WAL、输出字段筛选、回环接口失败、响应大小与超时，以及 Harness 多设备发现、登录轮换、精确金额、HTTPS 错误和限流。新增 Claude 最新空额度清理、桌面/终端登记与 PID 验证，以及 Harness 多帧解码、任务边界、等待确认、失去锁与陈旧状态检查。桌面检查使用独立临时配置，默认加载合成记录，验证真实窗口比例、内容溢出与元素重叠，输出文档截图；本机模式的截图不会提交。macOS Apple Silicon 上已通过构建、桌面启动与本地读取；验收记录见 [QA](docs/QA.md)。
 
-`claude/ui-redesign` 本轮 macOS 检查通过原生编译、TypeScript、网页构建、应用包签名及小组件原生 / bundle 检查；真实桌面状态尚未验收。受限执行会话中，socket 监听被拒绝会导致部分单元测试报 `EPERM`，Electron 启动失败也不能视为 UI 断言通过。完整结果及 Claude 六项实机验收清单见 [Agent Log](Agent%20Log.md) 中的“原生编译与验收阻塞记录”；以往版本的通过记录不代表当前分支已通过这些检查。读取真实账号的 `test:live-kimi-zcode` 需要单独选择运行，本轮未执行。
+`claude/ui-redesign` 于 2026-10-22 在 macOS 补验：构建、370 项单元测试、16 个合成数据界面验收命令、两种 desktop 光效变体及真实本地适配器桌面检查均通过。小组件原生构建、22 项模型检查、桥接、未签名 bundle 和隔离界面流程通过。真实开发签名构建及主应用 / 扩展 entitlement 校验也通过；系统因缺少覆盖对应 App Group 的匹配 provisioning profile 拒绝启动，图库、实际共享容器与系统刷新仍未验收。三种皮肤新增 24 组布局检查，覆盖双向溢出、头像、状态提醒、设置导航、收起展开和冷重启。此前的 socket 与 Electron 启动权限限制未复现。
+
+屏幕外提醒验收固定测试视口，并先检查卡片的实际可见比例，避免依赖当前屏幕高度。桌面几何检查先调用“重新贴边”，再严格核对当前工作区；Dock 显隐会改变工作区，但产品按既定策略保留窗口位置，直到重新贴边或显示器几何变化。各 Electron 验收命令应依次运行，避免原生窗口争抢焦点；新皮肤截图及本轮日志保存在忽略目录，现有文档截图未更新。
+
+已安装的验收副本通过正常桌面启动、沙盒检查、Claude 空闲状态、授权入口跳转及撤权提示实测。正常桌面启动与自动化启动的辅助功能归属可能不同，不以系统开关亮起或自动化进程输出代替最终安装副本验证。用户确认后临时授权，结束时关闭并移除测试副本授权，恢复原副本原有授权、运行状态及偏好。Claude 生成、提问与工具授权实测被账户额度上限阻塞，不能算通过；Kimi / ZCode 专项真实账号检查因缺少 ZCode 登录文件未开始。完整结果与历史失败见 [Agent Log](Agent%20Log.md)。
 
 ## 实现与后续接入
 
@@ -498,6 +503,16 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 任务名称与简短元数据由主进程限量读取、清理控制字符和明显的路径 / 凭证片段后传入沙盒界面；不显示完整提示词、对话正文、命令参数或工具输出，不持久化任务详情。退出全屏停止详情采集并清除界面快照。Windows / Linux 的窗口能力与布局已准备，仍需实机验证。
 
 ## 更新记录
+
+### 未发布 · 2026-10-22 · macOS 构建与界面补验 · 署名：Codex（GPT-6，Codex 桌面本地执行环境，含并行验收子 Agent）
+
+- 构建、370 项单元测试、16 个合成界面验收命令、两种光效变体和真实本地适配器桌面检查通过，补齐此前 socket / GUI 权限受限的自动检查。
+- 修正 `verify-modules` / `verify-credits` 对屏幕外卡片位置的假定：固定测试视口并验证实际可见比例；`verify-desktop` 在严格比对当前工作区前显式重新贴边，兼容 Dock 显隐引起的工作区变化。
+- 新增 `test:skins`，24 组布局覆盖三种皮肤、明暗、普通 / 二次元和两种宽度，验证双向边界、各皮肤光效、导航、收起展开、重启及非法 IPC 输入。
+- 修复小组件签名后校验将 entitlement 字面键名中的点误作嵌套路径的问题；新增真实 `plutil` 回归检查，严格区分字面键、嵌套键与缺失字段。
+- 实际开发签名构建复测通过；系统启动因缺少匹配 App Group 的 provisioning profile 被拒绝，图库、真实共享与刷新待配置后验收。普通交付包已重新生成并通过八模块启动与沙盒检查。
+- macOS 应用已打包并通过严格签名校验；小组件原生、22 项模型、桥接、bundle 和隔离 UI 流程通过。构建仍有现存的大 chunk 提示。
+- Claude 安装副本的空闲、授权入口与撤权提示实测通过，测试授权已清理、原面板及偏好已恢复；真实生成 / 提问 / 工具授权被账户额度上限阻塞，Kimi / ZCode 专项实测缺少登录前置条件。产物与真实数据截图均留在忽略目录。
 
 ### 未发布 · 2026-10-22 · 本地提交与推送重试 · 署名：Codex（GPT-6，Codex 桌面本地执行环境）
 

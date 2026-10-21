@@ -20,6 +20,44 @@
 
 ---
 
+## 2026-10-22 · Codex（GPT-6 / Codex 桌面本地执行环境，含并行验收子 Agent）· macOS 构建与界面补验
+
+- 分支：`claude/ui-redesign`，起点 `bf7cd52`；仅修改本分支独立 worktree。
+- 目的：补齐先前受 Git、socket、Electron GUI 与安装权限限制未完成的构建和界面验收。
+- 操作：
+  - 主 Agent 运行构建、打包、串行 Electron 验收和系统界面实测；同模型的 `unit_validation` 子 Agent 运行单元测试并修正两项屏幕外提醒验收，`skin_acceptance` 子 Agent 新增三皮肤验收，`widget_validation` 子 Agent 运行小组件原生检查并只读复核脚本。
+  - `scripts/verify-modules.mjs`、`scripts/verify-credits.mjs`：原测试假定特定卡片必在屏幕外，较高视口下不成立；固定合成测试视口，并用独立 IntersectionObserver 验证实际可见比例在 60% 阈值两侧，再验证提示出现与揭示后清除。未放宽产品阈值、颜色、动画或状态断言。
+  - `scripts/verify-desktop.mjs`：启动后 Dock 显隐可能改变工作区；原测试将保留位置的窗口与后来的工作区直接比较，首次合成与真实检查均出现 2 个逻辑像素差异。改为先经现有 preload 的 `dock()` 执行“重新贴边”，再严格比较尺寸与屏幕边界；不修改产品窗口策略。
+  - 新增 `scripts/verify-skins.mjs` 和 `package.json` 的 `test:skins`：24 组布局覆盖 watch / dial / party、明暗、普通 / 二次元与两种宽度，检查八提供商、图片、双向溢出及部件边界、Claude / Codex 红提醒、watch / dial 彩环和 party 卡片光效、六个设置导航、收起展开、冷重启及非法入参。截图默认输出到忽略目录 `.local/qa/skins`。
+  - `scripts/pack-widgets.mjs`、新增 `scripts/widget-plist.cjs`、`tests/widget-packaging.test.cjs`：首次真实开发签名已写入主应用和扩展的 App Group entitlement，但 `plutil -extract` 将带点的字面键名误作嵌套路径，导致后置校验失败。提取函数改为转义字面键路径，新增真实 `plutil` 回归，验证同名嵌套键不能替代字面根键、缺失字段必须失败。
+  - `README.md`：增加新验收命令、受控视口与重新贴边说明、当前通过结果和实机限制，保留历史失败记录。
+  - 自动测试生成的合成截图保存在忽略目录，并恢复受控文档截图；真实数据、偏好备份、证书元数据和构建产物未纳入提交。
+- 验证：
+  - `npm run build` 通过原生辅助程序编译、TypeScript 与 Vite；保留现有大 chunk 提示。`npm test` 首轮 368 / 368 通过；新增签名校验回归后最终 370 / 370 通过，无失败或跳过，原 socket `EPERM` 未复现。
+  - `test:ui`、`test:sort`、`test:theme`、`test:modules`、`test:credits`、`test:plans`、`test:anime`、`test:kimi-work`、`test:quotas`、`test:i18n`、`test:layouts`、`test:resources`、`test:desktop`、`test:tray`、`test:widgets`、`test:skins` 共 16 个合成界面命令最终全部通过；另 `glow-running`、`glow-attention` 两种 desktop 变体通过。17 语言单列及双列 / 全屏矩阵、托盘后台与恢复、退出清理、偏好持久化、窄桥校验及 renderer 隔离均按既有断言通过。
+  - `test:modules`、`test:credits` 首轮因视口位置假定失败，修正后复测通过；`test:desktop` 首轮与真实模式因工作区时序失败，显式重新贴边后的普通、两种光效及真实模式四项复测全通过。新皮肤脚本首次因测试控件固定名称与卡片来源名称不同而选择器超时，修正后通过；补强纵向边界和光效可见性后再次通过。
+  - `npm run build:widgets`、`node scripts/build-widgets.mjs --check`、`npm run test:widgets:bundle` 通过，包含 22 项模型、桥接原子写入、0600 权限、失败清理、plist / 架构 / 动态库、未签名嵌入布局及带空格路径检查。`test:widgets` 的真实 Electron 隔离配置、合成快照、模块同步、后台采样、恢复与清理通过。
+  - 使用现有 Apple Development 身份临时设置构建进程所需的团队与证书参数，未写入仓库或持久配置；修复字面 entitlement 键读取后，完整 `npm run pack:mac:widgets` 重跑通过，主 app、扩展与桥的团队、App Group、应用标识和严格签名检查通过。但隔离自动化启动失败，正常桌面启动同样被系统拒绝；系统日志明确报告没有匹配的 provisioning profile。只读检查现有配置描述文件均不覆盖该 App Group，因此未进入系统图库、实际容器共享及系统刷新验收，也未注册不可启动的扩展。诊断签名包保存在忽略目录，随后重新生成普通 ad hoc 面板包作为可运行交付产物。
+  - 使用本地 Electron 发行版完成普通应用打包，整包及 Claude 原生辅助程序通过全架构严格签名校验；已安装测试副本并以隔离偏好启动，确认 `app.isPackaged`、contextIsolation、sandbox 为真且 nodeIntegration 为假。
+  - 系统实测发现原面板仍在后台，正常启动被单实例锁挡住；临时退出原副本后，最终安装测试副本可正常桌面启动。自动化直接启动与正常桌面启动的辅助功能归属不同，只有后者确认识别到 Claude 空闲；不把自动化进程的未授权输出误作正常安装副本结果。
+  - 用户单独同意临时授权与验收指令，并本人完成系统身份验证。重新登记最终副本授权后验证空闲、授权入口和撤权；结束先确认测试权限关闭，再移除测试登记，恢复原副本原有授权与收起运行状态。原偏好文件与备份逐字节相同；两副本签名要求不同，最终移除的是测试副本登记，原副本恢复其原有登记。
+  - 最终普通交付包重新生成后通过全架构严格签名、八模块启动与 renderer 沙盒检查；临时安装副本已移回忽略目录，清理失败启动遗留的隔离 profile，原面板恢复收起运行且偏好再次逐字节比对一致。
+  - `AI_WATCH_LIVE_QA=1 npm run test:desktop` 最终通过，截图仅留在忽略目录。`test:live-kimi-zcode` 因缺少 ZCode 登录文件在前置检查失败，未进入账号与界面断言；未创建登录材料或修改账号配置。
+- Claude Desktop 实机清单：
+
+  | 场景 | 本轮结果 |
+  | --- | --- |
+  | 普通生成回复 | 未完成：一次无私人数据的验收指令被账户 5 小时额度上限阻塞，界面提示当日 03:50 重置 |
+  | 工具授权 | 未完成：额度限制下未产生工具调用，不能用合成通过替代实机通过 |
+  | Claude 提问 | 未完成：额度限制下未产生互动提问 |
+  | 空闲 | 通过：正常桌面启动、授权有效时显示待机 |
+  | 撤销辅助功能授权 | 通过：显示“辅助功能未授权，桌面状态未知”并恢复授权入口 |
+  | 点击“授权辅助功能” | 通过：打开系统设置的辅助功能页 |
+
+- 未完成 / 需要人类决定：Claude 额度重置后补齐生成 / 提问 / 工具授权三项；Kimi / ZCode 专项真实账号检查需要现有有效登录条件。Windows / Linux 仍未实机验收；本轮未合并 relay，没有新增产品决策。小组件系统验收仍需发布者准备匹配主应用、扩展、团队、证书和 App Group 的 provisioning profile；不能把已签名 / entitlement 校验通过当作可启动或系统验收通过。
+
+---
+
 ## 2026-10-22 · Codex（GPT-6 / Codex 桌面本地执行环境）· 本地提交与推送重试
 
 - 分支：`claude/ui-redesign`，起点 `01635d9`，仅操作该分支独立 worktree。
