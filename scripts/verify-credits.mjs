@@ -123,7 +123,7 @@ try {
   for (const mode of ['unknown', 'signed-out', 'error']) {
     await setData(mode);
     for (const id of Object.keys(names)) {
-      await expect(card(id).locator('.plan-name')).toHaveText('套餐未知');
+      await expect(card(id).locator('.plan-name')).toHaveText('未知');
       await expect(card(id).locator('.credit-value')).toHaveCount(0);
       await expect(card(id).getByRole('progressbar')).toHaveCount(0);
       await expect(card(id).locator('.quota-area')).not.toContainText(/(?:剩余|余额)\s*0(?:\D|$)/);
@@ -146,7 +146,7 @@ try {
   for (const id of Object.keys(names)) {
     await expect(card(id).locator('.credit-value')).toHaveText('—');
     await expect(card(id).locator('.credit-amount')).toContainText('未知');
-    await expect(card(id).locator('.plan-name')).toHaveText('套餐未知');
+    await expect(card(id).locator('.plan-name')).toHaveText('未知');
   }
   // Exercise the production source label using a synthetic event only; no credential read or authorization is requested.
   const accessSnapshot = { ...unknownSnapshot, isTestData: false,

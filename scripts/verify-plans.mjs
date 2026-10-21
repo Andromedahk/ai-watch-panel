@@ -35,7 +35,7 @@ try {
   // Missing plan information is unknown even if quota rows are absent, empty or fully used.
   for (const id of planIds) {
     await send({ [id]: { plan: { name: null }, quotas: [] } });
-    await expect(card(id).locator('.plan-name')).toHaveText('套餐未知');
+    await expect(card(id).locator('.plan-name')).toHaveText('未知');
     await expect(card(id).locator('.plan-summary')).not.toContainText(/Free|免费/i);
     if (id === 'claude') await expect(card(id).locator('.claude-empty')).not.toContainText(/Free|免费/i);
   }

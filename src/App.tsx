@@ -188,7 +188,7 @@ function ProviderCard({ provider, index, image, anime = false, onOpen, launchBus
     aria-label={t("{p0} 面板", { p0: provider.name })} data-provider={provider.id} data-animation-paused={animationPaused} data-attention={local?.id === 'codex' && local.activity === 'waiting'} tabIndex={0} aria-describedby="card-sort-help" onDragStart={event => event.preventDefault()}>
     <div className="card-heading">
       <LaunchAvatar provider={provider} image={image} anime={anime} onOpen={onOpen} busy={launchBusy} />
-      <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? t(local.claudeSource === 'desktop' ? '桌面版' : '终端版') : provider.subtitle}</span><h2><bdi>{provider.name}</bdi></h2>{provider.id !== 'deepseek' && <PlanBadge provider={provider} compact={anime} />}</div>
+      <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? t(local.claudeSource === 'desktop' ? '桌面版' : '终端版') : provider.subtitle}</span><h2><bdi>{provider.name}</bdi></h2>{provider.id !== 'deepseek' && <PlanBadge provider={provider} compact />}</div>
       <span className="card-index" title={t("长按卡片拖动排序")}><GripVertical size={10} aria-hidden="true" /><span>0{index + 1}</span></span>
     </div>
     <div className="quota-area">
