@@ -12,12 +12,14 @@ export type PanelState = Preferences & {
   trayAvailable: boolean; stored: boolean;
   widgetsEnabled: boolean; widgetsAvailable: boolean; widgetSyncError: boolean;
   widgetBackground: boolean; widgetLastPublishedAt: string | null;
+  claudeHooksStatus?: { supported: boolean; installed: boolean; error?: 'settings-invalid' | 'settings-unreadable' | 'unsupported-platform' | 'write-failed' };
   providerOrder: ProviderId[];
   enabledProviders: ProviderId[];
   qwenKeychainAllowed: boolean;
   kimiSource: KimiSource;
   claudeSource: ClaudeSource;
   claudeNetworkAllowed: boolean;
+  claudeHooksEnabled: boolean;
   animeMode: boolean; skin: Skin; layout: Layout; windowLayout: 'single' | 'double';
   language: Language; resolvedLanguage?: Exclude<Language, 'system'>;
   theme: Theme; resolvedTheme: 'light' | 'dark';
@@ -69,6 +71,7 @@ declare global {
       setKimiSource(source: KimiSource): Promise<PanelState>;
       setClaudeSource(source: ClaudeSource): Promise<PanelState>;
       setClaudeNetworkAccess(allowed: boolean): Promise<PanelState>;
+      setClaudeHooks(enabled: boolean): Promise<PanelState>;
       requestClaudeActivityAccess(): Promise<LocalStatus>;
       clearCache(): Promise<{ freedBytes: number }>;
       setAnimeMode(enabled: boolean): Promise<PanelState>;

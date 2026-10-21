@@ -12,7 +12,8 @@ const { requestZcodeJson } = require('./zcode-account-api.cjs');
 const { WindowLayout } = require('./window-layout.cjs');
 const { taskDetail } = require('./task-details.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
-const { ClaudeStatusReader } = require('./claude-status.cjs');
+const { ClaudeStatusReader, resolveClaudePaths } = require('./claude-status.cjs');
+const { ClaudeHooks } = require('./claude-hooks.cjs');
 const { createClaudeActivityBridge } = require('./claude-activity-bridge.cjs');
 const { readDesktopActivity } = require('./claude-desktop.cjs');
 const { ProviderLauncher } = require('./provider-launcher.cjs');
@@ -32,6 +33,23 @@ let statusSnapshot = statusReader.current;
 const fixtureVariant = process.env.AI_WATCH_TEST_STATUS;
 const fixtureMode = Boolean(process.env.AI_WATCH_TEST_PROFILE && ['fixture', 'glow-running', 'glow-attention'].includes(fixtureVariant));
 const providerLauncher = new ProviderLauncher({ fixtureMode });
+let claudeHooks = null, claudeHooksStatus = { supported: process.platform !== 'win32', installed: false };
+// Test profiles register hooks in a private copy of the settings file, never the user's real one.
+function createClaudeHooks() {
+  const settingsFile = process.env.AI_WATCH_TEST_PROFILE ? path.join(app.getPath('userData'), 'claude-config', 'settings.json')
+    : path.join(resolveClaudePaths().config, 'settings.json');
+  claudeHooks = new ClaudeHooks({ settingsFile, dataDir: app.getPath('userData') });
+  statusReader.claudeReader.hooks = claudeHooks;
+}
+async function applyClaudeHooks(enabled) {
+  try {
+    if (enabled) await claudeHooks.install(); else await claudeHooks.uninstall();
+    claudeHooksStatus = await claudeHooks.status();
+  } catch (error) {
+    claudeHooksStatus = { supported: claudeHooks.supported, installed: false, error: ['settings-invalid', 'settings-unreadable', 'unsupported-platform'].includes(error.message) ? error.message : 'write-failed' };
+    throw error;
+  }
+}
 async function refreshLocalStatus(force = false) {
   statusSnapshot = fixtureMode
     ? JSON.parse(await fs.promises.readFile(path.join(__dirname, '../tests/fixtures/local-status.json'), 'utf8'))
@@ -107,6 +125,7 @@ function currentState() {
     widgetsAvailable: widgetPublisher?.available === true, widgetSyncError: widgetPublisher?.error === true,
     widgetBackground: panelTray?.widgetBackground === true,
     widgetLastPublishedAt: widgetPublisher?.lastPublishedAt || null,
+    claudeHooksStatus,
     resolvedLanguage: currentLanguage().language,
     resolvedTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
@@ -208,6 +227,9 @@ else {
       }
     }
     statusReader.claudeReader.setDesktopPlanCacheFile(path.join(app.getPath('userData'), 'claude-desktop-plan.json'));
+    createClaudeHooks();
+    // Refresh the script on start so a moved or updated app keeps reporting; failures stay visible in settings.
+    if (preferences.claudeHooksEnabled) await applyClaudeHooks(true).catch(() => {});
     widgetPublisher = new WidgetPublisher({ bridge: loadWidgetBridge({ app, fixtureMode,
       fixtureWidgets: process.env.AI_WATCH_TEST_WIDGETS === '1' }) });
     statusReader.setKimiSource(preferences.kimiSource);
@@ -325,7 +347,7 @@ else {
     });
     handle('panel:configure', (value) => {
       const next = validPreferences({ ...value, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
-        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, skin: preferences.skin, providerApps: preferences.providerApps });
+        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, claudeHooksEnabled: preferences.claudeHooksEnabled, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, skin: preferences.skin, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -407,6 +429,15 @@ else {
         }
       }
       return refreshLocalStatus(true);
+    });
+    handle('panel:claude-hooks', async (value) => {
+      if (typeof value !== 'boolean') throw new Error('Invalid Claude hooks setting');
+      await applyClaudeHooks(value).catch(() => {});
+      // Only a successful install counts as on; a failed removal still turns reporting off.
+      preferences.claudeHooksEnabled = value && claudeHooksStatus.installed;
+      savePreferences(); emitState();
+      await refreshLocalStatus(true);
+      return currentState();
     });
     handle('panel:claude-network-access', async (value) => {
       if (typeof value !== 'boolean') throw new Error('Invalid Claude network setting');

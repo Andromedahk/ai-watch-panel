@@ -156,7 +156,7 @@ export function CardShell({ view, skin, index, sortProps, dragging, animationPau
 }) {
   const { t, number } = useI18n();
   return <section {...sortProps} className={`provider-card card-${skin} ${view.state === 'running' ? 'is-running' : ''} ${dragging ? 'is-dragging' : ''}`}
-    style={{ '--accent': view.color, ...sortProps?.style } as CSSProperties} data-provider={view.id} data-state={view.state} data-attention={view.attention}
+    style={{ '--accent': view.color, '--i': index, ...sortProps?.style } as CSSProperties} data-provider={view.id} data-state={view.state} data-attention={view.attention}
     data-animation-paused={animationPaused} aria-label={t('{p0} 面板', { p0: view.name })} tabIndex={0} aria-describedby="card-sort-help" onDragStart={event => event.preventDefault()}>
     <span className="card-index" title={t('长按卡片拖动排序')}><GripVertical size={10} aria-hidden="true" /><bdi dir="ltr">{number(index + 1, { minimumIntegerDigits: 2 })}</bdi></span>
     {children}

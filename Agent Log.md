@@ -20,6 +20,37 @@
 
 ---
 
+## 2026-10-22 · Claude（Anthropic，Claude App 云端会话，模型配置 claude-opus-5-5）· Claude Code 状态钩子与界面动效
+
+- 分支：`claude/ui-redesign`，起点 `9a7f453`。
+- 目的：按人类要求，不依赖辅助功能读取 Claude 运行状态（Claude Code 会话用官方钩子；人类明确不做网络流量相关测试，因此未加入网络信号）；并直接为现有界面加入动效。
+- 操作：
+  - 新增 `electron/claude-hooks.cjs`：
+    - 生成只记录元数据的 POSIX 钩子脚本，存放在面板数据目录。
+    - 安装 / 移除时与用户的 Claude Code 设置合并，只增删面板自己的条目；设置格式有误时拒绝改写；保留原文件权限，新文件 0600，脚本 0700。
+    - 增量读取事件记录，超过 512 KB 时裁剪，并维护各会话状态。
+  - `electron/claude-status.cjs`：仅在 Claude Code 进程存在时合并钩子状态。按入口或会话登记区分终端和桌面；授权 / 提问原因按钩子判定；新增 `activityHooks` 字段与说明文字。
+  - `electron/main.cjs`、`preload.cjs`、`window-policy.cjs`：新增 `claudeHooksEnabled` 偏好、`panel:claude-hooks` IPC 和 `claudeHooksStatus`。测试配置只写配置目录内的 `claude-config/settings.json`。启动时若开关为开，会刷新脚本。
+  - `src/App.tsx`、`src/types.ts`：数据来源分区新增开关和错误提示。
+  - `src/useVisibleCards.ts`、`src/App.tsx`：修正从非值守台风格启动时可见性监听失效（光效被一直暂停）的问题。
+  - `src/App.tsx`：切换主题的那一帧禁用过渡，避免颜色缓慢变化。
+  - `src/view/skins.css`、`parts.tsx`、`skins.tsx`：新增动效层（详见 README 更新记录）；暂停规则补上 `::after`。
+  - 17 个语言目录各新增 6 条文字。
+  - 测试：
+    - 新增 `tests/claude-hooks.test.cjs`（5 项）；`tests/window-policy.test.cjs` 补充偏好校验。
+    - `scripts/verify-resources.mjs` 新增钩子开关检查。
+    - `scripts/verify-skins.mjs` 的角色栏光效断言改为允许入场动画并存。
+- 验证：
+  - `tsc --noEmit`、`vite build` 通过；单元测试 375 项中 366 项通过、9 项按平台跳过。
+  - 在云端 Linux 的 xvfb 下，15 个 Electron 验收脚本最终全部通过。中途 `theme`（主题切换时颜色过渡导致对比度取值偏低）和 `skins`（动画名称断言）失败，修正后通过。
+  - 逐帧截图检查了入场、圆环增长、扫光和按钮脉动。
+- 未完成 / 需要人类决定：
+  - 钩子未在真实 Claude Code / Claude Desktop 中实测。需要在 macOS 上打开开关后跑一次 Claude Code，确认三件事：运行、`PermissionRequest` 和 `AskUserQuestion` 状态正确；桌面版 Code 页确实触发用户级钩子；`CLAUDE_CODE_ENTRYPOINT` 或会话登记能把桌面会话正确归类。
+  - 钩子脚本依赖 `/bin/sh`、`grep`、`sed`、`tr`、`head`、`cut`，Linux 上已实测运行，macOS 自带工具尚未实测。
+  - 未在 macOS 上重跑验收与打包。
+
+---
+
 ## 2026-10-22 · Claude（Anthropic，Claude App 云端会话，模型配置 claude-opus-5-5）· 提醒区展开与光效遮挡
 
 - 分支：`claude/ui-redesign`，起点 `c32a919`。

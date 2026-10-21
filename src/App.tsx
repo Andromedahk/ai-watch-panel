@@ -20,7 +20,7 @@ const previewState: PanelState = {
   widgetsEnabled: false, widgetsAvailable: false, widgetSyncError: false, widgetBackground: false, widgetLastPublishedAt: null,
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
-  kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, layout: 'single', windowLayout: 'single',
+  kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, layout: 'single', windowLayout: 'single',
   animeMode: readAnimeMode(), skin: readSkin(),
   language: window.panel ? 'zh-CN' : readLanguage(),
   theme: window.panel ? 'system' : readTheme(),
@@ -119,6 +119,7 @@ export default function App() {
   const [kimiSourceSaving, setKimiSourceSaving] = useState(false);
   const [claudeSourceSaving, setClaudeSourceSaving] = useState(false);
   const [claudeNetworkSaving, setClaudeNetworkSaving] = useState(false);
+  const [claudeHooksSaving, setClaudeHooksSaving] = useState(false);
   const [cacheClearing, setCacheClearing] = useState(false);
   const [widgetsSaving, setWidgetsSaving] = useState(false);
   const storeLabel = state.platform === 'darwin' ? t("收纳到菜单栏") : t("收纳到托盘");
@@ -128,7 +129,7 @@ export default function App() {
     ? { ...provider, name: 'Claude', subtitle: 'ANTHROPIC' } : provider).map(provider => localizeProvider(provider, i18n));
   const viewport = useRef<HTMLDivElement>(null);
   const enabledOrder = state.providerOrder.filter(id => state.enabledProviders.includes(id));
-  const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode);
+  const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode, `${state.skin}:${state.layout}:${state.animeMode}`);
   const resolvedTheme = state.theme === 'system' ? state.resolvedTheme : state.theme;
   const [draft, setDraft] = useState<Preferences>(previewState);
   const modal = useRef<HTMLDialogElement>(null);
@@ -275,6 +276,18 @@ export default function App() {
     finally { setClaudeNetworkSaving(false); }
   }
 
+  async function changeClaudeHooks(enabled: boolean) {
+    if (claudeHooksSaving || !window.panel) return;
+    setClaudeHooksSaving(true);
+    try {
+      const next = await window.panel.setClaudeHooks(enabled); setState(next);
+      const error = next.claudeHooksStatus?.error;
+      setNotice(!error ? '' : error === 'settings-invalid' ? t('Claude Code 设置文件格式有误，未做修改') : error === 'unsupported-platform' ? t('此系统暂不支持状态钩子') : t('无法写入 Claude Code 设置'));
+    }
+    catch { setNotice(t('保存失败，请重试')); }
+    finally { setClaudeHooksSaving(false); }
+  }
+
   async function changeLanguage(language: Language) {
     if (languageSaving) return;
     setLanguageSaving(true);
@@ -323,7 +336,13 @@ export default function App() {
     document.title = `AI Watch · ${t('AI 工具监看面板')}`;
   }, [i18n.language]);
   useLayoutEffect(() => { document.documentElement.dataset.layout = state.collapsed ? 'single' : state.layout; }, [state.layout, state.collapsed]);
-  useLayoutEffect(() => { document.documentElement.dataset.theme = resolvedTheme; }, [resolvedTheme]);
+  useLayoutEffect(() => {
+    // Swap palettes in one frame: colour transitions are for state changes, not for a theme flip.
+    const root = document.documentElement;
+    root.classList.add('theme-switching'); root.dataset.theme = resolvedTheme;
+    let second = 0; const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => root.classList.remove('theme-switching')); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); root.classList.remove('theme-switching'); };
+  }, [resolvedTheme]);
   useLayoutEffect(() => { document.documentElement.dataset.skin = state.skin; }, [state.skin]);
   useEffect(() => {
     const focused = document.activeElement;
@@ -542,6 +561,8 @@ export default function App() {
             <p className="appearance-hint">{t('桌面版与 Code 分开读取，切换后清除上个来源的套餐和状态。')}</p>
             <label className="switch-row"><span>{t('联网查询 Claude 额度')}<small>{t('复用所选客户端的本地登录')}</small></span><input aria-label={t('联网查询 Claude 额度')} type="checkbox" checked={state.claudeNetworkAllowed} disabled={!state.desktop || claudeNetworkSaving} onChange={event => void changeClaudeNetworkAccess(event.target.checked)} /></label>
             <p className="appearance-hint">{t('仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。')}</p>
+            <label className="switch-row"><span>{t('Claude Code 状态钩子')}<small>{t('即时识别运行、授权和提问，无需辅助功能')}</small></span><input aria-label={t('Claude Code 状态钩子')} type="checkbox" checked={state.claudeHooksEnabled} disabled={!state.desktop || claudeHooksSaving || state.claudeHooksStatus?.supported === false} onChange={event => void changeClaudeHooks(event.target.checked)} /></label>
+            <p className="appearance-hint">{t('开启后在 Claude Code 用户设置中登记一个只写本地文件的钩子，终端与桌面版 Code 会话都会上报；只记录事件类型和会话编号，不记录对话内容。关闭即移除，不影响你自己的钩子。')}</p>
             {state.claudeSource === 'desktop' && <><button className="dock-button" disabled={!state.desktop || claudeSourceSaving} onClick={async () => {
               if (!window.panel) return; setClaudeSourceSaving(true);
               try { setLocalStatus(await window.panel.requestClaudeActivityAccess()); }

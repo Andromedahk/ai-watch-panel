@@ -492,5 +492,11 @@
   "辅助功能未授权，桌面状态未知": "Accessibilité non autorisée ; état de l’app inconnu",
   "授权辅助功能请使用桌面版": "Autorisez l’accessibilité depuis l’app de bureau",
   "请在系统设置的“辅助功能”中允许 AI Watch，然后回到面板": "Autorisez AI Watch dans Accessibilité des Réglages Système, puis revenez au panneau",
-  "第 {p0} 位": "Position {p0}"
+  "第 {p0} 位": "Position {p0}",
+  "Claude Code 设置文件格式有误，未做修改": "Le fichier de réglages de Claude Code est invalide ; rien n’a été modifié",
+  "此系统暂不支持状态钩子": "Les hooks d’état ne sont pas pris en charge sur ce système",
+  "无法写入 Claude Code 设置": "Impossible d’écrire les réglages de Claude Code",
+  "Claude Code 状态钩子": "Hooks d’état Claude Code",
+  "即时识别运行、授权和提问，无需辅助功能": "Détecte aussitôt l’exécution, les autorisations et les questions, sans Accessibilité",
+  "开启后在 Claude Code 用户设置中登记一个只写本地文件的钩子，终端与桌面版 Code 会话都会上报；只记录事件类型和会话编号，不记录对话内容。关闭即移除，不影响你自己的钩子。": "Ajoute à vos réglages utilisateur de Claude Code un hook qui écrit seulement un fichier local ; les sessions Code du terminal et de l’app de bureau le signalent. Seuls le type d’évènement et l’ID de session sont enregistrés, jamais le contenu de la conversation. Le désactiver le retire sans toucher à vos propres hooks."
 }

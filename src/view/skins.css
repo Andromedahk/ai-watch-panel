@@ -261,8 +261,9 @@ h1 { margin: 0; font-size: 14px; font-weight: 750; letter-spacing: 1.4px; white-
 .credit-item.is-stale .credit-value { color: var(--faint); }
 .credit-label { display: flex; gap: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .credit-label small { color: var(--faint); }
-.provider-card[data-animation-paused="true"] *, .provider-card[data-animation-paused="true"] *::before, .animations-paused *, .animations-paused *::before { animation-play-state: paused !important; }
+.provider-card[data-animation-paused="true"], .provider-card[data-animation-paused="true"]::after, .provider-card[data-animation-paused="true"] *, .provider-card[data-animation-paused="true"] *::before, .provider-card[data-animation-paused="true"] *::after, .animations-paused *, .animations-paused *::before, .animations-paused *::after { animation-play-state: paused !important; }
 .no-animation *, .no-animation *::before, .no-animation *::after { animation: none !important; transition: none !important; }
+.theme-switching *, .theme-switching *::before, .theme-switching *::after { transition: none !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 /* ── A · 值守台 ────────────────────────────────────────── */
@@ -556,3 +557,70 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
 /* Light theme: brand-colored figures are pulled toward the text color to keep 4.5 : 1 contrast. */
 :root[data-theme="light"] .credit-value, :root[data-theme="light"] .balance-total:not(.is-stale), :root[data-theme="light"] .card-party .quota-label strong,
 :root[data-theme="light"] .dial-figure { color: color-mix(in oklch, var(--ink) 55%, var(--text)); }
+
+/* ── Motion ─────────────────────────────────────────────
+   Every effect animates only opacity, colour, shadow, clip or the individual
+   translate / scale properties, so layout and measured geometry never move.
+   "状态灯动画" off (.no-animation) or reduced motion turns all of it off. */
+:root { --ease-out: cubic-bezier(.2, .75, .25, 1); --ease-spring: cubic-bezier(.3, 1.4, .5, 1); }
+
+/* Cards fade in one after another whenever a skin or mode is (re)built. */
+.provider-card { animation: card-in .5s var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 10) * 45ms); }
+.card-party.is-running { animation: card-in .5s var(--ease-out) both, party-glow 5s ease-in-out .5s infinite; animation-delay: calc(min(var(--i, 0), 10) * 45ms), calc(min(var(--i, 0), 10) * 45ms + .5s); }
+.card-party[data-attention="true"] { animation: card-in .5s var(--ease-out) both; }
+@keyframes card-in { from { opacity: 0; filter: saturate(.4); } }
+.overview > * { animation: fade-in .4s var(--ease-out) both; }
+@keyframes fade-in { from { opacity: 0; } }
+
+/* Hover and press feedback. */
+.provider-card { transition: background-color .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.card-watch:hover { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.card-dial:hover, .card-party:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 10px 24px -14px color-mix(in srgb, var(--accent) 70%, transparent); }
+.avatar-launch { transition: filter .2s ease, scale .18s var(--ease-spring); }
+.avatar-launch:hover:not(:disabled) { filter: brightness(1.08) saturate(1.1); }
+.avatar-launch:active:not(:disabled) { scale: .94; }
+.attention-open, .icon-button, .dock-button { transition: background-color .2s ease, filter .2s ease, scale .15s var(--ease-spring); }
+.attention-open:hover { filter: brightness(1.1); }
+.attention-open:active, .icon-button:active { scale: .94; }
+
+/* Status changes cross-fade instead of snapping. */
+.state-pill, .status-dot, .stat, .party-chips span, .plan-summary { transition: background-color .35s ease, color .35s ease, border-color .35s ease, box-shadow .35s ease; }
+.stat strong { animation: num-pop .5s var(--ease-spring) both; }
+@keyframes num-pop { from { opacity: .2; scale: .8; } }
+
+/* Prompts wipe in, then the open button keeps a soft pulse until answered. */
+.attention { animation: attention-in .55s var(--ease-out) backwards; }
+.attention:nth-child(2) { animation-delay: .06s; } .attention:nth-child(3) { animation-delay: .12s; } .attention:nth-child(n+4) { animation-delay: .18s; }
+@keyframes attention-in { from { opacity: 0; clip-path: inset(0 100% 0 0 round 14px); } to { opacity: 1; clip-path: inset(0 0 0 0 round 14px); } }
+:root[dir="rtl"] .attention { animation-name: attention-in-rtl; }
+@keyframes attention-in-rtl { from { opacity: 0; clip-path: inset(0 0 0 100% round 14px); } to { opacity: 1; clip-path: inset(0 0 0 0 round 14px); } }
+.attention-open { animation: open-pulse 2.4s ease-in-out .6s infinite; }
+@keyframes open-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 0%, transparent); } 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--warn) 28%, transparent); } }
+
+/* Allowances grow in from empty and glide to new values. */
+.quota-fill { transform-origin: left center; animation: fill-in .9s var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 10) * 45ms + .1s); transition: width .7s var(--ease-out), background-color .3s ease; }
+:root[dir="rtl"] .quota-fill { transform-origin: right center; }
+@keyframes fill-in { from { scale: 0 1; } }
+.ring-fill { animation: ring-in 1s var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 10) * 45ms + .1s); transition: stroke-dasharray .7s var(--ease-out), stroke .3s ease; }
+@keyframes ring-in { from { stroke-dasharray: 0 999; } }
+.credit-value, .balance-total { animation: fade-in .6s var(--ease-out) both; }
+
+/* A running row carries a slow light sweep along its top edge. */
+.card-watch.is-running::after, .card-dial.is-running::after { content: ''; position: absolute; inset: 0 0 auto; height: 2px; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(90deg, transparent 0 35%, color-mix(in srgb, var(--ink) 85%, transparent) 50%, transparent 65% 100%) no-repeat;
+  background-size: 260% 100%; animation: sweep 3.2s linear infinite; }
+@keyframes sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.card-watch.is-running, .card-dial.is-running { position: relative; }
+
+/* Off-screen reminders rise in; the toast slides up; the settings sheet and rail ease in. */
+.hidden-activity-light { animation: light-in .4s var(--ease-out) backwards; }
+@keyframes light-in { from { opacity: 0; clip-path: inset(100% 0 0 0); } to { opacity: 1; clip-path: inset(0 0 0 0); } }
+.toast { animation: toast-in .3s var(--ease-out) both; }
+@keyframes toast-in { from { opacity: 0; translate: 0 10px; } }
+.settings-dialog[open] { animation: sheet-in .28s var(--ease-out) both; }
+@keyframes sheet-in { from { opacity: 0; translate: 0 14px; } }
+.settings-group { animation: fade-in .35s var(--ease-out) both; }
+.rail-item { animation: fade-in .35s var(--ease-out) both; }
+.rail-item:nth-child(2) { animation-delay: .04s; } .rail-item:nth-child(3) { animation-delay: .08s; } .rail-item:nth-child(4) { animation-delay: .12s; }
+.rail-item:nth-child(5) { animation-delay: .16s; } .rail-item:nth-child(6) { animation-delay: .2s; } .rail-item:nth-child(n+7) { animation-delay: .24s; }
+.skin-option { transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease; }

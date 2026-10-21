@@ -80,6 +80,7 @@ function validPreferences(value) {
     kimiSource: isKimiSource(value?.kimiSource) ? value.kimiSource : 'code',
     claudeSource: isClaudeSource(value?.claudeSource) ? value.claudeSource : 'desktop',
     claudeNetworkAllowed: value?.claudeNetworkAllowed === true,
+    claudeHooksEnabled: value?.claudeHooksEnabled === true,
     cacheCleanupPending: value?.cacheCleanupPending === true,
     widgetsEnabled: value?.widgetsEnabled === true,
     kimiWorkApp: validProviderApps({ kimi: value?.kimiWorkApp }).kimi || null,

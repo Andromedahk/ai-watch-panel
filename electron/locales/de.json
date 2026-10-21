@@ -492,5 +492,11 @@
   "辅助功能未授权，桌面状态未知": "Bedienungshilfen nicht erlaubt; Desktop-Status unbekannt",
   "授权辅助功能请使用桌面版": "Bedienungshilfen in der Desktop-App erlauben",
   "请在系统设置的“辅助功能”中允许 AI Watch，然后回到面板": "AI Watch in den Systemeinstellungen unter „Bedienungshilfen“ erlauben und zum Panel zurückkehren",
-  "第 {p0} 位": "Position {p0}"
+  "第 {p0} 位": "Position {p0}",
+  "Claude Code 设置文件格式有误，未做修改": "Die Claude-Code-Einstellungsdatei ist ungültig; nichts wurde geändert",
+  "此系统暂不支持状态钩子": "Status-Hooks werden auf diesem System nicht unterstützt",
+  "无法写入 Claude Code 设置": "Claude-Code-Einstellungen konnten nicht geschrieben werden",
+  "Claude Code 状态钩子": "Claude-Code-Status-Hooks",
+  "即时识别运行、授权和提问，无需辅助功能": "Erkennt Ausführung, Freigaben und Rückfragen sofort – ohne Bedienungshilfen",
+  "开启后在 Claude Code 用户设置中登记一个只写本地文件的钩子，终端与桌面版 Code 会话都会上报；只记录事件类型和会话编号，不记录对话内容。关闭即移除，不影响你自己的钩子。": "Trägt in deine Claude-Code-Benutzereinstellungen einen Hook ein, der nur eine lokale Datei schreibt; Code-Sitzungen im Terminal und in der Desktop-App melden sich. Erfasst werden nur Ereignistyp und Sitzungs-ID, nie Gesprächsinhalte. Ausschalten entfernt ihn, deine eigenen Hooks bleiben unberührt."
 }

@@ -132,9 +132,9 @@ export function Overview({ skin, summary, live, stamp, badge, onOpen, image, ani
   </section>;
   return <section className="overview overview-watch" aria-label={t('总览')}>
     <div className="stat-tiles">
-      <div className="stat" data-kind="running"><span>{t('运行中')}</span><strong><bdi dir="ltr">{number(summary.running)}</bdi></strong></div>
-      <div className="stat" data-kind="waiting" data-active={summary.waiting.length > 0}><span>{t('等你处理')}</span><strong><bdi dir="ltr">{number(summary.waiting.length)}</bdi></strong></div>
-      <div className="stat" data-kind="tight" data-low={isLow(tight?.value ?? null)} title={tight ? `${tight.view.name} · ${percent(tight.value)}` : ''}><span>{t('最紧额度')}</span><strong><bdi dir="ltr">{tight ? percent(tight.value) : '—'}</bdi></strong><small>{tight?.view.name}</small></div>
+      <div className="stat" data-kind="running"><span>{t('运行中')}</span><strong key={summary.running}><bdi dir="ltr">{number(summary.running)}</bdi></strong></div>
+      <div className="stat" data-kind="waiting" data-active={summary.waiting.length > 0}><span>{t('等你处理')}</span><strong key={summary.waiting.length}><bdi dir="ltr">{number(summary.waiting.length)}</bdi></strong></div>
+      <div className="stat" data-kind="tight" data-low={isLow(tight?.value ?? null)} title={tight ? `${tight.view.name} · ${percent(tight.value)}` : ''}><span>{t('最紧额度')}</span><strong key={tight ? Math.round(tight.value) : 'none'}><bdi dir="ltr">{tight ? percent(tight.value) : '—'}</bdi></strong><small>{tight?.view.name}</small></div>
     </div>
     {attention}
     <p className="overview-meta">{badge}{stamp && <span><time dir="ltr">{stamp}</time></span>}</p>

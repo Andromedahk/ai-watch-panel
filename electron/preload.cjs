@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('panel', {
   setKimiSource: (source) => ipcRenderer.invoke('panel:kimi-source', source),
   setClaudeSource: (source) => ipcRenderer.invoke('panel:claude-source', source),
   setClaudeNetworkAccess: (allowed) => ipcRenderer.invoke('panel:claude-network-access', allowed),
+  setClaudeHooks: (enabled) => ipcRenderer.invoke('panel:claude-hooks', enabled),
   requestClaudeActivityAccess: () => ipcRenderer.invoke('panel:claude-activity-access'),
   clearCache: () => ipcRenderer.invoke('panel:clear-cache'),
   setAnimeMode: (enabled) => ipcRenderer.invoke('panel:anime-mode', enabled),

@@ -204,6 +204,21 @@ try {
       try { await window.panel.setClaudeSource(value); return false; } catch { return true; }
     }, invalid), true);
   }
+  // Claude Code status hooks: test profiles register them in a private settings copy only.
+  const hookSettings = path.join(profile, 'claude-config', 'settings.json');
+  const hooksToggle = page.getByRole('checkbox', { name: 'Claude Code 状态钩子', exact: true });
+  await expect(hooksToggle).not.toBeChecked();
+  await hooksToggle.click(); await expect(hooksToggle).toBeChecked();
+  const registered = JSON.parse(await readFile(hookSettings, 'utf8'));
+  assert.equal(Object.values(registered.hooks).flat().filter(group => group.hooks.some(hook => hook.command.includes('ai-watch-claude-hook.sh'))).length, 12);
+  assert.equal(JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).claudeHooksEnabled, true);
+  assert.equal((await page.evaluate(() => window.panel.getState())).claudeHooksStatus.installed, true);
+  for (const invalid of ['true', 1, null, {}]) {
+    assert.equal(await page.evaluate(async value => { try { await window.panel.setClaudeHooks(value); return false; } catch { return true; } }, invalid), true);
+  }
+  await hooksToggle.click(); await expect(hooksToggle).not.toBeChecked();
+  assert.deepEqual(JSON.parse(await readFile(hookSettings, 'utf8')), {});
+  assert.equal(JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).claudeHooksEnabled, false);
   assert.equal((await page.evaluate(() => window.panel.getState())).claudeSource, 'code');
   await page.evaluate(() => localStorage.setItem('AI_WATCH_CACHE_KEEP', 'KEEP'));
   await writeFile(path.join(profile, 'claude-desktop-plan.json'), 'KEEP');
@@ -272,7 +287,7 @@ try {
       'rejected cache root preserves startup/settings/storage/plan', 'main and helper exit'],
     processAudits, metrics,
   }, null, 2));
-  console.log('Resource checks passed: visible/offscreen/hidden animation states, running hidden activity indicator, transform spectrum, Claude source controls, invalid IPC, fixture access isolation, restart persistence, safe startup after rejected cache root and no remaining main/renderer/helpers after all exits.');
+  console.log('Resource checks passed: visible/offscreen/hidden animation states, running hidden activity indicator, transform spectrum, Claude source controls, Claude Code status hook registration in a private settings copy, invalid IPC, fixture access isolation, restart persistence, safe startup after rejected cache root and no remaining main/renderer/helpers after all exits.');
   if (cpuEnabled) console.log(JSON.stringify({ syntheticFixture: true, metrics }, null, 2));
 } finally {
   if (app) await closeAndVerify();

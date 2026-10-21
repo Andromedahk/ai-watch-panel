@@ -1,7 +1,8 @@
 import { useEffect, useState, type RefObject } from 'react';
 import type { ProviderId } from './types';
 
-export function useVisibleCards(viewport: RefObject<HTMLDivElement | null>, ids: ProviderId[], collapsed: boolean, testing: boolean) {
+/** `layoutKey` must change whenever the viewport element or its cards are rebuilt (skin, layout, anime mode). */
+export function useVisibleCards(viewport: RefObject<HTMLDivElement | null>, ids: ProviderId[], collapsed: boolean, testing: boolean, layoutKey = '') {
   const [visible, setVisible] = useState<Set<ProviderId>>(new Set());
   const key = ids.join(',');
   useEffect(() => {
@@ -17,6 +18,6 @@ export function useVisibleCards(viewport: RefObject<HTMLDivElement | null>, ids:
     }, { root, threshold: [0, .6, 1] });
     root.querySelectorAll('.provider-card').forEach(card => observer.observe(card));
     return () => observer.disconnect();
-  }, [viewport, key, collapsed, testing]);
+  }, [viewport, key, collapsed, testing, layoutKey]);
   return visible;
 }

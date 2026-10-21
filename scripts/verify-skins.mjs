@@ -98,12 +98,15 @@ async function checkLayout(context) {
       const style = getComputedStyle(el);
       return { animation: style.animationName, duration: style.animationDuration, shadow: style.boxShadow };
     });
-    assert.equal(effect.animation, 'party-glow');
-    assert.equal(effect.duration, '5s');
+    // The one-off entrance runs alongside the continuous 5 s frame glow.
+    const names = effect.animation.split(', '), durations = effect.duration.split(', ');
+    assert.ok(names.includes('party-glow'), effect.animation);
+    assert.equal(durations[names.indexOf('party-glow')], '5s');
     assert.notEqual(effect.shadow, 'none');
     for (const id of ['claude', 'codex']) {
       const effect = await card(id).evaluate(el => ({ animation: getComputedStyle(el).animationName, shadow: getComputedStyle(el).boxShadow }));
-      assert.equal(effect.animation, 'none');
+      // A waiting card holds a steady red frame: no continuous frame glow (only the one-off entrance).
+      assert.ok(!effect.animation.split(', ').includes('party-glow'), effect.animation);
       assert.notEqual(effect.shadow, 'none');
     }
   } else {

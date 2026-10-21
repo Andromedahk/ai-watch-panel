@@ -99,6 +99,7 @@ class ClaudeStatusReader {
     this.desktopActivityReader = options.desktopActivityReader || require('./claude-desktop.cjs').readDesktopActivity;
     this.usageReader = options.usageReader || new (require('./claude-usage.cjs').ClaudeUsageReader)({ paths: this.paths, platform: this.platform });
     this.desktopPlanCache = null; this.desktopPlanCacheFile = null; this.persistedDesktopPlan = null; this.loadSamples = [];
+    this.hooks = options.hooks || null; // optional ClaudeHooks reader (Claude Code lifecycle events)
     if (options.desktopPlanCacheFile) this.setDesktopPlanCacheFile(options.desktopPlanCacheFile);
   }
   setDesktopPlanCacheFile(file) {
@@ -223,7 +224,7 @@ class ClaudeStatusReader {
     const sessions = path.join(config, 'sessions');
     try { names = (await fs.readdir(sessions)).filter(n => /^\d+\.json$/.test(n)); }
     catch (error) { failed = error.code !== 'ENOENT'; }
-    const states = new Map(), classified = new Set();
+    const states = new Map(), classified = new Set(), sessionSurfaces = new Map();
     for (const name of names.filter(n => pids.has(Number(n.slice(0, -5)))).slice(0, 128)) {
       try {
         const file = path.join(sessions, name);
@@ -231,6 +232,7 @@ class ClaudeStatusReader {
         if (!Number.isInteger(row.pid) || row.pid !== Number(name.slice(0, -5))) continue;
         classified.add(row.pid);
         const surface = isDesktopEntry(row.entrypoint) ? 'desktop' : 'terminal';
+        if (typeof row.sessionId === 'string') sessionSurfaces.set(row.sessionId, surface);
         if ((source === 'desktop') !== (surface === 'desktop')) continue;
         const stat = await fs.stat(file);
         const fresh = stat.mtimeMs <= now + 120000 && now - stat.mtimeMs <= FRESH_MS;
@@ -240,15 +242,24 @@ class ClaudeStatusReader {
       } catch { failed = true; }
     }
     const values = [...states.values()];
-    const sessionActive = values.filter(s => s.phase === 'running').length;
+    // Hook events name the exact state of each Claude Code session (running, waiting for
+    // approval, asking a question). They only count while a Claude Code process is alive,
+    // so a crash without SessionEnd cannot leave a stale light on.
+    const hookSessions = this.hooks?.enabled && codeProcesses.length
+      ? ((await this.hooks.read(now)) || []).map(s => ({ ...s, surface: sessionSurfaces.get(s.session) || s.surface }))
+        .filter(s => (source === 'desktop') === (s.surface === 'desktop')) : [];
+    const hookWaiting = hookSessions.filter(s => s.phase === 'waiting');
+    const sessionActive = Math.max(values.filter(s => s.phase === 'running').length, hookSessions.filter(s => s.phase === 'running').length);
     // The visible Stop button can belong to a registered desktop Code session;
     // use the larger signal rather than double-counting the same task.
     const desktopRunning = source === 'desktop' && (desktopActivity.activity === 'running' || inferredBusy);
     const activeTasks = Math.max(sessionActive, desktopRunning ? 1 : 0);
     const desktopWaiting = source === 'desktop' && desktopActivity.activity === 'waiting' ? desktopActivity.waiting : null;
-    const sessionWaiting = values.filter(s => s.phase === 'waiting').length;
+    const fileWaiting = values.filter(s => s.phase === 'waiting').length;
+    const sessionWaiting = Math.max(fileWaiting, hookWaiting.length);
     const waiting = sessionWaiting + (desktopWaiting ? 1 : 0);
-    const waitingReason = desktopWaiting && !sessionWaiting ? desktopWaiting : waiting ? 'both' : undefined;
+    const reasons = new Set([...hookWaiting.map(s => s.reason), desktopWaiting].filter(Boolean));
+    const waitingReason = !waiting ? undefined : reasons.size === 1 && fileWaiting <= hookWaiting.length ? [...reasons][0] : 'both';
     const incomplete = failed || (source === 'code' && classified.size < pids.size) || values.some(s => s.phase === 'unknown');
     // A question or permission prompt outranks a running task, as for Codex.
     const activity = processes === null ? 'unknown' : waiting ? 'waiting' : activeTasks ? 'running'
@@ -258,7 +269,8 @@ class ClaudeStatusReader {
     const surfaces = source === 'desktop'
       ? { desktop: values.length ? `桌面 ${values.length} 个 Code 会话` : desktopOpen ? '桌面已打开' : '桌面未运行', terminal: '终端独立接入' }
       : { desktop: '桌面独立接入', terminal: values.length ? `终端 ${values.length} 个会话` : pids.size > classified.size ? 'Code 进程缺少会话记录' : '终端无运行会话' };
-    const task = waiting ? desktopWaiting === 'approval' && !sessionWaiting ? 'Claude 在等你授权工具' : desktopWaiting === 'input' && !sessionWaiting ? 'Claude 在等你回答问题' : `${waiting} 项任务等你回答或确认`
+    const task = waiting ? waitingReason === 'approval' ? waiting > 1 ? `${waiting} 项任务等你授权工具` : 'Claude 在等你授权工具'
+      : waitingReason === 'input' ? waiting > 1 ? `${waiting} 项任务等你回答问题` : 'Claude 在等你回答问题' : `${waiting} 项任务等你回答或确认`
       : activeTasks ? source === 'desktop' && !sessionActive ? inferredBusy && desktopActivity.activity !== 'running' ? 'Claude 桌面可能正在生成回复（按进程负载推测）' : 'Claude 桌面正在生成回复' : source === 'desktop' ? `${activeTasks} 项桌面任务有近期活动` : `${activeTasks} 项 Code 任务有近期活动`
       : activity === 'idle' ? '已连接会话暂无运行任务'
         : activity === 'offline' ? source === 'desktop' ? 'Claude 桌面未运行' : 'Claude Code 未运行'
@@ -276,10 +288,11 @@ class ClaudeStatusReader {
       ...(source === 'desktop' ? { activityAccessState: !desktopActivity.supported ? 'unsupported' : desktopActivity.trusted === true ? 'granted' : desktopActivity.trusted === false ? 'denied' : 'unknown' } : {}),
       ...(source === 'desktop' && require('./claude-desktop.cjs').ACTIVITY_PROBE_ERRORS.includes(desktopActivity.probeError) ? { activityProbeError: desktopActivity.probeError } : {}),
       activityObservedAt: source === 'desktop' && (['running', 'idle', 'waiting'].includes(desktopActivity.activity) || inferredBusy) ? new Date(now).toISOString()
-        : values.length ? new Date(Math.max(...values.map(s => s.at))).toISOString() : null,
-      activityDetail: source === 'desktop'
+        : values.length || hookSessions.length ? new Date(Math.max(...values.map(s => s.at), ...hookSessions.map(s => s.at))).toISOString() : null,
+      ...(this.hooks?.enabled ? { activityHooks: true } : {}),
+      activityDetail: (this.hooks?.enabled ? 'Claude Code 状态钩子已启用：Code 会话的运行、工具授权和提问由钩子即时上报。' : '') + (source === 'desktop'
         ? '桌面普通聊天由 macOS 辅助功能只读发送、停止和工具授权按钮；未授权或无法读取时，按 Claude 渲染进程的负载推测是否正在生成。桌面 Code 会话单独校验进程和十分钟时效。'
-        : '仅监看终端 Code 会话，校验进程和十分钟时效；桌面 Code 不计入终端任务。',
+        : '仅监看终端 Code 会话，校验进程和十分钟时效；桌面 Code 不计入终端任务。'),
       detail: network.state !== 'disabled' ? network.detail : source === 'desktop'
         ? '桌面额度来自当前登录账号的本地用量快照。套餐读取匹配账号和组织的桌面套餐快照，历史档位会标记为历史；Free 或未提供窗口的额度保持未知。'
         : '终端套餐只读取有效的文件型登录；额度仅复用账号和组织均一致的桌面用量快照，无法匹配时保持未知。' };
