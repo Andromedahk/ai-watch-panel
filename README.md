@@ -417,6 +417,15 @@ npm run dist:linux  # 在 Linux 环境生成 AppImage
 
 输出在 `release`。macOS 本地评审包使用 ad hoc 整包签名，应用标识与签名一致，并包含辅助程序所有架构；尚未做 Developer ID 签名或公证。请从固定安装位置启动，系统授权应对应这个副本。更换原型包后，旧签名的授权可能失效；此时在辅助功能设置中重新添加最终安装副本，再重启面板。跨更新稳定保留授权需要正式 Developer ID 签名，不能靠设置开关为开来确认当前程序已获授权。当前按构建机器架构打包，其他架构与平台仍需各自验收。
 
+若 Electron 下载受网络限制，且依赖目录内已有与 `package.json` 版本和目标架构匹配的 Electron，可复用本地发行版打包：
+
+```sh
+npm run build
+npx --no-install electron-builder --mac --dir --config.electronDist=node_modules/electron/dist
+```
+
+这只替换 Electron 的来源，仍执行原有打包与 ad hoc 签名；生成应用包和通过签名检查不等于安装、辅助功能授权或真实桌面状态验收通过。
+
 Windows、Linux 尚未完成平台验收。Windows 原生置顶可用，但 Electron 的所有工作区 API 不处理 Windows 虚拟桌面，需要后续平台适配；Linux 的置顶与跨工作区行为受桌面环境影响，尤其 Wayland 下的窗口定位和置顶存在限制。
 
 窗口行为参考 Electron 官方 [BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window) 和 [screen](https://www.electronjs.org/docs/latest/api/screen) 文档。菜单栏 / 通知区域入口使用主进程的 [Tray](https://www.electronjs.org/docs/latest/api/tray)，图标遵循 [nativeImage](https://www.electronjs.org/docs/latest/api/native-image) 的模板图片与 DPI 约定。Windows 托盘与任务栏恢复逻辑已准备，仍需 Windows 实机验证；Linux 托盘是否可用取决于桌面环境，尚未验收。
@@ -438,12 +447,20 @@ npm run test:kimi-work  # Work / Code 来源切换、到期标签、模拟启动
 AI_WATCH_LIVE_QA=1 npm run test:live-kimi-zcode  # 当前登录账号的真实额度；截图仅存 .local
 npm run test:anime  # 图标启动、双套图片、二次元布局、持久化及模拟启动隔离
 npm run test:quotas  # Codex 官方窗口、历史值、登录清理与合并模型分页
+npm run test:i18n
+npm run test:layouts
+npm run test:resources
+node scripts/build-widgets.mjs --check  # macOS 原生模型、桥接与构建产物检查
+npm run test:widgets  # macOS，隔离配置与合成数据
+npm run test:widgets:bundle  # macOS，未签名嵌入与架构检查
 AI_WATCH_TEST_STATUS=glow-running npm run test:desktop
 AI_WATCH_TEST_STATUS=glow-attention npm run test:desktop
 AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存在忽略目录
 ```
 
 单元检查覆盖窗口策略、额度换算、缺失和过时数据、陈旧任务、只读 SQLite/WAL、输出字段筛选、回环接口失败、响应大小与超时，以及 Harness 多设备发现、登录轮换、精确金额、HTTPS 错误和限流。新增 Claude 最新空额度清理、桌面/终端登记与 PID 验证，以及 Harness 多帧解码、任务边界、等待确认、失去锁与陈旧状态检查。桌面检查使用独立临时配置，默认加载合成记录，验证真实窗口比例、内容溢出与元素重叠，输出文档截图；本机模式的截图不会提交。macOS Apple Silicon 上已通过构建、桌面启动与本地读取；验收记录见 [QA](docs/QA.md)。
+
+`claude/ui-redesign` 本轮 macOS 检查通过原生编译、TypeScript、网页构建、应用包签名及小组件原生 / bundle 检查；真实桌面状态尚未验收。受限执行会话中，socket 监听被拒绝会导致部分单元测试报 `EPERM`，Electron 启动失败也不能视为 UI 断言通过。完整结果及 Claude 六项实机验收清单见 [Agent Log](Agent%20Log.md) 中的“原生编译与验收阻塞记录”；以往版本的通过记录不代表当前分支已通过这些检查。读取真实账号的 `test:live-kimi-zcode` 需要单独选择运行，本轮未执行。
 
 ## 实现与后续接入
 
@@ -481,6 +498,33 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 任务名称与简短元数据由主进程限量读取、清理控制字符和明显的路径 / 凭证片段后传入沙盒界面；不显示完整提示词、对话正文、命令参数或工具输出，不持久化任务详情。退出全屏停止详情采集并清除界面快照。Windows / Linux 的窗口能力与布局已准备，仍需实机验证。
 
 ## 更新记录
+
+### 未发布 · 2026-10-22 · 本地提交与推送重试 · 署名：Codex（GPT-6，Codex 桌面本地执行环境）
+
+- 汇总提交此前保留的验收文档与重试记录，推送目标为 `claude/ui-redesign`，未改动业务代码。
+- 本轮远端查询与文档差异检查通过；历史失败记录保留供追溯。提交和推送不代表完成此前尚未通过的安装、辅助功能及真实桌面状态验收，本轮不重跑这些检查。
+
+### 未发布 · 2026-10-22 · 再次重试提交与推送 · 署名：Codex（模型标识未提供，ChatGPT Work）
+
+- 再次暂存仍因 Git 元数据写入权限被拒绝而失败，未生成新提交；推送仍因本地代理不可连接而失败。
+- 本轮仅补充操作记录，未修改业务代码或重跑构建与界面验收；需在具备 Git 写入权限及网络连接的环境完成提交和推送。
+
+### 未发布 · 2026-10-22 · 提交与推送重试 · 署名：Codex（GPT-6，ChatGPT Work）
+
+- 仅处理 `claude/ui-redesign` 的两份待提交文档，主工作区内容经摘要比对保持原样。
+- 无残留 Git 锁；暂存仍因 Git 元数据目录不可写而失败，提交未执行。推送受代理连接失败阻塞，单次禁用代理后仍无法解析 GitHub；未修改持久代理配置。
+- GitHub 连接器确认远端尚无目标分支及 `01635d9`；需在具备 Git 写入与联网能力的本地终端完成提交和推送。`git diff --check` 通过；本轮没有重跑构建或实机验收，已有未完成项继续保留。
+
+### 未发布 · 2026-10-21 · macOS 编译、打包与受限验收记录 · 署名：Codex（GPT-6，ChatGPT Work / macOS）
+
+- 仅在 `claude/ui-redesign` 的独立 worktree 验证 `01635d9`，主工作区的未提交文件经摘要比对保持原样，未合并 relay。
+- 原生辅助程序以 `-Wall -Wextra -Werror` 编译为双架构可执行文件，无编译警告或错误；TypeScript 与 Vite 构建通过，Vite 仍提示现有大 chunk。
+- 常规打包因网络失败；改用本地 Electron 后成功生成 ad hoc 签名应用包，整包与 Claude 辅助程序的全架构严格签名校验通过，包内源码与当前文件一致。补充本地 Electron 打包方法。
+- 小组件原生构建、22 项模型检查、桥接原子写入 / 权限 / 失败清理检查，以及 `verify-widget-bundle` 通过；不代表已签名小组件的系统图库与刷新验收。
+- 单元测试 368 项中 358 通过、10 项因 socket 监听 `EPERM` 失败。14 个 Electron 验收脚本、两种 desktop 光效变体及 `verify-widgets` 均因 Electron 启动失败而未进入 UI 验收；未执行真实账号检查，也未更新截图。
+- 当前会话无法写入安装目录，界面控制连接不可用；未替换已有应用、未更改系统授权，Claude 生成 / 授权 / 提问 / 空闲、撤权提示和授权按钮跳转均待实机验收。辅助程序直接运行返回 `trusted:false`，仅反映执行会话的权限。
+- 分支推送受代理连接与 GitHub 域名解析失败阻塞。后续合并 relay 时，仍需处理 `src/App.tsx`、`src/types.ts` 等冲突，并把 relay 设置迁到新的分区配置面板；本轮保留仅 Codex / Claude 使用 `RED_ALERT` 的规则。
+- 文档检查 `git diff --check` 通过；Git worktree 的 `index.lock` 写入被拒绝，文档尚未暂存或提交，分支 HEAD 仍为 `01635d9`。
 
 ### 未发布 · 2026-10-21 · 验收脚本重写与 Claude Desktop 状态识别 · 署名：Claude（Anthropic，Claude App 云端会话）
 
