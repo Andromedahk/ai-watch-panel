@@ -129,6 +129,7 @@ h1 { margin: 0; font-size: 14px; font-weight: 750; letter-spacing: 1.4px; white-
 .party-chips [data-kind="idle"] i { background: var(--idle); }
 
 /* Attention banner: the first assistant waiting on you. */
+.attention-list { display: flex; flex-direction: column; gap: 6px; }
 .attention { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--warn-line); border-radius: 14px; background: var(--warn-bg); overflow: hidden; }
 .attention .avatar-launch { width: 40px; height: 40px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 55%, transparent); }
 .attention-text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 0; border: 0; background: none; text-align: start; }
@@ -137,13 +138,15 @@ h1 { margin: 0; font-size: 14px; font-weight: 750; letter-spacing: 1.4px; white-
 .attention-task { max-width: 100%; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attention-open { flex: none; height: 30px; padding: 0 12px; border: 0; border-radius: 9px; background: var(--warn); color: #FFFFFF; font-size: 12px; font-weight: 700; }
 :root[data-theme="light"] .attention-open { background: var(--text); color: var(--bg); }
-.anime-mode.skin-watch .attention { min-height: 104px; padding-inline-end: 120px; }
-.anime-mode.skin-watch .attention .avatar-launch { position: absolute; inset-inline-end: -14px; top: -6px; width: 150px; height: 150px; box-shadow: none; border-radius: 0; }
-.anime-mode.skin-watch .attention .avatar-face { background: none; border: 0; box-shadow: none; }
-.anime-mode.skin-watch .attention-open { position: absolute; inset-inline-start: 10px; bottom: 10px; }
-.anime-mode.skin-watch .attention-text { align-self: flex-start; margin-bottom: 34px; }
-.skin-party .attention { border-width: 2px; box-shadow: 0 0 22px -6px color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 14%, var(--surface)); }
+.anime-mode.skin-watch .attention-list[data-count="1"] .attention { min-height: 104px; padding-inline-end: 120px; }
+.anime-mode.skin-watch .attention-list[data-count="1"] .attention .avatar-launch { position: absolute; inset-inline-end: -14px; top: -6px; width: 150px; height: 150px; box-shadow: none; border-radius: 0; }
+.anime-mode.skin-watch .attention-list[data-count="1"] .attention .avatar-face { background: none; border: 0; box-shadow: none; }
+.anime-mode.skin-watch .attention-list[data-count="1"] .attention-open { position: absolute; inset-inline-start: 10px; bottom: 10px; }
+.anime-mode.skin-watch .attention-list[data-count="1"] .attention-text { align-self: flex-start; margin-bottom: 34px; }
+.skin-party .attention { border-width: 2px; box-shadow: 0 0 12px -4px color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 14%, var(--surface)); }
 .skin-party .attention-kicker { color: var(--warn); }
+.attention-list:not([data-count="1"]) .attention { padding: 7px 10px; }
+.attention-list:not([data-count="1"]) .attention .avatar-launch { width: 34px; height: 34px; }
 
 /* ── Avatars ────────────────────────────────────────────── */
 .avatar-launch { position: relative; flex: none; display: block; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 10px; background: none; }
@@ -179,6 +182,8 @@ h1 { margin: 0; font-size: 14px; font-weight: 750; letter-spacing: 1.4px; white-
 .avatar[data-provider="antigravity"]:has(.avatar-halo)::before { box-shadow: 0 0 10px 1px color-mix(in srgb, var(--halo-color) 45%, transparent); }
 .party-stage .avatar-halo, .attention .avatar-halo { display: none; }
 .party-stage .avatar::before, .attention .avatar::before { display: none; }
+/* The halo already carries the state; the corner dot would sit on top of it, so it only shows for un-lit avatars. */
+.avatar-launch:has(> .avatar:is([data-glow="running"], [data-glow="attention"])) > .avatar-dot { display: none; }
 .card-party.is-running { animation: party-glow 5s ease-in-out infinite; }
 @keyframes party-glow { 0%, 100% { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, var(--line)); } 50% { box-shadow: inset 0 0 0 1.5px var(--ink), 0 0 16px -4px var(--ink); } }
 .card-party[data-attention="true"] { animation: none; }
@@ -283,7 +288,7 @@ h1 { margin: 0; font-size: 14px; font-weight: 750; letter-spacing: 1.4px; white-
 .anime-mode .card-watch .quota-area, .anime-mode .card-watch .task-line, .anime-mode .card-watch .task-details { grid-column: 2; }
 
 /* ── B · 表盘 ──────────────────────────────────────────── */
-.skin-dial .provider-viewport { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.skin-dial .provider-viewport { padding: 6px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
 .card-dial { flex: none; padding: 12px 14px; border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 0 var(--line), 0 6px 16px -12px #0006; }
 :root:not([data-theme="light"]) .card-dial { box-shadow: inset 0 0 0 1px var(--line); background: radial-gradient(120% 120% at 0 50%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%), var(--surface); }
 .card-dial[data-attention="true"] { box-shadow: 0 0 0 1.5px var(--warn-line), 0 8px 20px -12px color-mix(in srgb, var(--warn) 60%, transparent); }
@@ -313,9 +318,9 @@ h1 { margin: 0; font-size: 14px; font-weight: 750; letter-spacing: 1.4px; white-
 .card-foot .source-tag { max-width: none; }
 .card-foot > * + *::before { content: '· '; color: var(--faint); }
 .dial-hero { display: flex; align-items: center; gap: 14px; }
-.dial-frame { position: relative; flex: none; width: 84px; height: 84px; }
+.dial-frame { position: relative; flex: none; width: 84px; height: 84px; margin-bottom: 14px; }
 .dial-frame .avatar-launch { position: absolute; inset: 8px; width: auto; height: auto; border-radius: 50%; }
-.dial-figure { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); padding: 0 7px; border-radius: 999px; background: var(--bg); box-shadow: 0 0 0 1px var(--line-strong); font-size: 11px; font-weight: 800; line-height: 18px; color: var(--ink); white-space: nowrap; }
+.dial-figure { position: absolute; left: 50%; bottom: -19px; transform: translateX(-50%); padding: 0 7px; border-radius: 999px; background: var(--bg); box-shadow: 0 0 0 1px var(--line-strong); font-size: 11px; font-weight: 800; line-height: 18px; color: var(--ink); white-space: nowrap; }
 .dial-frame.is-low .dial-figure { color: var(--low); }
 .dial-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .dial-body .identity { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
@@ -333,10 +338,10 @@ h1 { margin: 0; font-size: 14px; font-weight: 750; letter-spacing: 1.4px; white-
 .anime-mode .card-dial .card-foot { display: none; }
 
 /* ── C · 角色栏 ────────────────────────────────────────── */
-.skin-party .provider-viewport { padding: 0 10px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); align-content: start; grid-auto-rows: max-content; gap: 10px; }
+.skin-party .provider-viewport { padding: 6px 10px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); align-content: start; grid-auto-rows: max-content; gap: 10px; }
 .card-party > * { flex: none; }
 .card-party { gap: 0; overflow: hidden; border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, var(--line)); }
-.card-party[data-attention="true"] { box-shadow: 0 0 0 2px var(--warn), 0 0 22px -4px color-mix(in srgb, var(--warn) 60%, transparent); }
+.card-party[data-attention="true"] { box-shadow: 0 0 0 2px var(--warn), 0 0 12px -2px color-mix(in srgb, var(--warn) 60%, transparent); }
 .party-stage { position: relative; height: 150px; overflow: hidden; background: radial-gradient(90% 80% at 50% 30%, color-mix(in srgb, var(--accent) 40%, transparent), color-mix(in srgb, var(--accent) 8%, transparent) 60%, transparent), var(--surface); }
 .anime-mode .party-stage { height: 168px; }
 .party-stage::after { content: ''; position: absolute; inset: auto 0 0 0; height: 72px; background: linear-gradient(transparent, var(--surface)); pointer-events: none; }
@@ -374,7 +379,7 @@ h1 { margin: 0; font-size: 14px; font-weight: 750; letter-spacing: 1.4px; white-
 .layout-double.skin-dial .provider-viewport { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: max-content; align-content: start; }
 .layout-double .overview-watch, .layout-fullscreen .overview-watch { flex-direction: row; align-items: center; flex-wrap: wrap; }
 .layout-double .stat-tiles, .layout-fullscreen .stat-tiles { flex: 1 1 320px; }
-.layout-double .overview-watch .attention, .layout-fullscreen .overview-watch .attention { flex: 1 1 320px; }
+.layout-double .overview-watch .attention-list, .layout-fullscreen .overview-watch .attention-list { flex: 1 1 320px; }
 .layout-fullscreen .control-region { padding: 16px 20px 10px 24px; }
 .layout-fullscreen .overview { padding-inline: 20px; }
 .layout-fullscreen .provider-viewport { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 14px; padding: 0 20px 20px; margin: 0; border: 0; background: none; }

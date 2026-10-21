@@ -22,8 +22,8 @@ export function applyTestPreset(config: TestConfig, preset: TestPreset): TestCon
 export function activityOptions(id: ProviderId): [TestActivity, string][] {
   return [
     ['running', '运行中'], ['idle', '待机'],
-    ...(id === 'codex' ? [['input', '等待回答'], ['approval', '等待授权'], ['mixed', '等待 + 其他任务运行']] as [TestActivity, string][]
-      : [['waiting', '等待确认']] as [TestActivity, string][]),
+    ...(id === 'codex' || id === 'claude' ? [['input', '等待回答'], ['approval', '等待授权'], ['mixed', '等待 + 其他任务运行']] as [TestActivity, string][] : []),
+    ...(id === 'codex' ? [] : [['waiting', '等待确认']] as [TestActivity, string][]),
     ['unknown', '状态未知'], ['offline', '离线'],
   ];
 }
@@ -69,7 +69,7 @@ export function makeTestStatus(config: TestConfig, at: string): LocalStatus {
       observedAt: data === 'stale' ? new Date(Date.parse(at) - 7200000).toISOString() : at,
       detail: '界面测试数据，仅用于预览显示效果。', activityDetail: '手动选择的测试状态，不代表真实任务。',
     };
-    if (id === 'codex' && waiting) Object.assign(status, {
+    if ((id === 'codex' || id === 'claude') && waiting && activity !== 'waiting') Object.assign(status, {
       waitingTasks: activity === 'mixed' ? 2 : 1,
       waitingReason: activity === 'input' ? 'input' : activity === 'approval' ? 'approval' : 'both', attentionAvailable: true,
     });

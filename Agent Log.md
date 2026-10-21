@@ -20,6 +20,31 @@
 
 ---
 
+## 2026-10-22 · Claude（Anthropic，Claude App 云端会话，模型配置 claude-opus-5-5）· 提醒区展开与光效遮挡
+
+- 分支：`claude/ui-redesign`，起点 `c32a919`。
+- 目的：按人类反馈修正界面——角上的光效被遮住、授权提示区与下方助手区域有几像素互相遮挡；多个助手同时需要处理时全部展开。
+- 操作：
+  - `src/view/skins.tsx`：总览提醒改为 `.attention-list`，每个等待中的助手一行（`role="group"`，以助手名称标注），去掉“+N”。
+  - `src/view/skins.css`：
+    - 提醒列表样式；二次元值守台大立绘只用于单条提醒，多条时改为紧凑行。
+    - 头像有光效时隐藏角标圆点。
+    - 表盘百分比标签下移，圆环下方留出空间。
+    - 表盘和角色栏卡片列表顶部加 6 像素内边距。
+    - 角色栏卡片与提醒的外发光收窄。
+  - `src/test-mode.ts`：Claude 增加“等待回答 / 等待授权 / 等待 + 其他任务运行”测试状态，保留“等待确认”。
+  - `scripts/verify-skins.mjs`：Claude 改用“等待授权”；新增四项检查：逐行展开、无重叠、首卡不被截断、无角标遮光。
+  - `scripts/verify-test-mode.mjs`：检查两个等待中的助手各有一行。
+- 验证：
+  - `tsc --noEmit`、`vite build`、单元测试通过。
+  - 在云端 Linux 的 xvfb 下，`test-mode`、`sort`、`theme`、`modules`、`credits`、`plans`、`anime`、`layouts`、`i18n`、`desktop`、`tray`、`codex-quota`、`kimi-work`、`resources`、`skins` 共 15 个验收脚本通过。
+  - 用测试数据截图人工检查三种风格的浅色 / 深色及普通 / 二次元。
+- 未完成 / 需要人类决定：
+  - 未在 macOS 上重跑验收或重新打包安装。
+  - 上一条记录里，Claude Desktop 生成 / 提问 / 工具授权三项实机检查仍待 Claude 额度重置后补齐。
+
+---
+
 ## 2026-10-22 · Codex（GPT-6 / Codex 桌面本地执行环境）· 安装新版并保留配置
 
 - 分支：`claude/ui-redesign`，起点 `c39b35f`。

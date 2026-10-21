@@ -48,7 +48,10 @@ try {
   await view();
   await expect(page.locator('.stat[data-kind="running"] strong')).toHaveText('1');
   await expect(page.locator('.stat[data-kind="waiting"]')).toHaveAttribute('data-active', 'true');
-  await expect(page.locator('.attention')).toContainText('Codex');
+  // Every waiting assistant has its own expanded row in the overview.
+  await expect(page.locator('.attention-list .attention')).toHaveCount(2);
+  await expect(page.locator('.attention-list')).toContainText('Codex');
+  await expect(page.locator('.attention-list')).toContainText('DeepSeek Harness');
   await expect(card('Codex').locator('.avatar')).toHaveAttribute('data-glow', 'attention');
   await expect(card('Claude').locator('.task-status')).toHaveText('离线');
   await expect(card('Antigravity').locator('.task-status')).toHaveText('未知');

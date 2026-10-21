@@ -68,6 +68,20 @@ async function checkLayout(context) {
     await expect(page.locator('.party-stage')).toHaveCount(8);
   }
   await expect(page.locator('.overview .test-badge')).toHaveText('测试模式');
+  // Each waiting assistant is its own banner row; the banners, the card list and the card halos never overlap or clip.
+  await page.locator('.provider-viewport').evaluate(el => el.scrollTo({ top: 0, behavior: 'instant' }));
+  await expect(page.locator('.attention-list .attention')).toHaveCount(3);
+  const stack = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.attention-list .attention')].map(el => el.getBoundingClientRect());
+    const view = document.querySelector('.provider-viewport').getBoundingClientRect();
+    const first = document.querySelector('.provider-card').getBoundingClientRect();
+    const dots = [...document.querySelectorAll('.provider-card .avatar-launch')].filter(button =>
+      ['running', 'attention'].includes(button.querySelector('.avatar')?.dataset.glow)
+      && [...button.querySelectorAll('.avatar-dot')].some(dot => getComputedStyle(dot).display !== 'none')).length;
+    return { separate: rows.every((row, i) => i === 0 || row.top >= rows[i - 1].bottom - .5), aboveList: rows.at(-1).bottom <= view.top + .5,
+      firstInside: first.top >= view.top + 1 - .01, dots };
+  });
+  assert.deepEqual(stack, { separate: true, aboveList: true, firstInside: true, dots: 0 }, JSON.stringify(context));
   for (const id of ['claude', 'codex']) {
     await expect(card(id)).toHaveAttribute('data-state', 'waiting');
     await expect(card(id)).toHaveAttribute('data-attention', 'true');
@@ -117,7 +131,7 @@ try {
     await page.locator('.settings-nav').getByRole('button', { name: '模块', exact: true }).click();
     await page.getByRole('checkbox', { name: '测试模式', exact: true }).check();
     await page.getByRole('button', { name: '全部运行', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Claude Code 测试任务状态', exact: true }).selectOption('waiting');
+    await page.getByRole('combobox', { name: 'Claude Code 测试任务状态', exact: true }).selectOption('approval');
     await page.getByRole('combobox', { name: 'Codex 测试任务状态', exact: true }).selectOption('input');
     await page.getByRole('combobox', { name: 'Antigravity 测试任务状态', exact: true }).selectOption('waiting');
     await close();

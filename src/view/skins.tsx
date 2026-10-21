@@ -102,16 +102,19 @@ export function Overview({ skin, summary, live, stamp, badge, onOpen, image, ani
   image: (view: ProviderView) => string | undefined; anime: boolean; onReveal: (view: ProviderView) => void;
 }) {
   const { t, number, percent } = useI18n();
-  const first = summary.waiting[0];
   const tight = summary.tightest;
-  const attention = first && <div className="attention" aria-live="polite" aria-label={t('等你处理')}>
-    <LaunchAvatar view={first} image={image(first)} anime={anime} crop={skin === 'watch' && anime ? 'bust' : 'face'} onOpen={() => onOpen(first)} mirror />
-    <button type="button" className="attention-text" onClick={() => onReveal(first)}>
-      <span className="attention-kicker">{first.stateLabel}{summary.waiting.length > 1 ? ` · +${number(summary.waiting.length - 1)}` : ''}</span>
-      <strong>{t('{p0} 在等你', { p0: first.name })}</strong>
-      <span className="attention-task">{first.task}</span>
-    </button>
-    <button type="button" className="attention-open" onClick={() => onOpen(first)}>{t('打开')}</button>
+  // Every assistant waiting on you gets its own row; nothing is folded into a "+N".
+  const single = summary.waiting.length === 1;
+  const attention = summary.waiting.length > 0 && <div className="attention-list" data-count={summary.waiting.length} aria-live="polite" aria-label={t('等你处理')}>
+    {summary.waiting.map(view => <div className="attention" role="group" aria-label={view.name} key={view.id} data-provider={view.id} style={{ '--accent': view.color } as CSSProperties}>
+      <LaunchAvatar view={view} image={image(view)} anime={anime} crop={skin === 'watch' && anime && single ? 'bust' : 'face'} onOpen={() => onOpen(view)} mirror />
+      <button type="button" className="attention-text" onClick={() => onReveal(view)}>
+        <span className="attention-kicker">{view.stateLabel}</span>
+        <strong>{t('{p0} 在等你', { p0: view.name })}</strong>
+        <span className="attention-task">{view.task}</span>
+      </button>
+      <button type="button" className="attention-open" onClick={() => onOpen(view)}>{t('打开')}</button>
+    </div>)}
   </div>;
   if (skin === 'dial') return <section className="overview overview-dial" aria-label={t('总览')}>
     <p className="overview-headline">{summary.waiting.length ? t('{p0} 个在跑，{p1} 个等你', { p0: summary.running, p1: summary.waiting.length }) : t('{p0} 个在跑', { p0: summary.running })}</p>
