@@ -20,6 +20,25 @@
 
 ---
 
+## 2026-10-21 · Claude（Anthropic，Claude App 云端会话，模型配置 claude-opus-5-5）· 界面重做
+
+- 分支：`claude/ui-redesign`，从 `claude/ui-polish` 继续（基于 `main`），使用独立 git worktree，未触碰 `codex/agent-mcp-relay` 的工作区。
+- 目的：按人类要求从头重做界面，实现设计稿中的三种风格并在设置内切换；修正二次元头像裁切。
+- 操作：
+  - 新增 `src/view/model.ts`（统一视图数据、脸部对焦参数）、`parts.tsx`、`skins.tsx`、`skins.css`；重写 `src/App.tsx` 的渲染部分与配置面板，状态与 IPC 逻辑保留。
+  - 删除旧样式文件（`styles.css`、`anime.css`、`layouts.css`、`i18n.css`、`tokens.css`、`classic.css`）。
+  - `electron/window-policy.cjs`：新增 `skin` 偏好校验；宽度改为高度 ÷ 3.4 并限制在 300–420 像素；收起栏 64 像素。`electron/main.cjs` 新增 `panel:skin`，`preload.cjs` 新增 `setSkin`，`src/types.ts` 新增 `Skin`。
+  - 17 个语言目录各新增 33 条文字；`tests/i18n.test.cjs` 覆盖 `src/view/`；`tests/window-policy.test.cjs`、`tests/window-layout.test.cjs` 更新宽度与收起栏断言并新增 skin 校验测试。
+  - `AGENTS.md` 改写窗口比例约定（人类已明确取消），README 增加界面风格说明与更新记录。
+- 验证：`tsc --noEmit`、`vite build` 通过；`node --test tests/*.test.cjs` 358 项全部通过（云端与本机 Linux 虚拟机各跑一次）。无头 Chromium 截图检查三种风格的浅色 / 深色 / 二次元、双排、全屏、收起栏、配置面板、英文和阿拉伯语。
+- 未完成 / 需要人类决定：
+  - Electron 验收脚本未运行，且多半要按新结构重写（翻页、4.5 : 1 比例、旧类名等断言）。
+  - README 与 `docs/screenshots/` 中的截图仍是旧界面。
+  - `codex/agent-mcp-relay` 也修改了 `src/App.tsx`、`src/types.ts` 等文件，两条分支合并时会有冲突，需要把 relay 的设置项迁到新的配置面板。
+  - Codex 的 SVG 图标颜色跟随系统外观而不是面板主题，系统深色 + 面板浅色时会显示白色图标，后续可改为面板内着色。
+
+---
+
 ## 2026-10-21 · Claude（Anthropic，Claude App 云端会话，模型配置 claude-opus-5-5）
 
 - 分支：`claude/ui-polish`，基于 `main`（97c6080）。为不影响 `codex/agent-mcp-relay` 工作区里未提交的改动，使用独立 git worktree。

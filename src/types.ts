@@ -2,6 +2,7 @@ import type { Language } from './i18n';
 export type ProviderId = 'claude' | 'codex' | 'antigravity' | 'deepseek' | 'zcode' | 'kimi' | 'qwen' | 'workbuddy';
 export type Theme = 'system' | 'light' | 'dark';
 export type Layout = 'single' | 'double' | 'fullscreen';
+export type Skin = 'watch' | 'dial' | 'party';
 export type TaskDetail = { title: string | null; state: 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled' | 'unknown' | 'idle'; updatedAt: string | null; stale: boolean; source: 'cache' | 'local-api'; operation: string | null; steps: number | null; toolCalls: number | null; progress: number | null };
 export type KimiSource = 'code' | 'work';
 export type ClaudeSource = 'desktop' | 'code';
@@ -17,7 +18,7 @@ export type PanelState = Preferences & {
   kimiSource: KimiSource;
   claudeSource: ClaudeSource;
   claudeNetworkAllowed: boolean;
-  animeMode: boolean; layout: Layout; windowLayout: 'single' | 'double';
+  animeMode: boolean; skin: Skin; layout: Layout; windowLayout: 'single' | 'double';
   language: Language; resolvedLanguage?: Exclude<Language, 'system'>;
   theme: Theme; resolvedTheme: 'light' | 'dark';
   bounds?: { x: number; y: number; width: number; height: number };
@@ -71,6 +72,7 @@ declare global {
       requestClaudeActivityAccess(): Promise<LocalStatus>;
       clearCache(): Promise<{ freedBytes: number }>;
       setAnimeMode(enabled: boolean): Promise<PanelState>;
+      setSkin(skin: Skin): Promise<PanelState>;
       openProvider(provider: ProviderId): Promise<{ status: 'opened' | 'missing' | 'unsupported' | 'error' | 'test'; message: string }>;
       chooseProviderApp(provider: ProviderId): Promise<{ status: 'selected' | 'cancelled' | 'error'; message: string }>;
       setLanguage(language: Language): Promise<PanelState>;

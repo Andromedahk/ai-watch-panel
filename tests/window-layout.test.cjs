@@ -21,7 +21,7 @@ test('double layout exactly doubles rounded single width, keeps height and eithe
     const single = panelBounds(area, side), double = panelBounds(area, side, false, 'double');
     assert.equal(double.width, single.width * 2); assert.equal(double.height, height);
     assert.equal(side === 'left' ? double.x : double.x + double.width, side === 'left' ? single.x : single.x + single.width);
-    assert.equal(panelBounds(area, side, true, 'double').width, 46);
+    assert.equal(panelBounds(area, side, true, 'double').width, 64);
   }
   assert.equal(panelBounds({ x: 0, y: 0, width: 200, height: 900 }, 'right', false, 'double').width, 200);
 });

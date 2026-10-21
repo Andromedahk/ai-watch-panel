@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('panel', {
   requestClaudeActivityAccess: () => ipcRenderer.invoke('panel:claude-activity-access'),
   clearCache: () => ipcRenderer.invoke('panel:clear-cache'),
   setAnimeMode: (enabled) => ipcRenderer.invoke('panel:anime-mode', enabled),
+  setSkin: (skin) => ipcRenderer.invoke('panel:skin', skin),
   openProvider: (provider) => ipcRenderer.invoke('panel:open-provider', provider),
   chooseProviderApp: (provider) => ipcRenderer.invoke('panel:choose-provider-app', provider),
   setLanguage: (language) => ipcRenderer.invoke('panel:language', language),

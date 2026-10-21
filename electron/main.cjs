@@ -6,7 +6,7 @@ const { WidgetPublisher, loadWidgetBridge } = require('./widget-publisher.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, PROVIDER_ORDER } = require('./window-policy.cjs');
 const { requestKimiWorkSubscription } = require('./kimi-work-api.cjs');
 const { requestZcodeJson } = require('./zcode-account-api.cjs');
 const { WindowLayout } = require('./window-layout.cjs');
@@ -325,7 +325,7 @@ else {
     });
     handle('panel:configure', (value) => {
       const next = validPreferences({ ...value, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
-        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
+        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, skin: preferences.skin, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -336,6 +336,13 @@ else {
       const previous = preferences.animeMode;
       preferences.animeMode = value;
       try { savePreferences(); } catch (error) { preferences.animeMode = previous; throw error; }
+      emitState(); return currentState();
+    });
+    handle('panel:skin', (value) => {
+      if (!isSkin(value)) throw new Error('Invalid skin');
+      const previous = preferences.skin;
+      preferences.skin = value;
+      try { savePreferences(); } catch (error) { preferences.skin = previous; throw error; }
       emitState(); return currentState();
     });
     handle('panel:open-provider', (id) => providerLauncher.launch(id,
