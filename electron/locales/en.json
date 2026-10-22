@@ -537,5 +537,5 @@
   "已退出": "Quit",
   "近 24 小时": "last 24 hours",
   "下半屏设置保存失败，请重试": "Couldn’t save lower panel settings. Try again.",
-  "卡片下方有空位时才显示，空间不足时按优先级隐藏。记录只保存在本机，不含任务内容。": "Shown only when there’s room under the cards; hidden in priority order when space runs out. The history stays on this device and never includes task content."
+  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Scroll up and down to view all enabled lower panels. The history stays on this device and never includes task content."
 }

@@ -537,5 +537,5 @@
   "已退出": "Beendet",
   "近 24 小时": "letzte 24 Stunden",
   "下半屏设置保存失败，请重试": "Untere Bereiche konnten nicht gespeichert werden. Bitte erneut versuchen",
-  "卡片下方有空位时才显示，空间不足时按优先级隐藏。记录只保存在本机，不含任务内容。": "Nur sichtbar, wenn unter den Karten Platz ist; bei Platzmangel nach Priorität ausgeblendet. Der Verlauf bleibt auf diesem Gerät und enthält keine Aufgabeninhalte."
+  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Scrolle nach oben und unten, um alle aktivierten unteren Bereiche anzuzeigen. Der Verlauf bleibt auf diesem Gerät und enthält keine Aufgabeninhalte."
 }

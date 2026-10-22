@@ -537,5 +537,5 @@
   "已退出": "Cerrado",
   "近 24 小时": "últimas 24 horas",
   "下半屏设置保存失败，请重试": "No se pudo guardar la configuración de los paneles inferiores. Inténtalo de nuevo",
-  "卡片下方有空位时才显示，空间不足时按优先级隐藏。记录只保存在本机，不含任务内容。": "Solo se muestran si hay espacio bajo las tarjetas; se ocultan por prioridad cuando falta. El historial queda en este dispositivo y no incluye el contenido de las tareas."
+  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Desplázate hacia arriba y hacia abajo para ver todos los paneles inferiores activados. El historial queda en este dispositivo y no incluye el contenido de las tareas."
 }

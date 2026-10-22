@@ -1,5 +1,4 @@
-// Lower-half panels: shown only in the spare height under the cards, never
-// instead of them. Panels that do not fit are left out in priority order.
+// Lower-half panels keep their full contents in a separate vertical scroller.
 import { useEffect, useLayoutEffect, useState, type CSSProperties, type RefObject } from 'react';
 import { useI18n } from '../i18n';
 import { DAY, type Journal, type JournalEvent } from '../journal';
@@ -7,15 +6,12 @@ import type { InsightId, Insights } from '../types';
 import { LOW, type ProviderView } from './model';
 import { Portrait } from './parts';
 
-const GAP = 10, MARGIN = 12;
-/** Smallest useful height of each panel, and the order panels are dropped in when space runs out (last goes first). */
-const MIN: Record<InsightId, number> = { timeline: 118, resets: 92, mascot: 160, trend: 100 };
-const PRIORITY: InsightId[] = ['timeline', 'resets', 'mascot', 'trend'];
+const MARGIN = 12;
 /** Top-to-bottom order; the mascot stands at the bottom edge. */
 const ORDER: InsightId[] = ['resets', 'trend', 'timeline', 'mascot'];
 const WIDE = 600;
 
-/** Spare height under the cards, measured from the last card rather than the viewport (which fills its flex slot). */
+/** Use spare height when available; otherwise reserve a scrollable area while keeping the card list accessible. */
 export function useInsightSpace(stage: RefObject<HTMLDivElement | null>, viewport: RefObject<HTMLDivElement | null>, key: string, paused: boolean) {
   const [space, setSpace] = useState({ height: 0, width: 0 });
   useLayoutEffect(() => {
@@ -28,7 +24,8 @@ export function useInsightSpace(stage: RefObject<HTMLDivElement | null>, viewpor
       for (const child of list.children) if (child instanceof HTMLElement && child.offsetParent !== null) bottom = Math.max(bottom, child.getBoundingClientRect().bottom);
       const content = bottom - box.top + list.scrollTop + parseFloat(style.paddingBottom) + parseFloat(style.borderBottomWidth);
       const used = content + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
-      const height = Math.floor(root.clientHeight - used - MARGIN);
+      const spare = Math.floor(root.clientHeight - used - MARGIN);
+      const height = Math.max(Math.min(180, Math.floor(root.clientHeight * .4)), spare);
       setSpace(current => Math.abs(current.height - height) < 1 && current.width === root.clientWidth ? current : { height, width: root.clientWidth });
     };
     measure();
@@ -38,20 +35,6 @@ export function useInsightSpace(stage: RefObject<HTMLDivElement | null>, viewpor
     return () => observer.disconnect();
   }, [stage, viewport, key, paused]);
   return space;
-}
-
-/** Which enabled panels fit, in display order. */
-export function fitInsights(enabled: InsightId[], height: number, width: number) {
-  const wide = width >= WIDE;
-  const chosen: InsightId[] = [];
-  let used = 0;
-  for (const id of PRIORITY) {
-    if (!enabled.includes(id)) continue;
-    if (wide) { if (MIN[id] <= height && chosen.length < Math.max(1, Math.floor(width / 240))) chosen.push(id); continue; }
-    const next = used + (chosen.length ? GAP : 0) + MIN[id];
-    if (next <= height) { chosen.push(id); used = next; }
-  }
-  return { ids: ORDER.filter(id => chosen.includes(id)), wide };
 }
 
 function useNow(interval: number) {
@@ -163,10 +146,10 @@ function Mascot({ views, anime, image, onOpen }: PanelProps) {
 type PanelProps = { views: ProviderView[]; journal: Journal; anime: boolean; image: (view: ProviderView) => string | undefined; onOpen: (view: ProviderView) => void };
 
 export function InsightsArea({ insights, height, width, ...props }: PanelProps & { insights: Insights; height: number; width: number }) {
-  const enabled = (Object.keys(insights) as InsightId[]).filter(id => insights[id] && (id !== 'mascot' || props.anime));
-  const { ids, wide } = fitInsights(enabled, height, width);
+  const { t } = useI18n();
+  const ids = ORDER.filter(id => insights[id] && (id !== 'mascot' || props.anime));
   if (!ids.length) return null;
-  return <div className={`insights ${wide ? 'is-wide' : ''}`} style={{ height }} data-count={ids.length}>
+  return <div className={`insights ${width >= WIDE ? 'is-wide' : ''}`} style={{ height }} data-count={ids.length} role="region" aria-label={t('下半屏')} tabIndex={0}>
     {ids.map(id => id === 'timeline' ? <Timeline key={id} {...props} /> : id === 'resets' ? <Resets key={id} {...props} />
       : id === 'trend' ? <Trend key={id} {...props} /> : <Mascot key={id} {...props} />)}
   </div>;

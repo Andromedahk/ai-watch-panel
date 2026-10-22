@@ -580,7 +580,7 @@ export default function App() {
             {([['timeline', t('动态时间线'), t('各助手开始、等待和完成的记录')], ['resets', t('额度重置日程'), t('按时间排列下一次额度恢复')],
               ['trend', t('额度趋势'), t('近 24 小时最紧额度的变化')], ['mascot', t('看板娘'), t('仅二次元模式显示，随状态换表情')]] as [InsightId, string, string][]).map(([id, label, hint]) =>
               <label key={id} className="switch-row"><span>{label}<small>{hint}</small></span><input aria-label={label} type="checkbox" checked={insights[id]} disabled={insightsSaving} onChange={event => void changeInsight(id, event.target.checked)} /></label>)}
-            <p className="appearance-hint">{t('卡片下方有空位时才显示，空间不足时按优先级隐藏。记录只保存在本机，不含任务内容。')}</p>
+            <p className="appearance-hint">{t('可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。')}</p>
           </fieldset>
           <fieldset className="language-settings"><legend>{t('语言')}</legend>
             <select aria-label={t('语言')} value={state.language} disabled={languageSaving} onChange={event => void changeLanguage(event.target.value as Language)}>

@@ -537,5 +537,5 @@
   "已退出": "Đã thoát",
   "近 24 小时": "24 giờ qua",
   "下半屏设置保存失败，请重试": "Không lưu được cài đặt bảng phía dưới. Hãy thử lại",
-  "卡片下方有空位时才显示，空间不足时按优先级隐藏。记录只保存在本机，不含任务内容。": "Chỉ hiển thị khi còn chỗ dưới các thẻ; thiếu chỗ sẽ ẩn theo thứ tự ưu tiên. Lịch sử chỉ lưu trên thiết bị này và không chứa nội dung tác vụ."
+  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Cuộn lên và xuống để xem tất cả các bảng phía dưới đã bật. Lịch sử chỉ lưu trên thiết bị này và không chứa nội dung tác vụ."
 }
