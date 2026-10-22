@@ -473,6 +473,7 @@ AI_WATCH_LIVE_QA=1 npm run test:live-kimi-zcode  # 当前登录账号的真实�
 npm run test:anime  # 图标启动、双套图片、二次元布局、持久化及模拟启动隔离
 npm run test:skins  # 三种皮肤 × 明暗 × 普通 / 二次元 × 两种宽度，截图写入 .local/qa/skins
 npm run test:motion  # 三皮肤冷启动、可见性重建、动效暂停恢复及主题首帧；输出 .local/qa/motion
+npm run test:corners  # 圆角审计：方角或更小圆角不得越过圆角边，光环须与头像同心
 npm run test:insights  # 下半屏：仅在空位显示、按优先级隐藏、设置保存、时间线 / 重置 / 趋势 / 看板娘；输出 .local/qa/insights
 npm run test:quotas  # Codex 官方窗口、历史值、登录清理与合并模型分页
 npm run test:i18n
@@ -534,6 +535,13 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 任务名称与简短元数据由主进程限量读取、清理控制字符和明显的路径 / 凭证片段后传入沙盒界面；不显示完整提示词、对话正文、命令参数或工具输出，不持久化任务详情。退出全屏停止详情采集并清除界面快照。Windows / Linux 的窗口能力与布局已准备，仍需实机验证。
 
 ## 更新记录
+
+### 未发布 · 2026-10-23 · 圆角与特效配对修正 · 署名：Claude（Anthropic，Claude App 云端会话）
+
+- 头像光环改为贴着头像边缘、用阴影向外扩展，外圈圆角随之同步放大，不再出现外圈转角比头像更方的情况；Antigravity 彩色光环的圆角改为头像圆角加 2px（各处头像设置 `--r`）。
+- 表盘卡片运行中顶边的扫光改为整卡图层上的 2px 背景，由卡片圆角裁切，不再在左上 / 右上转角露出直角。
+- 看板娘面板改为按自身圆角裁切，立绘不再以直角盖住面板圆角；跳动幅度相应减小。
+- 新增 `test:corners`（`scripts/verify-corners.mjs`）：在三种风格 × LOGO / 二次元 × 浅 / 深色、悬停、双排、全屏、入场动画中途、配置面板、等待状态、下半屏和收起栏中，逐个检查绘制在圆角元素上的子元素与伪元素是否越过圆角，以及外圈光效是否同心。
 
 ### 未发布 · 2026-10-23 · 下半屏：动态时间线、额度重置日程、额度趋势与看板娘 · 署名：Claude（Anthropic，Claude App 云端会话）
 

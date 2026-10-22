@@ -22,6 +22,7 @@
     "test:skins": "node scripts/verify-skins.mjs",
     "test:motion": "node scripts/verify-motion.mjs",
     "test:insights": "node scripts/verify-insights.mjs",
+    "test:corners": "node scripts/verify-corners.mjs",
     "test:sort": "node scripts/verify-sort.mjs",
     "test:theme": "node scripts/verify-theme.mjs",
     "test:modules": "node scripts/verify-modules.mjs",
