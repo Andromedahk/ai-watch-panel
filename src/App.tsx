@@ -3,6 +3,7 @@ import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, LockKeyhole, MapPin
 import packageInfo from '../package.json';
 import { providers as baseProviders, providerIds } from './data';
 import { useVisibleCards } from './useVisibleCards';
+import { replayEntrance } from './motion';
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
@@ -129,7 +130,10 @@ export default function App() {
     ? { ...provider, name: 'Claude', subtitle: 'ANTHROPIC' } : provider).map(provider => localizeProvider(provider, i18n));
   const viewport = useRef<HTMLDivElement>(null);
   const enabledOrder = state.providerOrder.filter(id => state.enabledProviders.includes(id));
-  const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode, `${state.skin}:${state.layout}:${state.animeMode}`);
+  const layoutKey = `${state.skin}:${state.layout}:${state.animeMode}`;
+  const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode, layoutKey);
+  const main = useRef<HTMLElement>(null);
+  const [entrance, setEntrance] = useState(0);
   const resolvedTheme = state.theme === 'system' ? state.resolvedTheme : state.theme;
   const [draft, setDraft] = useState<Preferences>(previewState);
   const modal = useRef<HTMLDialogElement>(null);
@@ -344,6 +348,8 @@ export default function App() {
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); root.classList.remove('theme-switching'); };
   }, [resolvedTheme]);
   useLayoutEffect(() => { document.documentElement.dataset.skin = state.skin; }, [state.skin]);
+  // Agent cards load in again after a refresh, a skin / layout / mode switch and when the stored panel is reopened.
+  useLayoutEffect(() => { if (!state.stored && !state.collapsed) replayEntrance(main.current); }, [entrance, layoutKey, state.stored, state.collapsed]);
   useEffect(() => {
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused.matches('.provider-card')) focused.scrollIntoView({ block: 'nearest' });
@@ -398,9 +404,11 @@ export default function App() {
       if (testMode) {
         await new Promise(resolve => setTimeout(resolve, 450));
         setTestSampledAt(new Date().toISOString()); setNotice(t("测试画面已刷新"));
+        setEntrance(value => value + 1);
       } else if (window.panel) {
         setLocalStatus(await window.panel.refreshStatus());
         setNotice(t("本地状态已重新读取"));
+        setEntrance(value => value + 1);
       } else setNotice(t("浏览器预览使用演示数据；本地接入请打开桌面版"));
     } catch { setNotice(t("本地状态读取失败，稍后自动重试")); }
     finally {
@@ -462,7 +470,7 @@ export default function App() {
   ];
   const section = (id: string) => modal.current?.querySelector<HTMLElement>(`[data-section="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
-  return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={state.desktop ? () => void grantClaudeAccess() : null}><main lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
+  return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={state.desktop ? () => void grantClaudeAccess() : null}><main ref={main} lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
     {state.collapsed ? <aside className="collapsed-rail" aria-label={t('收起的监看面板')}>
       <button className="rail-expand" title={t('展开面板')} aria-label={t('展开面板')} onClick={() => collapse(false)}>{state.side === 'right' ? <ArrowLeftToLine size={18} /> : <ArrowRightToLine size={18} />}</button>
       <div className="rail-counts" title={t('运行中 {p0} · 等你处理 {p1}', { p0: summary.running, p1: summary.waiting.length })}>

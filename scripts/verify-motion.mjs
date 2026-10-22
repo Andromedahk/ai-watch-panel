@@ -125,6 +125,28 @@ async function primaryEffect(skin, label) {
   await expect(card('claude')).toHaveAttribute('data-animation-paused', 'false');
   await advances(locator, name, `${label}/return`);
 }
+const entranceName = { watch: 'card-in', dial: 'card-in-dial', party: 'card-in-party' };
+async function entranceReplayed(skin, trigger, label) {
+  const replays = () => page.locator('main').evaluate(main => Number(main.dataset.entranceReplays || 0));
+  const before = await replays();
+  await trigger();
+  const row = await page.locator('main').evaluate((main, before) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Entrance was not replayed')), 5000);
+    const check = () => {
+      if (Number(main.dataset.entranceReplays || 0) <= before) { requestAnimationFrame(check); return; }
+      clearTimeout(timer);
+      const card = main.querySelector('.provider-card[data-provider="claude"]');
+      const enter = card.getAnimations().find(item => item.animationName?.startsWith('card-in'));
+      const curtain = card.getAnimations({ subtree: true }).find(item => item.animationName?.startsWith('curtain-'));
+      const gauge = [...card.getAnimations({ subtree: true })].find(item => ['fill-in', 'ring-in'].includes(item.animationName));
+      resolve({ name: enter?.animationName, time: enter?.currentTime, curtain: curtain?.currentTime, gauge: gauge ? gauge.currentTime : null });
+    };
+    check();
+  }), before);
+  assert.equal(row.name, entranceName[skin], `${label}: ${JSON.stringify(row)}`);
+  assert.ok(row.time < 450 && row.curtain < 450 && (row.gauge === null || row.gauge < 600), `${label}: ${JSON.stringify(row)}`);
+  checks.push(`${label}: agent cards replay their ${row.name} entrance`);
+}
 async function selectActivity(id, activity) {
   const names = { claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity' };
   await page.getByRole('combobox', { name: `${names[id]} 测试任务状态`, exact: true }).selectOption(activity);
@@ -206,12 +228,14 @@ try {
   }
   await launch('watch');
   for (const skin of ['watch', 'dial', 'party']) {
-    await page.evaluate(value => window.panel.setSkin(value), skin);
+    const switchSkin = () => page.evaluate(value => window.panel.setSkin(value), skin);
+    // The fixture starts in watch, so only an actual switch is expected to replay.
+    if (skin === 'watch') await switchSkin(); else await entranceReplayed(skin, switchSkin, `${skin}/skin entrance`);
     await expect(page.locator('main')).toHaveAttribute('data-skin', skin);
     await checkRebuild(`${skin}/skin`);
     await primaryEffect(skin, `${skin}/rebuilt`);
     for (const anime of [true, false]) {
-      await page.evaluate(value => window.panel.setAnimeMode(value), anime);
+      await entranceReplayed(skin, () => page.evaluate(value => window.panel.setAnimeMode(value), anime), `${skin}/anime-${anime} entrance`);
       await checkRebuild(`${skin}/anime-${anime}`);
     }
     for (const layout of ['double', 'fullscreen', 'single']) {
@@ -221,7 +245,7 @@ try {
         // this isolated fixture window before requesting its real fullscreen mode.
         await app.evaluate(({ app, BrowserWindow }) => { app.focus({ steal: true }); const win = BrowserWindow.getAllWindows()[0]; win.show(); win.focus(); });
       }
-      await page.evaluate(value => window.panel.setLayout(value), layout);
+      await entranceReplayed(skin, () => page.evaluate(value => window.panel.setLayout(value), layout), `${skin}/${layout} entrance`);
       await expect(page.locator('main')).toHaveAttribute('data-layout', layout);
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen())).toBe(layout === 'fullscreen');
       await checkRebuild(`${skin}/${layout}`);
@@ -242,7 +266,7 @@ try {
     await page.evaluate(() => window.panel.store());
     await expect(page.locator('main')).toHaveClass(/animations-paused/);
     await frozen(page.locator('.attention[data-provider="claude"] .attention-open'), 'open-pulse', `${skin}/stored waiting button`);
-    await app.evaluate(({ app }) => app.emit('activate'));
+    await entranceReplayed(skin, () => app.evaluate(({ app }) => app.emit('activate')), `${skin}/reopen entrance`);
     await expect(page.locator('main')).not.toHaveClass(/animations-paused/);
     await advances(page.locator('.attention[data-provider="claude"] .attention-open'), 'open-pulse', `${skin}/restored waiting button`);
     await page.emulateMedia({ reducedMotion: 'reduce' }); await noMotion(`${skin}/reduced-motion`);
@@ -261,10 +285,13 @@ try {
     await reminderRows([]);
     await moduleSettings(); await page.getByRole('checkbox', { name: '测试模式', exact: true }).uncheck(); await closeSettings();
     await checkRebuild(`${skin}/live-fixture restored`);
+    await scroll('top');
+    await entranceReplayed(skin, () => page.getByRole('button', { name: '刷新面板', exact: true }).click(), `${skin}/refresh entrance`);
+    await checkRebuild(`${skin}/refreshed`);
   }
   assert.deepEqual(errors, []);
   await writeFile(`${output}/results.json`, JSON.stringify({ syntheticFixture: true, checks, visibility, themes, errors }, null, 2));
-  console.log(`Motion acceptance passed: persisted dial/party startup; ${visibility.length} independent visibility observations; animation timeline advance/freeze/resume; skin/anime/layout/test/collapse rebuilds; three skins with 0/1/3/0 reminders, reduced motion, animations off, stored restore and first-frame palette changes. Synthetic data only.`);
+  console.log(`Motion acceptance passed: persisted dial/party startup; ${visibility.length} independent visibility observations; animation timeline advance/freeze/resume; skin/anime/layout/test/collapse rebuilds; entrance replay on refresh, skin/layout/mode switch and reopen; three skins with 0/1/3/0 reminders, reduced motion, animations off, stored restore and first-frame palette changes. Synthetic data only.`);
 } catch (error) {
   const native = await app?.evaluate(({ app, BrowserWindow }) => {
     const win = BrowserWindow.getAllWindows()[0];

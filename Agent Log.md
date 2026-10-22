@@ -20,6 +20,21 @@
 
 ---
 
+## 2026-10-22 · Claude（Anthropic / Claude App 云端会话，经桌面连接写入本 worktree）· Agent 模块入场动效重播
+
+- 分支：`claude/ui-redesign`，起点为 Codex 的最终验收提交。
+- 目的：按人类要求，在首次打开、每次刷新和切换界面风格时，让各 Agent 模块用动效重新加载。
+- 操作：
+  - 新增 `src/motion.ts`：`replayEntrance` 把卡片入场、幕布、额度条 / 圆环和总览数字的 CSS 动画时间轴拨回 0；不调用 play / pause，因此屏幕外与收纳暂停仍由 CSS 控制。
+  - `src/App.tsx`：刷新成功（含测试画面刷新）、皮肤 / 布局 / 二次元模式变化、从收纳或收起恢复时调用重播；`main` 写入 `data-entrance-replays` 计数供验收使用。
+  - `src/view/skins.css`：三种风格各自的入场——列表顶边揭幕、表盘模糊发亮后聚焦、角色栏起始侧擦出（RTL 镜像）。卡片只改透明度与滤镜，幕布为 `::before`，默认透明，只在动画期间可见；暂停规则加入 `::before`。曾尝试卡片位移和卡片 clip-path：前者让屏幕外暂停的卡片测量位置偏移，后者使 IntersectionObserver 判定为不可见而永远不播放，均已放弃。
+  - `scripts/verify-motion.mjs`：新增刷新、切换风格 / 布局 / 模式与重新打开时的重播检查（入场动画名称正确、卡片与幕布时间轴回到开头）。
+  - README 更新记录同步。
+- 验证（Linux 云端 xvfb）：`tsc`、`npm run build` 通过；`npm test` 407 项中 397 通过、10 项按平台跳过、0 失败（需清除运行环境的 `CLAUDE_CODE_ENTRYPOINT`，否则一项记录器测试会读到宿主入口标记）。test-mode、sort、theme、modules、credits、plans、anime、layouts、i18n、desktop、tray、codex-quota、kimi-work、resources、skins 通过。`test:motion` 的“收纳后按钮冻结”在 Linux 下因隐藏窗口不出帧而等待超时，未修改的基线同样如此；跳过该项后其余全部通过。
+- 未完成 / 需要人类决定：在 macOS 上完整复跑 `test:motion` 与其余界面命令，并确认真实观感；窗口较高时下半部分的内容方案待人类选择。
+
+---
+
 ## 2026-10-22 · Codex（GPT-6 / Codex 桌面本地执行环境，含 unit_validation、widget_validation、skin_acceptance 并行子 Agent）· 最终验收、钩子修复与安装
 
 - 分支：`claude/ui-redesign`，起点 `69eec45`；仅修改本分支独立 worktree。

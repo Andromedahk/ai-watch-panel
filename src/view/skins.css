@@ -262,7 +262,7 @@ h1 { margin: 0; font-size: 14px; font-weight: 750; letter-spacing: 1.4px; white-
 .credit-item.is-stale .credit-value { color: var(--faint); }
 .credit-label { display: flex; gap: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .credit-label small { color: var(--faint); }
-.provider-card[data-animation-paused="true"], .provider-card[data-animation-paused="true"]::after, .provider-card[data-animation-paused="true"] *, .provider-card[data-animation-paused="true"] *::before, .provider-card[data-animation-paused="true"] *::after, .animations-paused *, .animations-paused *::before, .animations-paused *::after { animation-play-state: paused !important; }
+.provider-card[data-animation-paused="true"], .provider-card[data-animation-paused="true"]::before, .provider-card[data-animation-paused="true"]::after, .provider-card[data-animation-paused="true"] *, .provider-card[data-animation-paused="true"] *::before, .provider-card[data-animation-paused="true"] *::after, .animations-paused *, .animations-paused *::before, .animations-paused *::after { animation-play-state: paused !important; }
 .no-animation *, .no-animation *::before, .no-animation *::after { animation: none !important; transition: none !important; }
 .theme-switching *, .theme-switching *::before, .theme-switching *::after { transition: none !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
@@ -565,11 +565,31 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
    "状态灯动画" off (.no-animation) or reduced motion turns all of it off. */
 :root { --ease-out: cubic-bezier(.2, .75, .25, 1); --ease-spring: cubic-bezier(.3, 1.4, .5, 1); }
 
-/* Cards fade in one after another whenever a skin or mode is (re)built. */
-.provider-card { animation: card-in .5s var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 10) * 45ms); }
-.card-party.is-running { animation: card-in .5s var(--ease-out) both, party-glow 5s ease-in-out .5s infinite; animation-delay: calc(min(var(--i, 0), 10) * 45ms), calc(min(var(--i, 0), 10) * 45ms + .5s); }
-.card-party[data-attention="true"] { animation: card-in .5s var(--ease-out) both; }
-@keyframes card-in { from { opacity: 0; filter: saturate(.4); } }
+/* Agent cards load in one after another on first open, after every refresh, on a
+   skin / layout / mode switch and when the panel is reopened (replayed by src/motion.ts).
+   Each skin has its own entrance: a curtain in the panel colour lifts off rows from
+   the top edge, fades off dials while they flash into focus, and wipes off party cards
+   from the leading side. The card itself only changes opacity and filter and the
+   curtain is a pseudo-element, so cards waiting off-screen keep their real geometry
+   and visibility (clip-path on the card would hide it from IntersectionObserver). */
+.provider-card { animation: card-in .6s var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 10) * 55ms); }
+.card-dial { animation-name: card-in-dial; animation-duration: .7s; }
+.card-party { animation-name: card-in-party; }
+.card-party.is-running { animation: card-in-party .6s var(--ease-out) both, party-glow 5s ease-in-out .6s infinite; animation-delay: calc(min(var(--i, 0), 10) * 55ms), calc(min(var(--i, 0), 10) * 55ms + .6s); }
+.card-party[data-attention="true"] { animation: card-in-party .6s var(--ease-out) both; }
+@keyframes card-in { from { opacity: .35; filter: blur(4px) saturate(.3); } }
+@keyframes card-in-dial { from { opacity: .3; filter: blur(6px) brightness(1.6) saturate(.3); } }
+@keyframes card-in-party { from { filter: saturate(0) brightness(1.4); } }
+.provider-card::before { content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit; opacity: 0; /* only the animation shows it */
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--ink, var(--accent)) 75%, transparent) 0 2px, var(--bg) 2px);
+  animation: curtain-down .6s var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 10) * 55ms); }
+.card-dial::before { background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--ink, var(--accent)) 30%, var(--bg)), var(--bg) 70%); animation-name: curtain-fade; animation-duration: .7s; }
+.card-party::before { background: linear-gradient(to right, color-mix(in srgb, var(--ink, var(--accent)) 80%, transparent) 0 3px, var(--bg) 3px); animation-name: curtain-side; }
+:root[dir="rtl"] .card-party::before { background: linear-gradient(to left, color-mix(in srgb, var(--ink, var(--accent)) 80%, transparent) 0 3px, var(--bg) 3px); animation-name: curtain-side-rtl; }
+@keyframes curtain-down { from { clip-path: inset(0); opacity: 1; } 85% { opacity: 1; } to { clip-path: inset(100% 0 0 0); opacity: 0; } }
+@keyframes curtain-fade { from { opacity: 1; } to { opacity: 0; } }
+@keyframes curtain-side { from { clip-path: inset(0); opacity: 1; } 85% { opacity: 1; } to { clip-path: inset(0 0 0 100%); opacity: 0; } }
+@keyframes curtain-side-rtl { from { clip-path: inset(0); opacity: 1; } 85% { opacity: 1; } to { clip-path: inset(0 100% 0 0); opacity: 0; } }
 .overview > * { animation: fade-in .4s var(--ease-out) both; }
 @keyframes fade-in { from { opacity: 0; } }
 
