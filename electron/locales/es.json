@@ -538,5 +538,6 @@
   "已退出": "Cerrado",
   "近 24 小时": "últimas 24 horas",
   "下半屏设置保存失败，请重试": "No se pudo guardar la configuración de los paneles inferiores. Inténtalo de nuevo",
-  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Desplázate hacia arriba y hacia abajo para ver todos los paneles inferiores activados. El historial queda en este dispositivo y no incluye el contenido de las tareas."
+  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Desplázate hacia arriba y hacia abajo para ver todos los paneles inferiores activados. El historial queda en este dispositivo y no incluye el contenido de las tareas.",
+  "拖动排序，或按 Alt + 方向键移动；Escape 取消": "Arrastra o usa Alt + flechas para ordenar; Escape cancela"
 }

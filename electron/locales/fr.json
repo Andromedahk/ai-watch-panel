@@ -538,5 +538,6 @@
   "已退出": "Fermé",
   "近 24 小时": "dernières 24 heures",
   "下半屏设置保存失败，请重试": "Impossible d’enregistrer les panneaux inférieurs. Réessayez",
-  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Faites défiler vers le haut et le bas pour voir tous les panneaux inférieurs activés. L’historique reste sur cet appareil et ne contient aucun contenu de tâche."
+  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Faites défiler vers le haut et le bas pour voir tous les panneaux inférieurs activés. L’historique reste sur cet appareil et ne contient aucun contenu de tâche.",
+  "拖动排序，或按 Alt + 方向键移动；Escape 取消": "Glissez ou utilisez Alt + flèches pour réordonner ; Échap annule"
 }

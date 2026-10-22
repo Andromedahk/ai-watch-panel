@@ -5,7 +5,7 @@ import { providers as baseProviders, providerIds } from './data';
 import { useVisibleCards } from './useVisibleCards';
 import { replayEntrance } from './motion';
 import { demoJournal, loadJournal, record, saveJournal } from './journal';
-import { InsightsArea, useInsightSpace } from './view/insights';
+import { DEFAULT_INSIGHT_ORDER, InsightsArea, useInsightSpace } from './view/insights';
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
@@ -24,7 +24,7 @@ const previewState: PanelState = {
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
   kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, layout: 'single', windowLayout: 'single',
-  animeMode: readAnimeMode(), insights: readInsights(), skin: readSkin(),
+  animeMode: readAnimeMode(), insights: readInsights(), insightOrder: readInsightOrder(), skin: readSkin(),
   language: window.panel ? 'zh-CN' : readLanguage(),
   theme: window.panel ? 'system' : readTheme(),
   resolvedTheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
@@ -33,6 +33,13 @@ function readInsights(): Insights {
   let value: Partial<Insights> | null = null;
   try { value = JSON.parse(localStorage.getItem('ai-watch:insights') || 'null'); } catch { /* defaults */ }
   return Object.fromEntries((['timeline', 'resets', 'trend', 'mascot'] as InsightId[]).map(id => [id, value?.[id] !== false])) as Insights;
+}
+function readInsightOrder(): InsightId[] {
+  try {
+    const value = JSON.parse(localStorage.getItem('ai-watch:insight-order') || 'null');
+    if (Array.isArray(value) && value.length === DEFAULT_INSIGHT_ORDER.length && new Set(value).size === value.length && value.every(id => DEFAULT_INSIGHT_ORDER.includes(id))) return [...value];
+  } catch { /* older or malformed preferences retain the original order */ }
+  return [...DEFAULT_INSIGHT_ORDER];
 }
 function readAnimeMode() {
   try { return localStorage.getItem('ai-watch:anime-mode') === 'true'; } catch { return false; }
@@ -145,6 +152,8 @@ export default function App() {
   const [liveJournal, setLiveJournal] = useState(() => loadJournal());
   const [testJournal, setTestJournal] = useState(() => demoJournal());
   const [insightsSaving, setInsightsSaving] = useState(false);
+  const [insightOrderSaving, setInsightOrderSaving] = useState(false);
+  const [insightSorting, setInsightSorting] = useState(false);
   const resolvedTheme = state.theme === 'system' ? state.resolvedTheme : state.theme;
   const [draft, setDraft] = useState<Preferences>(previewState);
   const modal = useRef<HTMLDialogElement>(null);
@@ -170,7 +179,7 @@ export default function App() {
   const settingsStatus = displayStatus && { ...displayStatus, ...Object.fromEntries(providerIds.map(id => [id, localizeStatus(displayStatus[id], i18n)])) } as LocalStatus | null;
   const activeTasks = visibleProviders.reduce((total, provider) => total + (displayStatus?.[provider.id]?.activeTasks || 0), 0);
   const refreshTime = displayStatus?.sampledAt ? date(displayStatus.sampledAt, {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : t("读取中");
-  const sorting = useCardSort(enabledOrder, order => { void saveVisibleOrder(order); }, settingsOpen || state.collapsed || orderSaving || modulesSaving);
+  const sorting = useCardSort(enabledOrder, order => { void saveVisibleOrder(order); }, settingsOpen || state.collapsed || orderSaving || modulesSaving || insightSorting);
   const hiddenActive = translatedProviders.filter(provider => !visibleCards.has(provider.id)
     && (provider.running || provider.local?.activity === 'waiting'));
   function revealProvider(id: ProviderId) {
@@ -219,6 +228,17 @@ export default function App() {
       else { localStorage.setItem('ai-watch:insights', JSON.stringify(next)); setState(current => ({ ...current, insights: next })); }
     } catch { setNotice(t('下半屏设置保存失败，请重试')); }
     finally { setInsightsSaving(false); }
+  }
+  async function saveInsightOrder(order: InsightId[]) {
+    if (insightOrderSaving) return;
+    const previous = state.insightOrder || readInsightOrder();
+    setInsightOrderSaving(true); setState(current => ({ ...current, insightOrder: order }));
+    try {
+      if (window.panel) setState(await window.panel.setInsightOrder(order));
+      else localStorage.setItem('ai-watch:insight-order', JSON.stringify(order));
+      setNotice(t('模块顺序已保存'));
+    } catch { setState(current => ({ ...current, insightOrder: previous })); setNotice(t('顺序保存失败，已恢复原顺序')); }
+    finally { setInsightOrderSaving(false); }
   }
   async function changeSkin(value: Skin) {
     if (skinSaving || value === state.skin) return;
@@ -398,14 +418,14 @@ export default function App() {
   }, [settingsOpen]);
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && state.layout === 'fullscreen' && !settingsOpen && !sorting.sorting) { event.preventDefault(); void changeLayout(state.windowLayout); }
+      if (!event.defaultPrevented && event.key === 'Escape' && state.layout === 'fullscreen' && !settingsOpen && !sorting.sorting && !insightSorting) { event.preventDefault(); void changeLayout(state.windowLayout); }
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'b' && !state.desktop) {
         event.preventDefault(); setState((old) => ({ ...old, collapsed: !old.collapsed }));
       }
     };
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
-  }, [state.desktop, state.layout, settingsOpen, sorting.sorting]);
+  }, [state.desktop, state.layout, settingsOpen, sorting.sorting, insightSorting]);
 
   async function toggleLock() {
     try {
@@ -543,6 +563,8 @@ export default function App() {
           } }} />)}
       </div>
       {!sorting.sorting && <InsightsArea insights={insights} height={insightSpace.height} width={insightSpace.width} views={views}
+        order={state.insightOrder || readInsightOrder()} onOrder={order => void saveInsightOrder(order)} onSortingChange={setInsightSorting}
+        sortingDisabled={settingsOpen || state.collapsed || insightOrderSaving || insightsSaving || layoutSaving || animeSaving}
         journal={testMode ? testJournal : liveJournal} anime={state.animeMode} image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)} />}
       </div>
     </div>}

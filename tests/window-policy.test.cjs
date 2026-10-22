@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { panelBounds, clampBounds, displayGeometry, validPreferences, isProviderOrder, isEnabledProviders, isInsights, PROVIDER_ORDER } = require('../electron/window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isProviderOrder, isEnabledProviders, isInsights, isInsightOrder, INSIGHT_ORDER, PROVIDER_ORDER } = require('../electron/window-policy.cjs');
 
 test('Dock work-area changes preserve placement; monitor geometry changes still resize', () => {
   const original = { bounds: { x: 0, y: 0, width: 2560, height: 1440 }, scaleFactor: 2, rotation: 0,
@@ -38,7 +38,7 @@ test('restore clamps a moved rail into the available display area', () => {
   assert.deepEqual(clampBounds({ x: 1500, y: 100, width: 200, height: 900 }, { x: 0, y: 25, width: 1600, height: 900 }), { x: 1400, y: 25, width: 200, height: 900 });
 });
 test('unknown configuration values fall back without broadening capabilities', () => {
-  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, language: 'zh-CN', theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', widgetsEnabled: false, claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, cacheCleanupPending: false, kimiWorkApp: null, animeMode: false, insights: { timeline: true, resets: true, trend: true, mascot: true }, skin: 'watch', layout: 'single', windowLayout: 'single', providerApps: {} });
+  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, language: 'zh-CN', theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', widgetsEnabled: false, claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, cacheCleanupPending: false, kimiWorkApp: null, animeMode: false, insights: { timeline: true, resets: true, trend: true, mascot: true }, insightOrder: INSIGHT_ORDER, skin: 'watch', layout: 'single', windowLayout: 'single', providerApps: {} });
 });
 test('provider order rejects missing, duplicate and unknown cards and migrates old preferences', () => {
   for (const value of [null, 'codex', [], ['codex', 'codex', 'claude', 'deepseek'], ['claude', 'codex', 'antigravity', 'other']]) {
@@ -48,7 +48,7 @@ test('provider order rejects missing, duplicate and unknown cards and migrates o
   const reversed = [...PROVIDER_ORDER].reverse();
   assert.equal(isProviderOrder(reversed), true);
   const settings = validPreferences({ side: 'left', locked: true, animate: false, language: 'zh-CN', theme: 'system', providerOrder: reversed });
-  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, language: 'zh-CN', theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', widgetsEnabled: false, claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, cacheCleanupPending: false, kimiWorkApp: null, animeMode: false, insights: { timeline: true, resets: true, trend: true, mascot: true }, skin: 'watch', layout: 'single', windowLayout: 'single', providerApps: {} });
+  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, language: 'zh-CN', theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', widgetsEnabled: false, claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, cacheCleanupPending: false, kimiWorkApp: null, animeMode: false, insights: { timeline: true, resets: true, trend: true, mascot: true }, insightOrder: INSIGHT_ORDER, skin: 'watch', layout: 'single', windowLayout: 'single', providerApps: {} });
   reversed.reverse();
   assert.notDeepEqual(settings.providerOrder, reversed);
 });
@@ -119,6 +119,26 @@ test('lower-half insights default on, keep explicit choices and reject malformed
   assert.deepEqual(validPreferences({ insights: { trend: false, mascot: false, extra: false } }).insights, { ...all, trend: false, mascot: false });
   assert.equal(isInsights({ ...all, mascot: false }), true);
   for (const value of [null, [], {}, { ...all, timeline: 'false' }, { ...all, extra: true }, { timeline: true, resets: true, trend: true }]) assert.equal(isInsights(value), false);
+});
+
+test('lower-half ordering migrates old preferences and strictly validates full permutations', () => {
+  assert.deepEqual(INSIGHT_ORDER, ['resets', 'trend', 'timeline', 'mascot']);
+  for (const value of [undefined, null, {}, 'timeline', [], ['timeline'], ['resets', 'trend', 'timeline', 'timeline'], ['resets', 'trend', 'timeline', 'other']]) {
+    assert.equal(isInsightOrder(value), false);
+    assert.deepEqual(validPreferences({ insightOrder: value }).insightOrder, INSIGHT_ORDER);
+  }
+  const order = ['mascot', 'timeline', 'resets', 'trend'];
+  assert.equal(isInsightOrder(order), true);
+  const preferences = validPreferences({ insightOrder: order, insights: { mascot: false, trend: false } });
+  assert.deepEqual(preferences.insightOrder, order);
+  assert.equal(preferences.insights.mascot, false);
+  // Preferences own the array even when some panels are hidden.
+  order.reverse();
+  assert.deepEqual(preferences.insightOrder, ['mascot', 'timeline', 'resets', 'trend']);
+  const roundTrip = validPreferences(JSON.parse(JSON.stringify(preferences)));
+  assert.deepEqual(roundTrip.insightOrder, preferences.insightOrder);
+  const defaults = validPreferences({}); defaults.insightOrder.reverse();
+  assert.deepEqual(validPreferences({}).insightOrder, INSIGHT_ORDER);
 });
 
 test('launch preferences retain only known provider absolute local paths', () => {

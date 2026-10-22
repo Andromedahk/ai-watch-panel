@@ -538,5 +538,6 @@
   "已退出": "Beendet",
   "近 24 小时": "letzte 24 Stunden",
   "下半屏设置保存失败，请重试": "Untere Bereiche konnten nicht gespeichert werden. Bitte erneut versuchen",
-  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Scrolle nach oben und unten, um alle aktivierten unteren Bereiche anzuzeigen. Der Verlauf bleibt auf diesem Gerät und enthält keine Aufgabeninhalte."
+  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Scrolle nach oben und unten, um alle aktivierten unteren Bereiche anzuzeigen. Der Verlauf bleibt auf diesem Gerät und enthält keine Aufgabeninhalte.",
+  "拖动排序，或按 Alt + 方向键移动；Escape 取消": "Ziehen oder Alt + Pfeiltasten zum Sortieren; Escape bricht ab"
 }

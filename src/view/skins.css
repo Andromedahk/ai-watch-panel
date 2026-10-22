@@ -574,6 +574,16 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
 .skin-dial .insight { border: 0; border-radius: var(--radius); box-shadow: 0 1px 0 var(--line), 0 6px 16px -12px #0006; }
 .skin-party .insight { border-radius: var(--radius); box-shadow: inset 0 0 0 1px var(--line); border: 0; }
 .insight > header { flex: none; display: flex; align-items: baseline; gap: 8px; }
+.insight-sort-handle { flex: none; align-self: center; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px;
+  color: var(--muted); background: var(--raised); cursor: grab; touch-action: none; }
+.insight-sort-handle svg { width: 15px; height: 15px; pointer-events: none; }
+.insight-sort-handle:hover { color: var(--text); background: var(--button-hover); }
+.insight-sort-handle:active { cursor: grabbing; }
+.insight-sort-handle:disabled, .insight-sort-handle[aria-disabled="true"] { opacity: .4; cursor: default; }
+.insight-mascot > .insight-sort-handle { position: absolute; top: 8px; inset-inline-start: 8px; z-index: 2; }
+.insights[data-sorting] > .insight { animation: none; }
+.insights [data-dragging="true"] { z-index: 3; opacity: .85; box-shadow: inset 0 0 0 2px var(--focus); }
+.insights [data-sort-target="true"]:not([data-dragging="true"]) { box-shadow: inset 0 0 0 2px var(--focus); }
 .insight h3 { margin: 0; font-size: 12px; font-weight: 750; letter-spacing: .02em; color: var(--text); }
 .insight header small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--faint); }
 .insight ol, .insight ul { flex: none; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
@@ -601,27 +611,27 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
 .insight-trend { min-height: 100px; }
 .insight-when { flex: none; min-width: 64px; text-align: end; font-size: 11px; color: var(--muted); }
 .insight-trend .insight-name { flex: 0 0 74px; }
-.insight-trend svg { flex: 1; min-width: 40px; height: 20px; overflow: visible; }
+.insight-trend li svg { flex: 1; min-width: 40px; height: 20px; overflow: visible; }
 .insight-trend polyline { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .insight-trend li[data-low="true"] polyline { stroke: var(--low); }
 .insight-trend .insight-value { min-width: 36px; text-align: end; }
 /* 看板娘: the portrait of whoever needs you, with a speech bubble. */
-.insight-mascot { flex: none; height: 160px; flex-direction: row; align-items: flex-end; gap: 4px; padding: 0 12px 0 4px; overflow: clip;
+.insight-mascot { flex: none; min-height: 200px; flex-direction: row; align-items: flex-end; gap: 4px; padding: 40px 12px 0 4px; overflow: clip;
   background: radial-gradient(120% 90% at 22% 100%, color-mix(in srgb, var(--accent, var(--text)) 22%, transparent), transparent 70%), var(--surface); }
 .insights.is-wide .insight-mascot { min-width: 0; }
 /* Keep the portrait anchored to the panel, independently of the grid row's
    height; limit its width so it leaves room for the bubble in narrow columns. */
 .insights.is-wide .mascot-figure { width: 146px; height: 160px; align-self: flex-end; }
-.mascot-figure { position: relative; flex: none; align-self: stretch; width: 146px; margin: 0; padding: 0; border: 0; background: none; cursor: pointer; transform-origin: 50% 100%; }
+.mascot-figure { position: relative; flex: none; align-self: flex-end; width: 146px; height: 160px; margin: 0; padding: 0; border: 0; background: none; cursor: pointer; transform-origin: 50% 100%; }
 .mascot-figure .avatar { position: absolute; inset: 0; background: none; box-shadow: none; border-radius: 0; }
 .mascot-figure .avatar-face, .mascot-figure:hover .avatar-face { position: absolute; inset: 0; overflow: hidden; border: 0; border-radius: 0; background: none; box-shadow: none; mask-image: linear-gradient(to bottom, #000 80%, transparent), linear-gradient(to right, #000 72%, transparent); mask-composite: intersect; }
 :root[dir="rtl"] .mascot-figure .avatar-face { mask-image: linear-gradient(to bottom, #000 80%, transparent), linear-gradient(to left, #000 72%, transparent); }
 .mascot-figure .avatar::before, .mascot-figure .avatar::after { display: none; }
 .mascot-figure .avatar[data-crop="bust"] img { left: -4%; top: auto; bottom: -6%; width: 108%; }
 .mascot-figure .avatar-halo { display: none; }
-.mascot-bubble { position: relative; flex: 1; min-width: 0; align-self: center; margin: 0; padding: 9px 12px; border-radius: 14px; background: var(--raised);
+.mascot-bubble { position: relative; flex: 1; min-width: 0; min-height: 48px; display: flex; align-items: center; align-self: center; margin: 0; padding: 9px 12px; border-radius: 14px; background: var(--raised);
   box-shadow: 0 0 0 1px var(--line-strong), 0 8px 20px -14px #000a; font-size: 12.5px; font-weight: 600; line-height: 1.45; color: var(--text); }
-.mascot-bubble::before { content: ''; position: absolute; inset-inline-start: -6px; top: 50%; width: 12px; height: 12px; translate: 0 -50%; rotate: 45deg; background: inherit; box-shadow: -1px 1px 0 var(--line-strong); }
+.mascot-bubble::before { content: ''; position: absolute; inset-inline-start: -6px; top: calc(50% - 6px); width: 12px; height: 12px; rotate: 45deg; background: inherit; box-shadow: -1px 1px 0 var(--line-strong); }
 :root[dir="rtl"] .mascot-bubble::before { box-shadow: 1px -1px 0 var(--line-strong); }
 .mascot-bubble span { display: block; }
 .insight-mascot[data-mood="alert"] .mascot-bubble { background: color-mix(in srgb, var(--warn) 14%, var(--raised)); color: color-mix(in srgb, var(--warn) 75%, var(--text)); box-shadow: 0 0 0 1px var(--warn-line), 0 8px 20px -14px #000a; }
@@ -633,7 +643,7 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
   background: var(--raised); color: var(--muted); box-shadow: 0 0 0 1px var(--line-strong); }
 .mascot-refresh:hover { color: var(--text); background: var(--button-hover); }
 .mascot-refresh svg { width: 14px; height: 14px; }
-.insight-mascot .mascot-bubble { margin-block-start: 26px; }
+.insight-mascot .mascot-bubble { margin-block: 0 10px; }
 .mascot-zzz i, .mascot-zzz b { display: inline-block; font-style: inherit; font-weight: inherit; }
 .mascot-zzz i { font-size: 11px; translate: 2px -8px; } .mascot-zzz b { font-size: 9px; translate: 4px -15px; }
 

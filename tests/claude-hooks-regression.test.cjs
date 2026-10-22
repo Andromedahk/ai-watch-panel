@@ -31,7 +31,7 @@ test('logger reads only event-specific top-level metadata, never a prompt or too
   assert.deepEqual(metadata(payload, 'PreToolUse', { at: baseTime, entry: 'cli', ancestors: [20, 30], ownerPid: 30 }),
     { v: 1, at: baseTime, event: 'PreToolUse', session: 'root-session', ancestors: [20, 30], ownerPid: 30,
       agent: 'agent-1', entry: 'cli', tool: 'Read', toolUse: 'tool-1' });
-  assert.deepEqual(metadata(payload, 'Notification', { at: baseTime, ancestors: [] }),
+  assert.deepEqual(metadata(payload, 'Notification', { at: baseTime, entry: '', ancestors: [] }),
     { v: 1, at: baseTime, event: 'Notification', session: 'root-session', ancestors: [], agent: 'agent-1', kind: 'permission_prompt' });
   assert.equal(metadata({ tool_input: { session_id: 'nested-session' } }, 'PreToolUse'), null);
   assert.equal(metadata(payload, 'unknown-event'), null);

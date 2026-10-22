@@ -538,5 +538,6 @@
   "已退出": "Đã thoát",
   "近 24 小时": "24 giờ qua",
   "下半屏设置保存失败，请重试": "Không lưu được cài đặt bảng phía dưới. Hãy thử lại",
-  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Cuộn lên và xuống để xem tất cả các bảng phía dưới đã bật. Lịch sử chỉ lưu trên thiết bị này và không chứa nội dung tác vụ."
+  "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Cuộn lên và xuống để xem tất cả các bảng phía dưới đã bật. Lịch sử chỉ lưu trên thiết bị này và không chứa nội dung tác vụ.",
+  "拖动排序，或按 Alt + 方向键移动；Escape 取消": "Kéo hoặc nhấn Alt + phím mũi tên để sắp xếp; Escape để hủy"
 }

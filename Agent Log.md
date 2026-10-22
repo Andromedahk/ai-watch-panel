@@ -20,6 +20,27 @@
 
 ---
 
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 review_claude_status、review_mascot_logic、refresh_drag_acceptance 子 Agent）· 审查修复与下半屏排序
+
+- 分支：`claude/ui-redesign`；开始时独立 worktree 干净，领先 origin 的提交仅 `f7cf933`、`0490e4f`，均基于 `84fa04d`。保留这两个提交，修复与新增功能另加提交，不改写历史或强制推送。
+- 目的：审查看板娘换句及 Claude Code 长任务识别，修复边界并完成指定检查；追加人类要求的下半屏拖动排序。只处理目标 worktree，不合并主分支、不打包或替换 App。
+- 操作：
+  - `src/view/insights.tsx`：改用未翻译的真实助手状态签名，并在状态变化后清除旧闲聊，避免同数量助手换人漏掉提示及状态恢复后旧台词复活；切换语言保留当前台词并切中英文。优先选有近期未说台词的助手，单助手台词耗尽后避免紧邻重复。
+  - `electron/claude-status.cjs` 与 `tests/claude-status.test.cjs`（review_claude_status 子 Agent）：修复启动身份已核对的长任务在全屏详情中仍按十分钟降为未知；只对已核对的登记详情放宽时效，保留真实更新时间。明确的启动时间不匹配直接拒绝旧登记并清除旧关联，先检查身份再筛选来源，避免旧 session / surface 阻挡新 hook。hook 覆盖时显式清除登记标记，维持 hook 原事件时效。新增两来源的 busy / waiting / idle、PID 复用、缺失身份、读取失败、时间边界、标题清洗及 Windows 无 ps 的模拟回退检查。
+  - `src/useInsightSort.ts`、`src/view/insights.tsx`、`src/App.tsx`、`src/types.ts`、`electron/window-policy.cjs`、`electron/main.cjs`、`electron/preload.cjs`、`tests/window-policy.test.cjs` 与 17 语言（review_mascot_logic 子 Agent）：下半屏独立手柄拖动，边缘自动滚动、Escape 取消、Alt + 方向键；严格校验完整四项 `insightOrder`，兼容旧偏好并保留隐藏槽位，排序持久化。主 Agent 补充视觉位移边界，避免拖动末组件使滚动范围持续扩大。原助手卡片排序实现未改动。
+  - `src/view/skins.css`：为看板娘刷新 / 排序控件预留顶部区域，长台词撑高模块；限制趋势图 SVG 样式只作用于列表图表，避免放大手柄；短气泡保留足够高度并显式居中尾部，避免尾部进入圆角弧线。`tests/claude-hooks-regression.test.cjs` 明确测试的空 entry，隔离外部环境变量。
+  - `scripts/verify-insights.mjs`（refresh_drag_acceptance 子 Agent）加入真实换句、窄英文 / RTL、状态恢复、单 / 零助手、拖动与键盘排序、隐藏项、边缘滚动和冷重启验收；`scripts/verify-corners.mjs` 加入各皮肤明暗主题中的真实换句点击，再审计圆角。README 更新用法、限制与署名记录。所有诊断、截图与日志只写忽略目录。
+- 验证：
+  - `env -u CLAUDE_CODE_ENTRYPOINT node --test tests/*.test.cjs`：最终 442 / 442 通过，0 失败、0 跳过。额外带 `CLAUDE_CODE_ENTRYPOINT=claude-desktop` 的 logger 定向用例通过。状态 / hook 最终定向回归 52 / 52、偏好 / 国际化 27 / 27 通过。
+  - `npm run build`：通过原生辅助程序、TypeScript 与 Vite，保留既有大 chunk 提示。`node --check` 与 `git diff --check` 通过。
+  - `npm run test:insights`：最终构建上扩展后的 37 项（16 布局、3 立绘、11 换句、7 排序）完整通过，0 页面错误；末组件向下拖住 200ms 时滚动高度和最大滚动量均增长 0px，Escape 取消不保存。主 Agent 独立读取结果并目视窄英文 / RTL 截图，气泡及按钮在组件内；冷重启顺序、隐藏槽位、卡片顺序未受影响。
+  - `npm run test:corners`：首轮发现趋势手柄 SVG 越界及短气泡尾部进入弧线，修复后完整复测通过；保留原审计断言并覆盖真实换句后的状态。
+- 审查边界：登记的 `procStart` 必须与存活 Code PID 的标准化启动时间一致才获得长期信任；当系统明确证明启动时间不同时，拒绝旧登记并移除其分类 / 会话关联，避免近期旧文件误报及阻挡新会话 hook。缺失启动身份或 ps 失败时保留原文件时效回退。hook 始终严格拒绝启动时间不匹配，不套用登记回退；两路径沿用同一受限启动时间查询，最多两批、每批 64 PID 和一秒超时。Windows 无 ps 已模拟验证回退，不等同于 Windows 实机验收。
+- 失败与复测：实机 300px 最长英文初次显示气泡越界及按钮相交，修复自然高度与顶部控件空间后严格几何检查通过；首轮圆角问题按上文修复。GUI 脚本调试修正了 React 合并挂载导致的测试历史未重置、控件名称误用以及保存禁用期间过早键盘输入，未放宽产品断言；失败日志保留。状态回归夹具曾误把独立桌面聊天未知状态视为 Code idle，及遇到文件时间亚毫秒舍入，已固定夹具和整秒边界后通过。
+- 未完成 / 需要人类决定：实际只读观察到一个空闲桌面 Code 登记，系统启动时间与 `procStart` 一致；未创建并连续观察超过十分钟的真实运行任务。本轮不改正式用户配置、系统授权、已安装 App 或主目录未提交的 relay 改动；是否打包替换仍由人类决定。Windows / Linux 未实机验收。
+
+---
+
 ## 2026-10-23 · Claude（Anthropic / Claude Code，经 Remote Control 在人类的 Mac 上执行）· Claude 桌面 Code 会话长任务识别
 
 - 分支：`claude/ui-redesign`（未提交）。

@@ -140,6 +140,10 @@ try {
     for (const skin of ['watch', 'dial', 'party']) for (const anime of [false, true]) for (const theme of ['dark', 'light']) {
       await page.evaluate(async ({ skin, anime, theme }) => { await window.panel.setSkin(skin); await window.panel.setAnimeMode(anime); await window.panel.setTheme(theme); }, { skin, anime, theme });
       await check(`${enabled.length}/${skin}/${anime ? 'anime' : 'logo'}/${theme}`);
+      if (anime) {
+        await page.locator('.mascot-refresh').click();
+        await check(`${enabled.length}/${skin}/anime/${theme}/mascot-chat`);
+      }
       // Hover the first card and its avatar: hover rings and backgrounds must follow the corners too.
       await page.locator('.provider-card').first().hover();
       await check(`${enabled.length}/${skin}/${anime ? 'anime' : 'logo'}/${theme}/hover`);

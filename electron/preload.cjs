@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('panel', {
   clearCache: () => ipcRenderer.invoke('panel:clear-cache'),
   setAnimeMode: (enabled) => ipcRenderer.invoke('panel:anime-mode', enabled),
   setInsights: (insights) => ipcRenderer.invoke('panel:insights', insights),
+  setInsightOrder: (order) => ipcRenderer.invoke('panel:insight-order', order),
   setSkin: (skin) => ipcRenderer.invoke('panel:skin', skin),
   openProvider: (provider) => ipcRenderer.invoke('panel:open-provider', provider),
   chooseProviderApp: (provider) => ipcRenderer.invoke('panel:choose-provider-app', provider),

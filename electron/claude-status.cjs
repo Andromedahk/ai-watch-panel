@@ -256,7 +256,6 @@ class ClaudeStatusReader {
         const surface = isDesktopEntry(row.entrypoint) ? 'desktop' : 'terminal';
         const session = typeof row.sessionId === 'string' && row.sessionId ? row.sessionId : null;
         registrations.set(row.pid, { session, surface });
-        if ((source === 'desktop') !== (surface === 'desktop')) continue;
         rows.push({ row, surface, session, stat: await fs.stat(file) });
       } catch { failed = true; }
     }
@@ -269,13 +268,21 @@ class ClaudeStatusReader {
       try { rowStarts = await this.ownerStartsReader(startPids); } catch { /* No owner identity: keep the freshness rule. */ }
     }
     for (const { row, surface, session, stat } of rows) {
-      const live = rowStarts instanceof Map && typeof row.procStart === 'string'
-        && rowStarts.get(row.pid) === row.procStart.trim().replace(/\s+/g, ' ');
+      const registeredStart = typeof row.procStart === 'string' ? row.procStart.trim().replace(/\s+/g, ' ') : '';
+      const nativeStart = rowStarts instanceof Map ? rowStarts.get(row.pid) : null;
+      const ownerStart = typeof nativeStart === 'string' ? nativeStart.trim().replace(/\s+/g, ' ') : '';
+      // A positive mismatch proves PID reuse. Even a recent file then belongs
+      // to another process; do not let its old session block the new owner's hook.
+      if (registeredStart && ownerStart && registeredStart !== ownerStart) {
+        registrations.delete(row.pid); classified.delete(row.pid); continue;
+      }
+      if ((source === 'desktop') !== (surface === 'desktop')) continue;
+      const live = Boolean(registeredStart && ownerStart && registeredStart === ownerStart);
       const fresh = live || (stat.mtimeMs <= now + 120000 && now - stat.mtimeMs <= FRESH_MS);
       const phase = row.status === 'idle' ? 'idle' : fresh && row.status === 'busy' ? 'running'
         : fresh && row.status === 'waiting' ? 'waiting' : 'unknown';
       const updated = live && Number.isFinite(row.statusUpdatedAt) && row.statusUpdatedAt <= now + 120000 ? row.statusUpdatedAt : 0;
-      states.set(row.pid, { phase, surface, session, at: Math.max(stat.mtimeMs, updated), ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName || row.name) } : {}) });
+      states.set(row.pid, { phase, surface, session, registrationVerified: live, at: Math.max(stat.mtimeMs, updated), ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName || row.name) } : {}) });
     }
     // The logger captures the nearest actual Claude Code owner when the event
     // occurs. It must still be alive: never fall back to a surviving ancestor of
@@ -312,7 +319,7 @@ class ClaudeStatusReader {
     }
     const hookSessions = [...hookByPid.values()];
     for (const [pid, hook] of hookByPid) {
-      states.set(pid, { ...states.get(pid), phase: hook.phase, reason: hook.reason,
+      states.set(pid, { ...states.get(pid), registrationVerified: false, phase: hook.phase, reason: hook.reason,
         session: hook.session, surface: hook.surface, at: hook.at, hook: true });
     }
     // A session can have more than one registered PID. Prefer its hook state over
@@ -349,7 +356,10 @@ class ClaudeStatusReader {
       : activity === 'idle' ? '已连接会话暂无运行任务'
         : activity === 'offline' ? source === 'desktop' ? 'Claude 桌面未运行' : 'Claude Code 未运行'
           : source === 'desktop' ? '桌面当前任务状态未知' : 'Code 当前任务状态未知';
-    const taskDetails = this.taskDetailsEnabled ? values.slice(0, 8).map(s => taskDetail({ title: s.title, state: s.phase, updatedAt: s.at }, { now, live: true })) : [];
+    // A verified registration remains current while its owner lives, even when
+    // its last status transition is old. Keep that real transition timestamp.
+    const taskDetails = this.taskDetailsEnabled ? values.slice(0, 8).map(s => taskDetail({ title: s.title, state: s.phase, updatedAt: s.at },
+      { now, live: true, freshMs: s.registrationVerified ? Infinity : FRESH_MS })) : [];
     if (this.taskDetailsEnabled && source === 'desktop' && ['running', 'idle'].includes(desktopActivity.activity)) {
       taskDetails.unshift(taskDetail({ title: null, state: desktopActivity.activity, updatedAt: now, operation: desktopActivity.activity === 'running' ? 'agentMessage' : undefined }, { now, live: true }));
     }
@@ -365,8 +375,8 @@ class ClaudeStatusReader {
         : values.length || hookSessions.length ? new Date(Math.max(...values.map(s => s.at), ...hookSessions.map(s => s.at))).toISOString() : null,
       ...(this.hooks?.enabled ? { activityHooks: true } : {}),
       activityDetail: (this.hooks?.enabled ? 'Claude Code 状态钩子已启用：Code 会话的运行、工具授权和提问由钩子即时上报。' : '') + (source === 'desktop'
-        ? '桌面普通聊天由 macOS 辅助功能只读发送、停止和工具授权按钮；未授权或无法读取时，按 Claude 渲染进程的负载推测是否正在生成。桌面 Code 会话单独校验进程和十分钟时效。'
-        : '仅监看终端 Code 会话，校验进程和十分钟时效；桌面 Code 不计入终端任务。'),
+        ? '桌面普通聊天由 macOS 辅助功能只读发送、停止和工具授权按钮；未授权或无法读取时，按 Claude 渲染进程的负载推测是否正在生成。桌面 Code 会话单独核对存活进程与登记的启动时间；无法核对时使用十分钟时效。'
+        : '仅监看终端 Code 会话，核对存活进程与登记的启动时间；无法核对时使用十分钟时效。桌面 Code 不计入终端任务。'),
       detail: network.state !== 'disabled' ? network.detail : source === 'desktop'
         ? '桌面额度来自当前登录账号的本地用量快照。套餐读取匹配账号和组织的桌面套餐快照，历史档位会标记为历史；Free 或未提供窗口的额度保持未知。'
         : '终端套餐只读取有效的文件型登录；额度仅复用账号和组织均一致的桌面用量快照，无法匹配时保持未知。' };

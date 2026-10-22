@@ -22,7 +22,7 @@ export type PanelState = Preferences & {
   claudeSource: ClaudeSource;
   claudeNetworkAllowed: boolean;
   claudeHooksEnabled: boolean;
-  animeMode: boolean; insights: Insights; skin: Skin; layout: Layout; windowLayout: 'single' | 'double';
+  animeMode: boolean; insights: Insights; insightOrder: InsightId[]; skin: Skin; layout: Layout; windowLayout: 'single' | 'double';
   language: Language; resolvedLanguage?: Exclude<Language, 'system'>;
   theme: Theme; resolvedTheme: 'light' | 'dark';
   bounds?: { x: number; y: number; width: number; height: number };
@@ -78,6 +78,7 @@ declare global {
       clearCache(): Promise<{ freedBytes: number }>;
       setAnimeMode(enabled: boolean): Promise<PanelState>;
       setInsights(insights: Insights): Promise<PanelState>;
+      setInsightOrder(order: InsightId[]): Promise<PanelState>;
       setSkin(skin: Skin): Promise<PanelState>;
       openProvider(provider: ProviderId): Promise<{ status: 'opened' | 'missing' | 'unsupported' | 'error' | 'test'; message: string }>;
       chooseProviderApp(provider: ProviderId): Promise<{ status: 'selected' | 'cancelled' | 'error'; message: string }>;

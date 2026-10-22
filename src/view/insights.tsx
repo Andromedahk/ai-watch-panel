@@ -1,16 +1,17 @@
 // Lower-half panels keep their full contents in a separate vertical scroller.
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
+import { GripVertical, RefreshCw } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { DAY, type Journal, type JournalEvent } from '../journal';
 import type { InsightId, Insights, ProviderId } from '../types';
 import { LOW, type ProviderView } from './model';
 import { Portrait } from './parts';
 import quipBook from './quips.json';
+import { useInsightSort } from '../useInsightSort';
 
 const MARGIN = 12;
-/** Top-to-bottom order; the mascot stands at the bottom edge. */
-const ORDER: InsightId[] = ['resets', 'trend', 'timeline', 'mascot'];
+/** Old preferences retain this default; user ordering keeps hidden panels in place. */
+export const DEFAULT_INSIGHT_ORDER: InsightId[] = ['resets', 'trend', 'timeline', 'mascot'];
 const WIDE = 600;
 
 /** Use spare height when available; otherwise reserve a scrollable area while keeping the card list accessible. */
@@ -56,13 +57,13 @@ function eventLabel(event: JournalEvent, t: ReturnType<typeof useI18n>['t']) {
   return event.from === 'running' ? t('完成任务') : event.from === 'waiting' ? t('已处理') : t('已启动');
 }
 
-function Timeline({ views, journal, anime, image }: PanelProps) {
+function Timeline({ views, journal, anime, image, sortHandle, sortProps }: PanelProps) {
   const { t, date } = useI18n();
   const now = useNow(60000);
   const byId = new Map(views.map(view => [view.id, view]));
   const events = journal.events.filter(event => byId.has(event.id) && now - event.at <= DAY).slice(-40).reverse();
-  return <section className="insight insight-timeline" data-insight="timeline" aria-label={t('动态时间线')}>
-    <header><h3>{t('动态')}</h3><small>{t('近 24 小时')}</small></header>
+  return <section {...sortProps} className="insight insight-timeline" data-insight="timeline" aria-label={t('动态时间线')}>
+    <header>{sortHandle}<h3>{t('动态')}</h3><small>{t('近 24 小时')}</small></header>
     {events.length ? <ol>{events.map(event => {
       const view = byId.get(event.id)!;
       return <li key={`${event.id}:${event.at}`} data-kind={event.to}>
@@ -81,14 +82,14 @@ function countdown(at: number, now: number, i18n: ReturnType<typeof useI18n>) {
   return i18n.date(new Date(at).toISOString(), { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-function Resets({ views, anime, image }: PanelProps) {
+function Resets({ views, anime, image, sortHandle, sortProps }: PanelProps) {
   const i18n = useI18n(), { t, percent } = i18n;
   const now = useNow(30000);
   const rows = views.flatMap(view => (view.provider.local?.quotas || []).map((quota, index) => ({ view, quota, index, at: Date.parse(quota.reset) })))
     .filter(row => Number.isFinite(row.at) && row.at > now && !row.quota.stale)
     .sort((a, b) => a.at - b.at).slice(0, 8);
-  return <section className="insight insight-resets" data-insight="resets" aria-label={t('额度重置日程')}>
-    <header><h3>{t('额度重置')}</h3><small>{t('按恢复时间')}</small></header>
+  return <section {...sortProps} className="insight insight-resets" data-insight="resets" aria-label={t('额度重置日程')}>
+    <header>{sortHandle}<h3>{t('额度重置')}</h3><small>{t('按恢复时间')}</small></header>
     {rows.length ? <ul>{rows.map(({ view, quota, index, at }) => <li key={`${view.id}:${index}`} data-low={quota.remaining !== null && quota.remaining < LOW}>
       <Face view={view} anime={anime} image={image(view)} />
       <span className="insight-name"><bdi>{view.name}</bdi><small><bdi>{[quota.model === view.name ? '' : quota.model, quota.period].filter(Boolean).join(' · ')}</bdi></small></span>
@@ -98,12 +99,12 @@ function Resets({ views, anime, image }: PanelProps) {
   </section>;
 }
 
-function Trend({ views, journal, anime, image }: PanelProps) {
+function Trend({ views, journal, anime, image, sortHandle, sortProps }: PanelProps) {
   const { t, percent } = useI18n();
   const now = useNow(60000);
   const rows = views.map(view => ({ view, points: (journal.samples[view.id] || []).filter(([at]) => now - at <= DAY) })).filter(row => row.points.length > 1);
-  return <section className="insight insight-trend" data-insight="trend" aria-label={t('额度趋势')}>
-    <header><h3>{t('额度趋势')}</h3><small>{t('近 24 小时 · 最紧额度')}</small></header>
+  return <section {...sortProps} className="insight insight-trend" data-insight="trend" aria-label={t('额度趋势')}>
+    <header>{sortHandle}<h3>{t('额度趋势')}</h3><small>{t('近 24 小时 · 最紧额度')}</small></header>
     {rows.length ? <ul>{rows.map(({ view, points }) => {
       const line = points.map(([at, value]) => `${((at - (now - DAY)) / DAY * 100).toFixed(2)},${(23 - value / 100 * 22).toFixed(2)}`).join(' ');
       const current = points[points.length - 1][1];
@@ -125,14 +126,16 @@ type Quip = { id: ProviderId; index: number; status: string };
 function nextQuip(views: ProviderView[], speaker: ProviderId | undefined, recent: string[]) {
   const speakers = views.filter(view => quips[view.id]?.length);
   const pool = speakers.length > 1 ? speakers.filter(view => view.id !== speaker) : speakers;
-  const view = pool[Math.floor(Math.random() * pool.length)];
+  const unheard = pool.filter(view => quips[view.id].some((_, index) => !recent.includes(`${view.id}:${index}`)));
+  const candidates = unheard.length ? unheard : pool;
+  const view = candidates[Math.floor(Math.random() * candidates.length)];
   if (!view) return undefined;
   const all = quips[view.id].map((_, index) => index), fresh = all.filter(index => !recent.includes(`${view.id}:${index}`));
-  const choices = fresh.length ? fresh : all;
+  const choices = fresh.length ? fresh : all.filter(index => `${view.id}:${index}` !== recent.at(-1));
   return { id: view.id, index: choices[Math.floor(Math.random() * choices.length)] };
 }
 
-function Mascot({ views, anime, image, onOpen }: PanelProps) {
+function Mascot({ views, anime, image, onOpen, sortHandle, sortProps }: PanelProps) {
   const { t, number, percent, language } = useI18n();
   const [quip, setQuip] = useState<Quip | null>(null);
   const [spins, setSpins] = useState(0);
@@ -153,8 +156,12 @@ function Mascot({ views, anime, image, onOpen }: PanelProps) {
   } else if (views.length) {
     mood = 'rest'; focus = views[0]; line = t('大家都在休息，喝杯茶吧');
   } else { mood = 'empty'; line = t('还没有助手上线'); }
-  // A refreshed line stays until the room's status changes, so alerts always win.
-  const status = line, speaker = quip?.status === status ? views.find(view => view.id === quip.id) : undefined;
+  // Track the room's actual state, independently of translated/summarized text.
+  // Once a status change dismisses a quip, returning to that state must not revive it.
+  const status = JSON.stringify(views.map(view => [view.id, view.state, view.attention, view.provider.local?.waitingReason,
+    view.tightest !== null && view.tightest < LOW ? view.tightest : null]));
+  useEffect(() => { setQuip(current => current?.status === status ? current : null); }, [status]);
+  const speaker = quip?.status === status ? views.find(view => view.id === quip.id) : undefined;
   // Non-Chinese languages show the English line, kept left-to-right inside RTL layouts.
   const english = !language.startsWith('zh') && Boolean(quip && speaker);
   if (quip && speaker) { mood = 'chat'; focus = speaker; line = quips[speaker.id][quip.index][english ? 1 : 0]; }
@@ -165,8 +172,9 @@ function Mascot({ views, anime, image, onOpen }: PanelProps) {
     setQuip({ ...next, status });
     setSpins(count => count + 1);
   };
-  return <section className="insight insight-mascot" data-insight="mascot" data-mood={mood} aria-label={t('看板娘')}
-    style={focus ? { '--accent': focus.color } as CSSProperties : undefined}>
+  return <section {...sortProps} className="insight insight-mascot" data-insight="mascot" data-mood={mood} aria-label={t('看板娘')}
+    style={{ ...sortProps?.style, ...(focus ? { '--accent': focus.color } : {}) } as CSSProperties}>
+    {sortHandle}
     {views.length > 0 && <button type="button" className="mascot-refresh" data-spin={spins > 0 || undefined} title={t('换一句')} aria-label={t('换一句')} onClick={refresh}>
       <RefreshCw key={spins} aria-hidden="true" />
     </button>}
@@ -178,14 +186,39 @@ function Mascot({ views, anime, image, onOpen }: PanelProps) {
   </section>;
 }
 
-type PanelProps = { views: ProviderView[]; journal: Journal; anime: boolean; image: (view: ProviderView) => string | undefined; onOpen: (view: ProviderView) => void };
+type PanelProps = { views: ProviderView[]; journal: Journal; anime: boolean; image: (view: ProviderView) => string | undefined; onOpen: (view: ProviderView) => void;
+  sortHandle?: ReactNode; sortProps?: HTMLAttributes<HTMLElement> };
 
-export function InsightsArea({ insights, height, width, ...props }: PanelProps & { insights: Insights; height: number; width: number }) {
+export function InsightsArea({ insights, order, onOrder, sortingDisabled, onSortingChange, height, width, ...props }: PanelProps & {
+  insights: Insights; order: InsightId[]; onOrder: (order: InsightId[]) => void; sortingDisabled: boolean; onSortingChange: (sorting: boolean) => void; height: number; width: number;
+}) {
   const { t } = useI18n();
-  const ids = ORDER.filter(id => insights[id] && (id !== 'mascot' || props.anime));
+  const root = useRef<HTMLDivElement>(null);
+  const ids = order.filter(id => insights[id] && (id !== 'mascot' || props.anime));
+  const saveVisibleOrder = (next: InsightId[]) => {
+    let index = 0;
+    onOrder(order.map(id => ids.includes(id) ? next[index++] : id));
+  };
+  const sorting = useInsightSort(ids, saveVisibleOrder, sortingDisabled, onSortingChange);
+  const labels: Record<InsightId, string> = { timeline: t('动态时间线'), resets: t('额度重置日程'), trend: t('额度趋势'), mascot: t('看板娘') };
   if (!ids.length) return null;
-  return <div className={`insights ${width >= WIDE ? 'is-wide' : ''}`} style={{ height }} data-count={ids.length} role="region" aria-label={t('下半屏')} tabIndex={0}>
-    {ids.map(id => id === 'timeline' ? <Timeline key={id} {...props} /> : id === 'resets' ? <Resets key={id} {...props} />
-      : id === 'trend' ? <Trend key={id} {...props} /> : <Mascot key={id} {...props} />)}
+  return <div ref={root} className={`insights ${width >= WIDE ? 'is-wide' : ''}`} style={{ height }} data-count={ids.length} data-sorting={sorting.sorting || undefined} role="region" aria-label={t('下半屏')} tabIndex={0}>
+    {ids.map((id, index) => {
+      const sortProps = { style: sorting.style(id), 'data-dragging': sorting.activeId === id || undefined, 'data-sort-target': sorting.targetId === id || undefined };
+      const sortHandle = <button type="button" className="insight-sort-handle" data-sort-insight={id} disabled={ids.length < 2} aria-disabled={sortingDisabled || undefined}
+        aria-label={`${t('排序')} · ${labels[id]}`} title={t('拖动排序，或按 Alt + 方向键移动；Escape 取消')}
+        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight" onPointerDown={event => sorting.start(event, id)} onKeyDown={event => {
+          if (!event.altKey || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) || sorting.sorting || sortingDisabled) return;
+          event.preventDefault(); event.stopPropagation();
+          const panels = [...(root.current?.querySelectorAll<HTMLElement>(':scope > [data-insight]') || [])];
+          const columns = panels.filter(panel => Math.abs(panel.getBoundingClientRect().top - panels[0].getBoundingClientRect().top) < 2).length;
+          const delta = event.key === 'ArrowUp' ? -columns : event.key === 'ArrowDown' ? columns : (event.key === 'ArrowLeft' ? -1 : 1) * (document.documentElement.dir === 'rtl' ? -1 : 1);
+          const target = Math.max(0, Math.min(ids.length - 1, index + delta));
+          if (target !== index) { const next = [...ids]; next.splice(index, 1); next.splice(target, 0, id); saveVisibleOrder(next); }
+        }}><GripVertical aria-hidden="true" /></button>;
+      const panelProps = { ...props, sortProps, sortHandle };
+      return id === 'timeline' ? <Timeline key={id} {...panelProps} /> : id === 'resets' ? <Resets key={id} {...panelProps} />
+        : id === 'trend' ? <Trend key={id} {...panelProps} /> : <Mascot key={id} {...panelProps} />;
+    })}
   </div>;
 }
