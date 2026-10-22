@@ -20,6 +20,21 @@
 
 ---
 
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 verify_install_bundle 子 Agent）· 替换并重启已安装 App
+
+- 分支：`claude/ui-redesign`，功能提交 `71a70eb`；开始时 worktree 干净并已与 origin 同步。
+- 目的：按人类“执行替换 App”的后续授权，安装上一轮已审查版本，保留既有用户数据。
+- 操作：
+  - 从当前功能提交重新构建，以依赖目录中匹配的 Electron 打包普通 macOS 应用，输出保留在忽略的 `release/` 版本目录。
+  - verify_install_bundle 子 Agent（Codex / GPT-6 / Codex 桌面本地执行环境）只读核对整包严格签名、产品标识和包内内容；关键 Electron 文件、完整网页构建与当前源码 / dist 一致，两个原生辅助程序的差异仅为打包签名，包清单仅有正常构建字段清理。
+  - 新版先暂存并检查签名，备份旧应用后正常退出旧进程，再备份整个用户数据目录；在原位置替换应用并正常启动。核对安装归档与已验证包摘要相同、仅一个原位置主进程持续存活，确认重启前后偏好文件逐字节一致。临时回滚副本清理前，长期旧应用备份已保留。
+  - 旧应用、完整用户数据及安装摘要记录保存在 `.local/install-backups/`，不纳入版本控制；本轮仅修改 README 与本操作记录，其他工作区未改动。
+- 验证：`npm run build`、普通 macOS 打包、`codesign --verify --deep --strict --all-architectures`、包内容和安装归档一致性检查通过；应用替换与重启完成，偏好保留。构建保留既有大 chunk 提示，应用仍为本地 ad hoc 签名版本。
+- 失败或未验证项：本轮无构建或安装失败；沿用此前 442 / 442 单元测试、37 项界面检查与圆角审计的通过结果，未重复功能验收。未新建真实连续十分钟 Code 任务，未完成原生小组件系统集成或 Windows / Linux 实机验收。
+- 未完成 / 需要人类决定：无新增需决定事项；不将安装和启动成功视为上述未验证事项已完成。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 review_claude_status、review_mascot_logic、refresh_drag_acceptance 子 Agent）· 审查修复与下半屏排序
 
 - 分支：`claude/ui-redesign`；开始时独立 worktree 干净，领先 origin 的提交仅 `f7cf933`、`0490e4f`，均基于 `84fa04d`。保留这两个提交，修复与新增功能另加提交，不改写历史或强制推送。
