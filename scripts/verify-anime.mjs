@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-const names = { claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity', deepseek: 'DeepSeek Harness', zcode: 'ZCode', kimi: 'Kimi Code', qwen: 'Qwen（千问）', workbuddy: 'WorkBuddy' };
+const names = { claude: 'Claude', codex: 'Codex', antigravity: 'Antigravity', deepseek: 'DeepSeek Harness', zcode: 'ZCode', kimi: 'Kimi Code', qwen: 'Qwen（千问）', workbuddy: 'WorkBuddy' };
 const ids = Object.keys(names);
 const feedbackName = id => id === 'claude' ? 'Claude' : id === 'qwen' ? '千问' : names[id];
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-anime-'));
@@ -79,10 +79,10 @@ try {
   }
   await open();
   await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }); }, paths[0]);
-  await page.getByRole('button', { name: '替换 Claude Code 图片', exact: true }).click();
+  await page.getByRole('button', { name: '替换 Claude 图片', exact: true }).click();
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('ai-watch:images') || '{}').claude?.startsWith('data:image/png'));
   await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }); }, paths[1]);
-  await page.getByRole('button', { name: '替换 Claude Code 二次元图片', exact: true }).click();
+  await page.getByRole('button', { name: '替换 Claude 二次元图片', exact: true }).click();
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('ai-watch:anime-images') || '{}').claude?.startsWith('data:image/png'));
   await close();
   const customAnime = await card('claude').locator('.avatar img').getAttribute('src');
@@ -152,7 +152,7 @@ try {
     await window.loadFile(file);
   }, path.resolve('dist/index.html'));
   preview = await previewPromise;
-  await preview.getByRole('button', { name: '打开 Claude Code', exact: true }).click();
+  await preview.getByRole('button', { name: '打开 Claude', exact: true }).click();
   await expect(preview.locator('.toast')).toContainText('桌面版');
   const settings = () => preview.getByRole('button', { name: '打开配置', exact: true }).click();
   const dismiss = () => preview.getByRole('button', { name: '关闭配置', exact: true }).click();
@@ -164,13 +164,14 @@ try {
   await preview.getByRole('button', { name: '全部运行', exact: true }).click();
   await dismiss();
   await expect(preview.locator('.panel')).toHaveClass(/anime-mode/);
-  await preview.getByRole('button', { name: '打开 Claude Code', exact: true }).click();
+  await preview.getByRole('button', { name: '打开 Claude', exact: true }).click();
   await expect(preview.locator('.toast')).toContainText(/测试|模拟/);
 
   async function geometry(size, theme) {
     const metrics = await preview.locator('.provider-card').evaluateAll(cards => {
       const box = element => { const { x, y, top, bottom, left, right, width, height } = element.getBoundingClientRect(); return { x, y, top, bottom, left, right, width, height }; };
-      return cards.map(card => ({ id: card.dataset.provider, card: box(card), heading: box(card.querySelector('.card-heading')),
+      return cards.map(card => ({ id: card.dataset.provider, card: box(card), // The anime watch card flattens its heading into the card grid (display: contents); the identity block is then the heading.
+        heading: box(getComputedStyle(card.querySelector('.card-heading')).display === 'contents' ? card.querySelector('.identity') : card.querySelector('.card-heading')),
         avatar: box(card.querySelector('.avatar')), identity: box(card.querySelector('.identity')), content: box(card.querySelector('.quota-area')), footer: box(card.querySelector('.task-line')),
         identityText: [...card.querySelectorAll('.identity h2, .identity .eyebrow, .identity .plan-summary')].map(element => ({ box: box(element), overflow: element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1 })),
         imageLoaded: card.querySelectorAll('.avatar img').length === 1 && [...card.querySelectorAll('.avatar img')].every(image => image.complete && image.naturalWidth > 0),
@@ -180,12 +181,12 @@ try {
     });
     assert.equal(metrics.length, 8);
     const header = await preview.locator('.control-region').boundingBox();
-    assert.ok(Math.abs(header.height * 2 - metrics[0].card.height) < 1);
+    assert.ok(metrics[0].card.height > header.height);
     for (const item of metrics) {
       const context = JSON.stringify({ size, theme, ...item });
-      assert.equal(item.imageLoaded, true, context); assert.equal(item.imageFit, 'contain', context); assert.equal(item.overflow, false, context);
-      const ratio = item.avatar.width * item.avatar.height / (item.card.width * item.card.height);
-      assert.ok(ratio >= .20 && ratio <= .28, `Avatar area ${ratio}: ${context}`);
+      assert.equal(item.imageLoaded, true, context); assert.equal(item.overflow, false, context);
+      // Anime portraits are square and face-cropped; they must stay readable without crowding the card.
+      assert.ok(Math.abs(item.avatar.width - item.avatar.height) < 1 && item.avatar.width >= 36, `Avatar size: ${context}`);
       assert.ok(item.heading.bottom <= item.content.top + 1, context);
       assert.ok(item.identity.top >= item.heading.top - 1 && item.identity.bottom <= item.heading.bottom + 1, context);
       assert.ok(item.avatar.right < item.identity.left && item.identity.right <= item.heading.right + 1, context);
@@ -209,28 +210,23 @@ try {
       await settings(); await preview.getByRole('checkbox', { name: '暗夜模式', exact: true }).setChecked(theme === 'dark'); await dismiss();
       await expect(preview.locator('html')).toHaveAttribute('data-theme', theme);
       await geometry(size, theme); await scroll(false);
-      await expect(preview.locator('.hidden-activity-light')).toHaveCount(4);
+      // Every running card that is not fully on screen gets a bottom-edge light.
+      const offscreen = await preview.locator('.provider-viewport').evaluate(view => {
+        const frame = view.getBoundingClientRect();
+        return [...view.querySelectorAll('.provider-card')].filter(card => { const box = card.getBoundingClientRect(); return box.top < frame.top - 1 || box.bottom > frame.bottom + 1; }).length;
+      });
+      assert.ok(offscreen > 0);
+      await expect(preview.locator('.hidden-activity-light')).toHaveCount(offscreen);
       await expect(previewCard('claude').locator('.avatar')).toHaveAttribute('data-glow', 'running');
+      // The watch skin lists every model quota and Claude's Opus window directly, with no pagination.
       const modelNames = await previewCard('antigravity').locator('.model-name').allTextContents();
-      for (let current = 2; current <= 4; current++) {
-        await previewCard('antigravity').getByRole('button', { name: 'Antigravity 下一页额度', exact: true }).click();
-        await expect(previewCard('antigravity').locator('.quota-pagination')).toHaveText(`${current}/4`);
-        modelNames.push(...await previewCard('antigravity').locator('.model-name').allTextContents());
-      }
       assert.equal(new Set(modelNames).size, 7, 'Compact layout keeps every model quota reachable');
-      for (let current = 3; current >= 1; current--) await previewCard('antigravity').getByRole('button', { name: 'Antigravity 上一页额度', exact: true }).click();
-      await previewCard('claude').getByRole('button', { name: 'Claude Code 下一页额度', exact: true }).click();
-      await expect(previewCard('claude').locator('.model-name')).toHaveText('Opus');
-      await previewCard('claude').getByRole('button', { name: 'Claude Code 上一页额度', exact: true }).click();
+      await expect(previewCard('claude').locator('.model-name').filter({ hasText: 'Opus' })).toHaveCount(1);
       await expect(preview.locator('.toast')).toBeHidden();
       await preview.screenshot({ path: `docs/screenshots/anime-first-${size.height}-${theme}.png`, animations: 'disabled' });
       await scroll(true);
-      for (const id of ['qwen', 'workbuddy']) {
-        await previewCard(id).getByRole('button', { name: `${names[id]} 下一页额度`, exact: true }).click();
-        await expect(previewCard(id).locator('.quota-pagination')).toHaveText('2/2');
-        await geometry(size, theme);
-        await previewCard(id).getByRole('button', { name: `${names[id]} 上一页额度`, exact: true }).click();
-      }
+      for (const id of ['qwen', 'workbuddy']) await expect(previewCard(id).locator('.more-quotas')).toHaveText('另有 2 项');
+      await geometry(size, theme);
       await preview.screenshot({ path: `docs/screenshots/anime-more-${size.height}-${theme}.png`, animations: 'disabled' });
       await settings();
       await preview.getByRole('combobox', { name: 'Claude Code 测试数据显示', exact: true }).selectOption('free');
@@ -242,7 +238,7 @@ try {
         descriptionBottom: element.querySelector('p').getBoundingClientRect().bottom,
       }));
       assert.equal(empty.overflow, false);
-      assert.ok(empty.titleTop > empty.top && empty.descriptionBottom < empty.bottom);
+      assert.ok(empty.titleTop >= empty.top - 1 && empty.descriptionBottom <= empty.bottom + 1);
       if (size.height === 1440 && theme === 'dark') await previewCard('claude').screenshot({ path: 'docs/screenshots/anime-card-empty-dark.png', animations: 'disabled' });
       await settings();
       await preview.getByRole('combobox', { name: 'Claude Code 测试数据显示', exact: true }).selectOption('unknown');
@@ -262,7 +258,7 @@ try {
   await settings(); await preview.getByRole('checkbox', { name: '二次元模式', exact: true }).uncheck(); await dismiss();
   await expect(preview.locator('.panel')).not.toHaveClass(/anime-mode/);
   await preview.reload(); await expect(preview.locator('.panel')).not.toHaveClass(/anime-mode/);
-  console.log('Anime layout checks passed: independent default artwork, approximately one-quarter card image area, four-card ratio, scroll, two themes at 320×1440 and 200×900, all quota/credit pagination, running and Codex waiting halos, preview launch feedback and saved preview preference. Screenshots contain synthetic data only.');
+  console.log('Anime layout checks passed: independent default artwork, square face-cropped portraits, scroll, two themes at 320×1440 and 200×900, every quota listed and credit overflow summaries, running and Codex waiting halos, preview launch feedback and saved preview preference. Screenshots contain synthetic data only.');
 } finally {
   await preview?.close();
   await app.close();

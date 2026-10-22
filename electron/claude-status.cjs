@@ -3,6 +3,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { createHash, randomBytes } = require('node:crypto');
+const { promisify } = require('node:util');
+const execFile = promisify(require('node:child_process').execFile);
 const { boundedFile } = require('./session-files.cjs');
 const FRESH_MS = 10 * 60 * 1000;
 const WINDOWS = [['fh', '全部模型', '5 小时'], ['sd', '全部模型', '1 周'],
@@ -34,6 +36,25 @@ function isCodeProcess(command) {
   return /(?:^|[/\\])claude(?:\.exe)?$/.test(command)
     || /[/\\]claude[/\\]versions[/\\]\d+\.\d+\.\d+(?:\.exe)?$/.test(command);
 }
+// PID numbers can be reused. Compare the logger's captured start time with one
+// bounded native query per poll; do not add process arguments or paths to state.
+async function readOwnerStarts(pids) {
+  const selected = [...new Set(pids.filter(pid => Number.isSafeInteger(pid) && pid > 1))].slice(0, 64);
+  if (!selected.length) return new Map();
+  try {
+    const { stdout } = await execFile('/bin/ps', ['-p', selected.join(','), '-o', 'pid=,lstart='], {
+      env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' }, timeout: 1000, maxBuffer: 32768, windowsHide: true,
+    });
+    const starts = new Map();
+    for (const line of stdout.split('\n')) {
+      const match = /^\s*(\d+)\s+(.+?)\s*$/.exec(line);
+      if (!match) continue;
+      const pid = Number(match[1]), start = match[2].trim().replace(/\s+/g, ' ');
+      if (selected.includes(pid) && /^[A-Za-z]{3} [A-Za-z]{3} \d{1,2} \d{2}:\d{2}:\d{2} \d{4}$/.test(start)) starts.set(pid, start);
+    }
+    return starts;
+  } catch { return new Map(); }
+}
 function normalizeClaudePlan(payload, now) {
   const oauth = payload?.claudeAiOauth;
   // CLI file-backed login only. Desktop encrypted caches and ordinary quota history
@@ -64,6 +85,17 @@ async function readClaudePlan(config, platform, now) {
     finally { buffer.fill(0); }
   } catch { return { name: null }; }
 }
+// Claude Desktop's chat renderer is near-idle (< 3 %) unless it is streaming a reply,
+// animating the thinking indicator or the user is interacting with it. Two
+// consecutive busy samples are treated as a likely reply in progress; this is an
+// inference used only when the accessibility probe cannot answer.
+const RENDERER = /[/\\]Claude\.app[/\\]Contents[/\\]Frameworks[/\\]Claude Helper \(Renderer\)\.app[/\\]/;
+const BUSY_CPU = 12;
+function rendererLoad(processes) {
+  if (!Array.isArray(processes)) return null;
+  const rows = processes.filter(p => RENDERER.test(p.command) && Number.isFinite(p.cpu));
+  return rows.length ? Math.round(rows.reduce((total, p) => total + p.cpu, 0) * 10) / 10 : null;
+}
 function isDesktopEntry(entrypoint) {
   return ['claude-desktop', 'claude-desktop-3p', 'local-agent'].includes(entrypoint);
 }
@@ -87,7 +119,9 @@ class ClaudeStatusReader {
     this.codeIdentityRoot = env.CLAUDE_CONFIG_DIR ? this.paths.config : home;
     this.desktopActivityReader = options.desktopActivityReader || require('./claude-desktop.cjs').readDesktopActivity;
     this.usageReader = options.usageReader || new (require('./claude-usage.cjs').ClaudeUsageReader)({ paths: this.paths, platform: this.platform });
-    this.desktopPlanCache = null; this.desktopPlanCacheFile = null; this.persistedDesktopPlan = null;
+    this.desktopPlanCache = null; this.desktopPlanCacheFile = null; this.persistedDesktopPlan = null; this.loadSamples = [];
+    this.hooks = options.hooks || null; // optional ClaudeHooks reader (Claude Code lifecycle events)
+    this.ownerStartsReader = options.ownerStartsReader || readOwnerStarts;
     if (options.desktopPlanCacheFile) this.setDesktopPlanCacheFile(options.desktopPlanCacheFile);
   }
   setDesktopPlanCacheFile(file) {
@@ -189,6 +223,10 @@ class ClaudeStatusReader {
     let plan = source === 'code' ? await readClaudePlan(config, this.platform, now) : await this.readDesktopPlan(identity, now);
     let desktopActivity = { activity: 'unknown', trusted: null, supported: this.platform === 'darwin', plan: null };
     if (source === 'desktop' && desktopOpen) desktopActivity = await this.desktopActivityReader(desktopProcess.pid, { platform: this.platform });
+    const load = source === 'desktop' && desktopOpen ? rendererLoad(processes) : null;
+    this.loadSamples = load === null ? [] : [...this.loadSamples, { at: now, load }].filter(s => now - s.at <= 20000).slice(-3);
+    const recent = this.loadSamples.slice(-2);
+    const inferredBusy = desktopActivity.activity === 'unknown' && recent.length === 2 && recent.every(s => s.load >= BUSY_CPU);
     if (source === 'desktop' && desktopActivity.plan && ['Free', 'Pro', 'Max', 'Max 5×', 'Max 20×', 'Team', 'Enterprise'].includes(desktopActivity.plan)) {
       plan = { name: desktopActivity.plan, status: '桌面界面', stale: false, observedAt: new Date(now).toISOString() };
     }
@@ -208,7 +246,7 @@ class ClaudeStatusReader {
     const sessions = path.join(config, 'sessions');
     try { names = (await fs.readdir(sessions)).filter(n => /^\d+\.json$/.test(n)); }
     catch (error) { failed = error.code !== 'ENOENT'; }
-    const states = new Map(), classified = new Set();
+    const states = new Map(), classified = new Set(), registrations = new Map(), rows = [];
     for (const name of names.filter(n => pids.has(Number(n.slice(0, -5)))).slice(0, 128)) {
       try {
         const file = path.join(sessions, name);
@@ -216,48 +254,129 @@ class ClaudeStatusReader {
         if (!Number.isInteger(row.pid) || row.pid !== Number(name.slice(0, -5))) continue;
         classified.add(row.pid);
         const surface = isDesktopEntry(row.entrypoint) ? 'desktop' : 'terminal';
-        if ((source === 'desktop') !== (surface === 'desktop')) continue;
-        const stat = await fs.stat(file);
-        const fresh = stat.mtimeMs <= now + 120000 && now - stat.mtimeMs <= FRESH_MS;
-        const phase = row.status === 'idle' ? 'idle' : fresh && row.status === 'busy' ? 'running'
-          : fresh && row.status === 'waiting' ? 'waiting' : 'unknown';
-        states.set(row.pid, { phase, surface, at: stat.mtimeMs, ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName) } : {}) });
+        const session = typeof row.sessionId === 'string' && row.sessionId ? row.sessionId : null;
+        registrations.set(row.pid, { session, surface });
+        rows.push({ row, surface, session, stat: await fs.stat(file) });
       } catch { failed = true; }
     }
-    const values = [...states.values()];
+    // The CLI rewrites its registration only when the status changes, so a long
+    // turn leaves an old mtime. A procStart equal to the live PID's start time
+    // proves the file belongs to this process and its status is still current.
+    let rowStarts = new Map();
+    const startPids = [...new Set(rows.filter(r => typeof r.row.procStart === 'string').map(r => r.row.pid))].slice(0, 64);
+    if (startPids.length) {
+      try { rowStarts = await this.ownerStartsReader(startPids); } catch { /* No owner identity: keep the freshness rule. */ }
+    }
+    for (const { row, surface, session, stat } of rows) {
+      const registeredStart = typeof row.procStart === 'string' ? row.procStart.trim().replace(/\s+/g, ' ') : '';
+      const nativeStart = rowStarts instanceof Map ? rowStarts.get(row.pid) : null;
+      const ownerStart = typeof nativeStart === 'string' ? nativeStart.trim().replace(/\s+/g, ' ') : '';
+      // A positive mismatch proves PID reuse. Even a recent file then belongs
+      // to another process; do not let its old session block the new owner's hook.
+      if (registeredStart && ownerStart && registeredStart !== ownerStart) {
+        registrations.delete(row.pid); classified.delete(row.pid); continue;
+      }
+      if ((source === 'desktop') !== (surface === 'desktop')) continue;
+      const live = Boolean(registeredStart && ownerStart && registeredStart === ownerStart);
+      const fresh = live || (stat.mtimeMs <= now + 120000 && now - stat.mtimeMs <= FRESH_MS);
+      const phase = row.status === 'idle' ? 'idle' : fresh && row.status === 'busy' ? 'running'
+        : fresh && row.status === 'waiting' ? 'waiting' : 'unknown';
+      const updated = live && Number.isFinite(row.statusUpdatedAt) && row.statusUpdatedAt <= now + 120000 ? row.statusUpdatedAt : 0;
+      states.set(row.pid, { phase, surface, session, registrationVerified: live, at: Math.max(stat.mtimeMs, updated), ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName || row.name) } : {}) });
+    }
+    // The logger captures the nearest actual Claude Code owner when the event
+    // occurs. It must still be alive: never fall back to a surviving ancestor of
+    // an exited nested CLI, even when that parent has no session registration.
+    const hookByPid = new Map();
+    if (this.hooks?.enabled && pids.size) {
+      const candidates = [];
+      for (const hook of (await this.hooks.read(now)) || []) {
+        if (!hook || typeof hook.session !== 'string' || !hook.session
+          || !['running', 'waiting', 'idle'].includes(hook.phase) || !Number.isFinite(hook.at)
+          || !Array.isArray(hook.ancestors) || !Number.isSafeInteger(hook.ownerPid) || hook.ownerPid <= 1
+          || typeof hook.ownerStart !== 'string' || !hook.ownerStart) continue;
+        const pid = hook.ownerPid;
+        if (!pids.has(pid) || !hook.ancestors.includes(pid)) continue;
+        const registration = registrations.get(pid);
+        if (registration?.session && registration.session !== hook.session) continue;
+        const surface = registration?.surface || hook.surface;
+        if (!['desktop', 'terminal'].includes(surface)) continue;
+        candidates.push({ hook, pid, surface });
+      }
+      let ownerStarts = new Map();
+      const ownerPids = [...new Set(candidates.map(candidate => candidate.pid))].slice(0, 64);
+      if (ownerPids.length) {
+        try { ownerStarts = await this.ownerStartsReader(ownerPids); } catch { /* No reliable owner identity: keep file/AX evidence only. */ }
+      }
+      for (const { hook, pid, surface } of candidates) {
+        if (!(ownerStarts instanceof Map) || ownerStarts.get(pid) !== hook.ownerStart) continue;
+        classified.add(pid);
+        if ((source === 'desktop') !== (surface === 'desktop')) continue;
+        // Without a registration, a CLI may have moved to another session. Only
+        // its newest hook session is evidence of its current state.
+        if (!hookByPid.has(pid) || hookByPid.get(pid).at <= hook.at) hookByPid.set(pid, { ...hook, surface });
+      }
+    }
+    const hookSessions = [...hookByPid.values()];
+    for (const [pid, hook] of hookByPid) {
+      states.set(pid, { ...states.get(pid), registrationVerified: false, phase: hook.phase, reason: hook.reason,
+        session: hook.session, surface: hook.surface, at: hook.at, hook: true });
+    }
+    // A session can have more than one registered PID. Prefer its hook state over
+    // an older registration, then keep the freshest evidence for one task count.
+    const bySession = new Map();
+    for (const [pid, state] of states) {
+      const key = state.session ? `session:${state.session}` : `pid:${pid}`;
+      const previous = bySession.get(key);
+      if (!previous || (state.hook && !previous.hook) || (Boolean(state.hook) === Boolean(previous.hook) && state.at >= previous.at)) bySession.set(key, state);
+    }
+    const values = [...bySession.values()];
     const sessionActive = values.filter(s => s.phase === 'running').length;
-    // The visible Stop button can belong to a registered desktop Code session;
-    // use the larger signal rather than double-counting the same task.
-    const activeTasks = Math.max(sessionActive, source === 'desktop' && desktopActivity.activity === 'running' ? 1 : 0);
-    const waiting = values.filter(s => s.phase === 'waiting').length;
+    // AX describes the visible desktop conversation, which may be the same Code
+    // session already counted above. It establishes at least one task, not another.
+    const desktopRunning = source === 'desktop' && (desktopActivity.activity === 'running' || inferredBusy);
+    const activeTasks = Math.max(sessionActive, desktopRunning ? 1 : 0);
+    const desktopWaiting = source === 'desktop' && desktopActivity.activity === 'waiting' ? desktopActivity.waiting : null;
+    const waitingSessions = values.filter(s => s.phase === 'waiting');
+    const waiting = Math.max(waitingSessions.length, desktopWaiting ? 1 : 0);
+    const reasons = new Set([...waitingSessions.map(s => s.reason), desktopWaiting].filter(Boolean));
+    const waitingReason = !waiting ? undefined : reasons.size === 1 && waitingSessions.every(s => s.reason) ? [...reasons][0] : 'both';
     const incomplete = failed || (source === 'code' && classified.size < pids.size) || values.some(s => s.phase === 'unknown');
-    const activity = processes === null ? 'unknown' : activeTasks ? 'running' : waiting ? 'waiting'
+    // A question or permission prompt outranks a running task, as for Codex.
+    const activity = processes === null ? 'unknown' : waiting ? 'waiting' : activeTasks ? 'running'
       : incomplete ? 'unknown' : source === 'desktop'
         ? desktopOpen ? desktopActivity.activity === 'idle' ? 'idle' : 'unknown' : values.length ? 'idle' : 'offline'
         : values.length ? 'idle' : codeProcesses.length && classified.size < pids.size ? 'unknown' : 'offline';
     const surfaces = source === 'desktop'
       ? { desktop: values.length ? `桌面 ${values.length} 个 Code 会话` : desktopOpen ? '桌面已打开' : '桌面未运行', terminal: '终端独立接入' }
       : { desktop: '桌面独立接入', terminal: values.length ? `终端 ${values.length} 个会话` : pids.size > classified.size ? 'Code 进程缺少会话记录' : '终端无运行会话' };
-    const task = activeTasks ? source === 'desktop' && !sessionActive ? 'Claude 桌面正在生成回复' : source === 'desktop' ? `${activeTasks} 项桌面任务有近期活动` : `${activeTasks} 项 Code 任务有近期活动`
-      : waiting ? `${waiting} 项任务等待确认` : activity === 'idle' ? '已连接会话暂无运行任务'
+    const task = waiting ? waitingReason === 'approval' ? waiting > 1 ? `${waiting} 项任务等你授权工具` : 'Claude 在等你授权工具'
+      : waitingReason === 'input' ? waiting > 1 ? `${waiting} 项任务等你回答问题` : 'Claude 在等你回答问题' : `${waiting} 项任务等你回答或确认`
+      : activeTasks ? source === 'desktop' && !sessionActive ? inferredBusy && desktopActivity.activity !== 'running' ? 'Claude 桌面可能正在生成回复（按进程负载推测）' : 'Claude 桌面正在生成回复' : source === 'desktop' ? `${activeTasks} 项桌面任务有近期活动` : `${activeTasks} 项 Code 任务有近期活动`
+      : activity === 'idle' ? '已连接会话暂无运行任务'
         : activity === 'offline' ? source === 'desktop' ? 'Claude 桌面未运行' : 'Claude Code 未运行'
           : source === 'desktop' ? '桌面当前任务状态未知' : 'Code 当前任务状态未知';
-    const taskDetails = this.taskDetailsEnabled ? values.slice(0, 8).map(s => taskDetail({ title: s.title, state: s.phase, updatedAt: s.at }, { now, live: true })) : [];
+    // A verified registration remains current while its owner lives, even when
+    // its last status transition is old. Keep that real transition timestamp.
+    const taskDetails = this.taskDetailsEnabled ? values.slice(0, 8).map(s => taskDetail({ title: s.title, state: s.phase, updatedAt: s.at },
+      { now, live: true, freshMs: s.registrationVerified ? Infinity : FRESH_MS })) : [];
     if (this.taskDetailsEnabled && source === 'desktop' && ['running', 'idle'].includes(desktopActivity.activity)) {
       taskDetails.unshift(taskDetail({ title: null, state: desktopActivity.activity, updatedAt: now, operation: desktopActivity.activity === 'running' ? 'agentMessage' : undefined }, { now, live: true }));
     }
     const result = { id: 'claude', claudeSource: source, source: network.usage && network.state === 'ready' ? 'account' : usage || values.length || plan.name || desktopActivity.trusted ? 'cache' : 'unavailable',
       connection: processes === null ? 'error' : source === 'desktop' ? desktopOpen || values.length ? 'ready' : 'offline' : values.length || pids.size > classified.size ? 'ready' : 'offline',
-      activity, activeTasks, task, plan, ...(this.taskDetailsEnabled ? { taskDetails: taskDetails.slice(0, 8) } : {}),
+      activity, activeTasks, task, plan, waitingTasks: waiting, ...(waitingReason ? { waitingReason } : {}),
+      ...(inferredBusy && desktopActivity.activity !== 'running' ? { activityInferred: true } : {}), ...(this.taskDetailsEnabled ? { taskDetails: taskDetails.slice(0, 8) } : {}),
       quotas: usage?.quotas || [], observedAt: usage?.observedAt || plan.observedAt || null, surfaces,
       activityAccessRequired: source === 'desktop' && desktopOpen && desktopActivity.supported && desktopActivity.trusted === false,
       ...(source === 'desktop' ? { activityAccessState: !desktopActivity.supported ? 'unsupported' : desktopActivity.trusted === true ? 'granted' : desktopActivity.trusted === false ? 'denied' : 'unknown' } : {}),
       ...(source === 'desktop' && require('./claude-desktop.cjs').ACTIVITY_PROBE_ERRORS.includes(desktopActivity.probeError) ? { activityProbeError: desktopActivity.probeError } : {}),
-      activityObservedAt: source === 'desktop' && ['running', 'idle'].includes(desktopActivity.activity) ? new Date(now).toISOString()
-        : values.length ? new Date(Math.max(...values.map(s => s.at))).toISOString() : null,
-      activityDetail: source === 'desktop'
-        ? '桌面普通聊天由 macOS 辅助功能只读发送和停止按钮；桌面 Code 会话单独校验进程和十分钟时效。后台或不可见聊天无法确认时保持未知。'
-        : '仅监看终端 Code 会话，校验进程和十分钟时效；桌面 Code 不计入终端任务。',
+      activityObservedAt: source === 'desktop' && (['running', 'idle', 'waiting'].includes(desktopActivity.activity) || inferredBusy) ? new Date(now).toISOString()
+        : values.length || hookSessions.length ? new Date(Math.max(...values.map(s => s.at), ...hookSessions.map(s => s.at))).toISOString() : null,
+      ...(this.hooks?.enabled ? { activityHooks: true } : {}),
+      activityDetail: (this.hooks?.enabled ? 'Claude Code 状态钩子已启用：Code 会话的运行、工具授权和提问由钩子即时上报。' : '') + (source === 'desktop'
+        ? '桌面普通聊天由 macOS 辅助功能只读发送、停止和工具授权按钮；未授权或无法读取时，按 Claude 渲染进程的负载推测是否正在生成。桌面 Code 会话单独核对存活进程与登记的启动时间；无法核对时使用十分钟时效。'
+        : '仅监看终端 Code 会话，核对存活进程与登记的启动时间；无法核对时使用十分钟时效。桌面 Code 不计入终端任务。'),
       detail: network.state !== 'disabled' ? network.detail : source === 'desktop'
         ? '桌面额度来自当前登录账号的本地用量快照。套餐读取匹配账号和组织的桌面套餐快照，历史档位会标记为历史；Free 或未提供窗口的额度保持未知。'
         : '终端套餐只读取有效的文件型登录；额度仅复用账号和组织均一致的桌面用量快照，无法匹配时保持未知。' };
@@ -265,4 +384,4 @@ class ClaudeStatusReader {
     return result;
   }
 }
-module.exports = { ClaudeStatusReader, normalizeClaudeUsage, normalizeClaudePlan, readClaudePlan, resolveClaudePaths, isCodeProcess, isDesktopEntry, readCodeIdentity };
+module.exports = { ClaudeStatusReader, normalizeClaudeUsage, normalizeClaudePlan, readClaudePlan, resolveClaudePaths, isCodeProcess, isDesktopEntry, readCodeIdentity, readOwnerStarts };

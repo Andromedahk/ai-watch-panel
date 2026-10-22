@@ -32,7 +32,7 @@ try {
   async function quotaGeometry(id) {
     const geometry = await card(id).evaluate(element => {
       const bounds = node => { const box = node.getBoundingClientRect(); return { top: box.top, bottom: box.bottom }; };
-      return { tools: bounds(element.querySelector('.quota-tools')), list: bounds(element.querySelector('.quota-list')),
+      return { tools: bounds(element.querySelector('.card-heading').getBoundingClientRect().height ? element.querySelector('.card-heading') : element.querySelector('.identity')), list: bounds(element.querySelector('.quota-list')),
         footer: bounds(element.querySelector('.task-line')), rows: [...element.querySelectorAll('.quota')].map(bounds) };
     });
     const context = JSON.stringify({ id, viewport: page.viewportSize(), geometry });
@@ -63,10 +63,8 @@ try {
         const labels = await card('antigravity').locator('.model-name').allTextContents();
         assert.equal(labels.some(label => /High|Low|Medium|Thinking/.test(label)), false);
         await expect(card('antigravity').locator('.quota').first()).toHaveAttribute('title', /合并.*High.*Low/);
-        await card('antigravity').getByRole('button', { name: 'Antigravity 下一页额度', exact: true }).click();
-        const next = await card('antigravity').locator('.model-name').allTextContents();
-        assert.equal(new Set([...labels, ...next]).size, animeMode ? 4 : 5);
-        await card('antigravity').getByRole('button', { name: 'Antigravity 上一页额度', exact: true }).click();
+        // All five merged models are listed at once.
+        assert.equal(new Set(labels).size, 5);
         const overflow = await card('codex').evaluate(element => element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1);
         assert.equal(overflow, false);
         await send({ codex: { source: 'cache', connection: 'error', task: '合成测试 · 历史额度展示', plan: { name: 'Pro', status: '官方查询缓存', stale: true },
@@ -95,7 +93,7 @@ try {
   await page.locator('.provider-viewport').evaluate(element => element.scrollTo({ top: 0, behavior: 'instant' }));
   await page.screenshot({ path: 'docs/screenshots/quotas-online-merged.png' });
   assert.equal((await page.evaluate(() => window.panel.getState())).qwenKeychainAllowed, false);
-  console.log('Quota UI checks passed: official weekly-only display, no invented five-hour window, allowances with app closed, historical numbers without current progress, cleared login, merged model names/hover/pagination, both themes and logo modes at six viewport sizes, and three-row ZCode boundaries. All samples synthetic.');
+  console.log('Quota UI checks passed: official weekly-only display, no invented five-hour window, allowances with app closed, historical numbers without current progress, cleared login, merged model names/hover/full list, both themes and logo modes at six viewport sizes, and three-row ZCode boundaries. All samples synthetic.');
 } finally {
   await app.close();
   await rm(profile, { recursive: true, force: true });

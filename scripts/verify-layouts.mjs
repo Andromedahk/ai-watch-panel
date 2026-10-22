@@ -43,7 +43,7 @@ try {
       await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setBounds({width:400,height:900}));
       await page.waitForFunction(()=>innerWidth===400&&innerHeight===900);
       const fit = await page.locator('.provider-card').evaluateAll(cards=>cards.map(card=>{
-        const box=card.getBoundingClientRect(), hero=card.querySelector('.card-heading').getBoundingClientRect(), avatar=card.querySelector('.avatar-launch').getBoundingClientRect(), identity=card.querySelector('.identity').getBoundingClientRect(), area=card.querySelector('.quota-area').getBoundingClientRect(), footer=card.querySelector('.task-line').getBoundingClientRect();
+        const box=card.getBoundingClientRect(), heading=card.querySelector('.card-heading'), hero=(getComputedStyle(heading).display==='contents'?card.querySelector('.identity'):heading).getBoundingClientRect(), avatar=card.querySelector('.avatar-launch').getBoundingClientRect(), identity=card.querySelector('.identity').getBoundingClientRect(), area=card.querySelector('.quota-area').getBoundingClientRect(), footer=card.querySelector('.task-line').getBoundingClientRect();
         return {id:card.dataset.provider,inside:[hero,avatar,identity,area,footer].every(r=>r.left>=box.left-1&&r.right<=box.right+1),separate:hero.bottom<=area.top+1&&area.bottom<=footer.top+1,ordered:document.documentElement.dir==='rtl'?identity.right<=avatar.left+1:avatar.right<=identity.left+1};
       }));
       for(const card of fit)assert.ok(card.inside&&card.separate&&card.ordered,`${id}/${anime}/${theme}/double: ${JSON.stringify(card)}`);
@@ -67,13 +67,15 @@ try {
   for (const id of ['antigravity','qwen','workbuddy']) {
     const card = page.locator(`[data-provider="${id}"]`), credit = id !== 'antigravity';
     const items = credit ? snapshot[id].credits.items : snapshot[id].quotas;
-    for (let index=0;index<items.length;index++) {
-      await expect(card.locator(credit ? '.credit-item' : '.quota-list > .quota')).toHaveCount(1);
-      if (credit) await expect(card.locator('.credit-value bdi')).toHaveText(items[index].remaining);
-      else await expect(card.locator('.quota-label strong bdi')).toHaveText(`${items[index].remaining}%`);
-      if(index+1<items.length)await card.locator('.quota-pagination button').last().click();
+    // Quotas are all listed; credit pools show two tiles and summarize the rest.
+    if (credit) {
+      await expect(card.locator('.credit-item')).toHaveCount(Math.min(2, items.length));
+      for (const [index, item] of items.slice(0, 2).entries()) await expect(card.locator('.credit-value bdi').nth(index)).toHaveText(item.remaining);
+      if (items.length > 2) await expect(card.locator('.more-quotas')).toHaveAttribute('title', new RegExp(items.slice(2).map(item => item.label).join('[\\s\\S]*')));
+    } else {
+      await expect(card.locator('.quota-list > .quota')).toHaveCount(items.length);
+      for (const [index, item] of items.entries()) await expect(card.locator('.quota-label strong bdi').nth(index)).toHaveText(`${item.remaining}%`);
     }
-    for(let index=items.length-1;index>0;index--)await card.locator('.quota-pagination button').first().click();
   }
   const currency = page.locator('[data-provider="deepseek"] .currency-switch');
   if(await currency.count()) {
@@ -89,12 +91,13 @@ try {
       const controls = await page.locator('.toolbar button').evaluateAll(buttons => buttons.every(button => { const r = button.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth; }));
       assert.ok(controls, `${id}: controls outside viewport`);
       const layout = await page.locator('.provider-card').evaluateAll(cards => cards.map(card => {
-        const r = card.getBoundingClientRect(), boxes = ['.card-heading','.quota-area','.task-details','.task-line'].map(selector => card.querySelector(selector).getBoundingClientRect());
+        const r = card.getBoundingClientRect(), boxes = ['.card-heading','.quota-area','.task-details','.task-line'].map(selector => { const el = card.querySelector(selector); return (getComputedStyle(el).display === 'contents' ? card.querySelector('.identity') : el).getBoundingClientRect(); });
         const [heading, quota, tasks, footer] = boxes;
         return { id: card.dataset.provider,
           inside: boxes.every(b => b.left >= r.left - 1 && b.right <= r.right + 1 && b.top >= r.top - 1 && b.bottom <= r.bottom + 1),
-          separate: heading.bottom <= quota.top + 1 && quota.bottom <= tasks.top + 1 && tasks.bottom <= footer.top + 1,
-          compact: quota.height <= 38 && Math.abs(tasks.left-quota.left)<1 && Math.abs(tasks.right-quota.right)<1,
+          // Task details follow the status line in every skin.
+          separate: heading.bottom <= quota.top + 1 && quota.bottom <= footer.top + 1 && footer.bottom <= tasks.top + 1,
+          compact: Math.abs(tasks.left-quota.left)<1 && Math.abs(tasks.right-quota.right)<1 && r.right <= innerWidth + 1 && r.left >= -1,
           stripFit: [...card.querySelectorAll('.quota-area .source-tag,.quota-area .quota-pagination,.quota-area .quota,.quota-area .credit-item,.quota-area .balance-total,.quota-area .balance-empty,.quota-area .credits-empty,.quota-area .claude-empty')].every(el=>{
             const b=el.getBoundingClientRect();return !b.width||!b.height||(b.left>=quota.left-1&&b.right<=quota.right+1&&b.top>=quota.top-1&&b.bottom<=quota.bottom+1);
           }) };
@@ -118,7 +121,7 @@ try {
   assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen()), false);
   assert.deepEqual((await state()).bounds, moved); await expect(page.locator('.task-details')).toHaveCount(0);
   await page.evaluate(() => window.panel.configure({ side: 'right', locked: true, animate: false })); assert.equal((await state()).layout,'double');
-  await page.evaluate(() => window.panel.setCollapsed(true)); assert.equal((await state()).bounds.width,46);
+  await page.evaluate(() => window.panel.setCollapsed(true)); assert.equal((await state()).bounds.width,64);
   await page.evaluate(() => window.panel.setCollapsed(false)); assert.equal((await state()).bounds.width,double.bounds.width);
   await expect(page.locator('.toast')).toHaveCount(0);
   await page.screenshot({path:'.local/qa/layouts/double.png',animations:'disabled',scale:'css'});
@@ -132,9 +135,9 @@ try {
   await expect(fullRestart.locator('main')).toHaveAttribute('data-layout','fullscreen');
   await expect.poll(()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isFullScreen())).toBe(true);
   await fullRestart.evaluate(()=>window.panel.setCollapsed(true));
-  await expect(fullRestart.locator('main')).toHaveAttribute('data-layout','double'); assert.equal((await fullRestart.evaluate(()=>window.panel.getState())).bounds.width,46);
+  await expect(fullRestart.locator('main')).toHaveAttribute('data-layout','double'); assert.equal((await fullRestart.evaluate(()=>window.panel.getState())).bounds.width,64);
   await fullRestart.evaluate(()=>window.panel.setCollapsed(false)); await fullRestart.evaluate(()=>window.panel.setLayout('single'));
   await expect.poll(()=>fullRestart.evaluate(()=>window.panel.getStatus()).then(s=>Object.values(s).filter(p=>p?.taskDetails).length)).toBe(0);
   assert.deepEqual(errors,[]);
-  console.log('Layout checks passed: native fullscreen entry/exit, exact 2x geometry, moved-position restore, two-dimensional sorting, compact 36px quota strips with full-width task areas, all allowance/credit pages and balance currencies, collapse, tray, persistence, invalid input, test restoration and 136 double/fullscreen locale/anime/theme layouts and fullscreen restart.');
+  console.log('Layout checks passed: native fullscreen entry/exit, exact 2x geometry, moved-position restore, two-dimensional sorting, full-width task areas inside the window, every allowance and credit pool and balance currencies, collapse, tray, persistence, invalid input, test restoration and 136 double/fullscreen locale/anime/theme layouts and fullscreen restart.');
 } finally { if(app) await app.close().catch(()=>{}); await rm(profile,{recursive:true,force:true}); }

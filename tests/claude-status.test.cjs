@@ -123,3 +123,180 @@ test('Claude plan refuses permissive, symlinked, oversized or invalid login file
   const outside = path.join(home, 'other.json'); await fs.writeFile(outside, text, { mode: 0o600 });
   await fs.symlink(outside, file); assert.equal((await reader.poll([], now)).plan.name, null);
 });
+
+test('Claude keeps a long busy desktop turn running only when procStart proves the live owner', async () => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-claude-owner-'));
+  try {
+    const dir = path.join(home, '.claude', 'sessions'); await fs.mkdir(dir, { recursive: true });
+    const file = path.join(dir, '40.json'); const old = now - 30 * 60000;
+    const put = async extra => {
+      await fs.writeFile(file, JSON.stringify({ pid: 40, status: 'busy', entrypoint: 'claude-desktop', sessionId: 'S', statusUpdatedAt: old, ...extra }));
+      await fs.utimes(file, old / 1000, old / 1000);
+    };
+    const poll = ownerStartsReader => new ClaudeStatusReader({ home, env: {}, source: 'desktop', ownerStartsReader,
+      usageReader: { poll: async () => ({ state: 'disabled' }), clearSource() {} },
+      desktopActivityReader: async () => ({ activity: 'unknown', trusted: null, supported: true, plan: null }) })
+      .poll([{ pid: 1, command: '/app/Claude', cpu: 0 }, { pid: 40, command: '/app/claude', cpu: 0 }], now);
+    const starts = async () => new Map([[40, 'Thu Oct 22 17:25:40 2026']]);
+    await put({ procStart: 'Thu Oct 22  17:25:40 2026 ' });
+    let result = await poll(starts); assert.equal(result.activity, 'running'); assert.equal(result.activeTasks, 1);
+    await put({ procStart: 'Thu Oct 22 09:00:00 2026' });
+    result = await poll(starts); assert.equal(result.activity, 'unknown'); assert.equal(result.activeTasks, 0);
+    await put({});
+    let asked = false;
+    result = await poll(async () => { asked = true; return starts(); });
+    assert.equal(result.activity, 'unknown'); assert.equal(asked, false);
+    await put({ procStart: 'Thu Oct 22 17:25:40 2026' });
+    result = await poll(async () => { throw new Error('ps failed'); });
+    assert.equal(result.activity, 'unknown'); assert.equal(result.activeTasks, 0);
+  } finally { await fs.rm(home, { recursive: true, force: true }); }
+});
+
+async function ownerFixture(t, { source = 'desktop', platform, ownerStartsReader } = {}) {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-claude-owner-boundaries-'));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const dir = path.join(home, '.claude', 'sessions'); await fs.mkdir(dir, { recursive: true });
+  // Whole seconds avoid filesystem sub-millisecond rounding at exact boundaries.
+  const at = Math.floor(now / 1000) * 1000;
+  const file = path.join(dir, '40.json'), old = at - 30 * 60000;
+  const start = 'Thu Oct 22 17:25:40 2026';
+  const reader = new ClaudeStatusReader({ home, env: {}, source, ...(platform ? { platform } : {}),
+    ownerStartsReader: ownerStartsReader || (async pids => new Map(pids.map(pid => [pid, start]))),
+    usageReader: { poll: async () => ({ state: 'disabled' }), clearSource() {} },
+    desktopActivityReader: async () => ({ activity: 'unknown', trusted: null, supported: true, plan: null }) });
+  // A simulated Windows reader still uses this host's temporary fixture files.
+  reader.paths.config = path.join(home, '.claude');
+  reader.taskDetailsEnabled = true;
+  const put = async (extra = {}, mtime = old) => {
+    await fs.writeFile(file, JSON.stringify({ pid: 40, sessionId: 'S', status: 'busy', procStart: start,
+      entrypoint: source === 'desktop' ? 'claude-desktop' : 'cli', statusUpdatedAt: old, ...extra }));
+    await fs.utimes(file, mtime / 1000, mtime / 1000);
+  };
+  const processes = [{ pid: 1, command: '/app/Claude', cpu: 0 }, { pid: 40, command: '/app/claude', cpu: 0 }];
+  return { reader, put, old, start, at, poll: () => reader.poll(processes, at) };
+}
+
+test('verified owners keep long busy, waiting and idle task details current on both Code surfaces', async t => {
+  for (const source of ['desktop', 'code']) {
+    for (const [status, activity] of [['busy', 'running'], ['waiting', 'waiting'], ['idle', 'idle']]) {
+      await t.test(`${source} ${status}`, async t => {
+        const { put, poll, old } = await ownerFixture(t, { source });
+        await put({ status, name: 'Long task /tmp/private/path token=PRIVATE' });
+        const result = await poll();
+        // An idle Code session cannot prove the separately open desktop chat idle.
+        assert.equal(result.activity, source === 'desktop' && status === 'idle' ? 'unknown' : activity);
+        assert.equal(result.activeTasks, status === 'busy' ? 1 : 0);
+        assert.equal(result.waitingTasks, status === 'waiting' ? 1 : 0);
+        assert.equal(result.taskDetails[0].state, activity);
+        assert.equal(result.taskDetails[0].stale, false);
+        assert.equal(result.taskDetails[0].updatedAt, new Date(old).toISOString());
+        assert.match(result.taskDetails[0].title, /^Long task/);
+        assert.doesNotMatch(JSON.stringify(result), /PRIVATE|private\/path|registrationVerified/);
+      });
+    }
+  }
+});
+
+test('missing owner identity and ps failure retain the exact mtime fallback including future limits', async t => {
+  const cases = [
+    ['missing identity', { procStart: null }],
+    ['empty identity', { procStart: '' }],
+    ['ps returned no owner', {}, async () => new Map()],
+    ['ps unavailable', {}, async () => { throw Object.assign(new Error('ps not found'), { code: 'ENOENT' }); }],
+    ['malformed reader result', {}, async () => null],
+  ];
+  for (const [name, extra, ownerStartsReader] of cases) {
+    await t.test(name, async t => {
+      const { put, poll, at } = await ownerFixture(t, { ownerStartsReader });
+      for (const [age, activity] of [[600000, 'running'], [600001, 'unknown'], [-120000, 'running'], [-120001, 'unknown']]) {
+        await put(extra, at - age);
+        const result = await poll();
+        assert.equal(result.activity, activity, `mtime age ${age}`);
+        assert.equal(result.taskDetails[0].state, activity);
+      }
+      // As before, an old idle registration is idle even without identity proof.
+      await put({ ...extra, status: 'idle' });
+      assert.equal((await poll()).taskDetails[0].state, 'idle');
+    });
+  }
+});
+
+test('proven PID reuse rejects fresh and old busy, waiting and idle registrations on both surfaces', async t => {
+  for (const source of ['desktop', 'code']) {
+    for (const status of ['busy', 'waiting', 'idle']) {
+      for (const fresh of [true, false]) {
+        await t.test(`${source} ${status} ${fresh ? 'fresh' : 'old'}`, async t => {
+          const { put, poll, at, old } = await ownerFixture(t, { source });
+          await put({ status, procStart: 'Thu Oct 22 09:00:00 2026' }, fresh ? at : old);
+          const result = await poll();
+          assert.equal(result.activity, 'unknown');
+          assert.equal(result.activeTasks, 0); assert.equal(result.waitingTasks, 0);
+          assert.deepEqual(result.taskDetails, []);
+        });
+      }
+    }
+  }
+});
+
+test('a reused PID old registration cannot block its verified new owner hook session', async t => {
+  const { reader, put, poll, at, start } = await ownerFixture(t, { source: 'code' });
+  reader.hooks = { enabled: true, read: async () => [{ session: 'new-session', ancestors: [40], ownerPid: 40,
+    ownerStart: start, phase: 'waiting', reason: 'input', surface: 'terminal', at }] };
+  for (const entrypoint of ['cli', 'claude-desktop']) {
+    await put({ entrypoint, sessionId: 'old-session', name: 'Old task', procStart: 'Thu Oct 22 09:00:00 2026' }, at);
+    const result = await poll();
+    assert.equal(result.activity, 'waiting'); assert.equal(result.waitingTasks, 1);
+    assert.equal(result.waitingReason, 'input');
+    assert.equal(result.taskDetails[0].state, 'waiting');
+    assert.equal(result.taskDetails[0].title, null);
+  }
+});
+
+test('verified owner uses a valid status transition time without inventing a current timestamp', async t => {
+  const { put, poll, old, at } = await ownerFixture(t);
+  await put({ statusUpdatedAt: old + 1000 });
+  let result = await poll();
+  assert.equal(result.taskDetails[0].updatedAt, new Date(old + 1000).toISOString());
+  await put({ statusUpdatedAt: at + 120001 });
+  result = await poll();
+  assert.equal(result.taskDetails[0].updatedAt, new Date(old).toISOString());
+  assert.equal(result.taskDetails[0].state, 'running');
+  await put({ status: 'future-status' });
+  assert.equal((await poll()).activity, 'unknown');
+});
+
+test('hook detail freshness does not inherit a verified registration timestamp policy', async t => {
+  const { reader, put, poll, old, start } = await ownerFixture(t);
+  reader.hooks = { enabled: true, read: async () => [{ session: 'S', ancestors: [40], ownerPid: 40,
+    ownerStart: start, phase: 'waiting', reason: 'approval', surface: 'desktop', at: old }] };
+  for (const procStart of [start, null]) {
+    await put({ procStart });
+    const result = await poll();
+    assert.equal(result.activity, 'waiting');
+    assert.equal(result.taskDetails[0].state, 'unknown');
+    assert.equal(result.taskDetails[0].stale, true);
+    assert.equal(result.taskDetails[0].updatedAt, new Date(old).toISOString());
+  }
+});
+
+test('Windows default owner lookup with no ps falls back to the original mtime rule', async t => {
+  // Load the actual default reader with an unavailable native command, as on
+  // Windows. No test override replaces the ownerStartsReader implementation.
+  const { createRequire } = require('node:module');
+  const { runInNewContext } = require('node:vm');
+  const file = require.resolve('../electron/claude-status.cjs'), localRequire = createRequire(file);
+  let requests = 0;
+  const module = { exports: {} };
+  runInNewContext(await fs.readFile(file, 'utf8'), { module, Map, Buffer, process,
+    require: name => name === 'node:child_process' ? { execFile(command, args, options, callback) {
+      requests++; assert.equal(command, '/bin/ps');
+      callback(Object.assign(new Error('No ps on Windows'), { code: 'ENOENT' }));
+    } } : localRequire(name) });
+  const { reader, put, poll } = await ownerFixture(t, { platform: 'win32' });
+  reader.ownerStartsReader = module.exports.readOwnerStarts;
+  await put();
+  assert.equal((await poll()).activity, 'unknown');
+  await put({}, now);
+  assert.equal((await poll()).activity, 'running');
+  assert.equal(requests, 2);
+});

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import policy from '../electron/window-policy.cjs';
 
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-qa-'));
 const live = process.env.AI_WATCH_LIVE_QA === '1';
@@ -14,7 +15,7 @@ try {
   await page.getByRole('heading', { name: 'AI WATCH', exact: true }).waitFor();
   // Wait on committed DOM state; an asynchronous predicate can resolve before rendering.
   await page.waitForFunction(() => Boolean(document.querySelector('main')?.getAttribute('data-sampled-at')));
-  // Keep the historical four-card layout acceptance; six-card overflow has a dedicated suite.
+  // Four-card acceptance; the eight-card overflow has a dedicated suite.
   await page.evaluate(() => window.panel.setEnabled(['claude', 'codex', 'antigravity', 'deepseek']));
   await page.waitForFunction(() => document.querySelectorAll('.provider-card').length === 4);
   const expected = await page.evaluate(() => window.panel.getStatus());
@@ -22,15 +23,19 @@ try {
     const cards = document.querySelectorAll('.provider-card');
     const quotasReady = ['claude', 'codex', 'antigravity'].every((id, index) => {
       const card = cards[index];
-      return card?.querySelector('.task-line > span:nth-child(2)')?.textContent === snapshot[id].task
-        && card.querySelectorAll('.quota').length === (id === 'claude' && !snapshot[id].quotas.length ? 0 : Math.max(1, Math.min(3, snapshot[id].quotas.length)));
+      return card?.querySelector('.task-line .task-text')?.textContent === snapshot[id].task
+        && card.querySelectorAll('.quota').length === (id === 'claude' && !snapshot[id].quotas.length ? 0 : Math.max(1, snapshot[id].quotas.length));
     });
     const balanceReady = cards[3]?.querySelector('.balance-content')
-      && cards[3].querySelector('.task-line > span:nth-child(2)')?.textContent === snapshot.deepseek.task;
+      && cards[3].querySelector('.task-line .task-text')?.textContent === snapshot.deepseek.task;
     return quotasReady && balanceReady && (snapshot.deepseek.balance?.wallets.length
       ? cards[3].querySelector('.balance-total')?.getAttribute('title') === `${snapshot.deepseek.balance.wallets[0].currency} ${snapshot.deepseek.balance.wallets[0].total}`
       : Boolean(cards[3].querySelector('.balance-empty')));
   }, expected);
+  // Dock/menu-bar visibility may change the work area after launch without a
+  // monitor geometry change. The panel preserves its position until redocked;
+  // explicitly exercise that action before comparing with the current area.
+  await page.evaluate(() => window.panel.dock());
   const native = await app.evaluate(({ BrowserWindow, screen }) => {
     const win = BrowserWindow.getAllWindows()[0];
     const display = screen.getDisplayMatching(win.getBounds());
@@ -40,7 +45,8 @@ try {
       sandbox: win.webContents.getLastWebPreferences().sandbox };
   });
   assert.equal(native.bounds.height, native.workArea.height);
-  assert.ok(Math.abs(native.bounds.width * 4.5 - native.bounds.height) <= 2.25);
+  // Column width follows the work-area height (÷ WIDTH_DIVISOR, clamped to MIN/MAX).
+  assert.equal(native.bounds.width, policy.columnWidth(native.workArea.height));
   assert.equal(native.bounds.x + native.bounds.width, native.workArea.x + native.workArea.width);
   assert.equal(native.bounds.y, native.workArea.y);
   assert.equal(native.resizable, false);
@@ -60,37 +66,36 @@ try {
       const footer = card.querySelector('.task-line').getBoundingClientRect();
       return header.bottom > first.top || last.bottom > footer.top;
     });
-    const images = [...document.querySelectorAll('.panel-regions .avatar img')];
+    const images = [...document.querySelectorAll('.provider-card .avatar img')];
     return { regions, overlaps, images: images.length === 4 && images.every((image) => image.complete && image.naturalWidth > 0),
       quotaCount: document.querySelectorAll('[role="progressbar"]').length };
   });
   assert.equal(layout.regions.length, 5);
   for (const region of layout.regions) { assert.equal(region.overflowX, false); assert.equal(region.overflowY, false); }
-  assert.ok(Math.abs(layout.regions[0].height * 2 - layout.regions[1].height) < 1);
-  for (const region of layout.regions.slice(2)) assert.ok(Math.abs(region.height - layout.regions[1].height) < 1);
+  // Cards size to their content in the watch skin; each is still taller than the toolbar.
+  for (const region of layout.regions.slice(1)) assert.ok(region.height > layout.regions[0].height);
   assert.equal(layout.images, true);
   assert.ok(layout.overlaps.every((value) => value === false));
   assert.ok(layout.quotaCount >= 3);
   assert.equal(await page.locator('.provider-card').last().getByRole('progressbar').count(), 0);
   if (!live) {
-    assert.equal(layout.quotaCount, 5);
-    assert.equal(await page.locator('.claude-empty strong').innerText(), 'Code 额度暂不可用');
+    assert.equal(await page.locator('.claude-empty strong').innerText(), '额度未知');
     assert.equal(await page.locator('.task-line .status-dot.waiting').count(), variant === 'glow-running' ? 0 : 1);
-    assert.equal(await page.locator('.quota-unknown').count(), 1);
-    assert.equal(await page.locator('.quota-pagination').innerText(), '1/5');
+    assert.ok(await page.locator('.quota-unknown').count() >= 1);
     assert.equal(await page.locator('.balance-total strong').innerText(), '13.57');
     assert.equal(await page.locator('.currency-switch').innerText(), 'CNY ↔');
   }
   if (glow) {
-    const lights = await page.locator('.panel-regions .avatar').evaluateAll(elements => elements.map(el => ({
+    const lights = await page.locator('.provider-card .avatar').evaluateAll(elements => elements.map(el => ({
       state: el.getAttribute('data-glow'), color: el.getAttribute('data-provider') === 'antigravity' ? 'rainbow' : getComputedStyle(el).getPropertyValue('--halo-color').trim(),
       duration: getComputedStyle(el, '::before').animationDuration,
     })));
     assert.deepEqual(lights.map(l => l.state), ['running', variant === 'glow-attention' ? 'attention' : 'running', 'running', 'running']);
-    assert.ok(lights.every(l => l.duration === '5s'));
+    // Running halos breathe every 5 s; a Codex/Claude prompt pulses faster so it reads as urgent.
+    assert.deepEqual(lights.map(l => l.duration), lights.map(l => l.state === 'attention' ? '2.4s' : '5s'));
     assert.equal(lights[1].color, variant === 'glow-attention' ? '#ff555f' : '#c5d494');
-    await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.card-heading .avatar'), '::before').opacity) > .98);
-    console.log(JSON.stringify({ glow: variant, colors: lights.map(l => l.color), cycle: '5 seconds' }));
+    await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.provider-card .card-heading .avatar'), '::before').opacity) > .98);
+    console.log(JSON.stringify({ glow: variant, colors: lights.map(l => l.color), cycles: lights.map(l => l.duration) }));
   }
   const output = live ? '.local/qa/live-panel.png' : glow ? `docs/screenshots/${variant}.png` : 'docs/screenshots/panel.png';
   await mkdir(path.dirname(output), { recursive: true });
@@ -102,7 +107,7 @@ try {
       walletCount: snapshot[id].balance?.wallets.length }));
   });
   assert.equal(layout.quotaCount, status.filter(provider => provider.provider !== 'deepseek')
-    .reduce((total, provider) => total + (provider.provider === 'claude' && !provider.quotaRows ? 0 : Math.max(1, Math.min(3, provider.quotaRows))), 0));
+    .reduce((total, provider) => total + (provider.provider === 'claude' && !provider.quotaRows ? 0 : Math.max(1, provider.quotaRows)), 0));
   console.log(JSON.stringify({ result: 'passed', data: live ? 'local adapters' : 'synthetic fixture',
     logicalSize: `${native.bounds.width}×${native.bounds.height}`, scaleFactor: native.scaleFactor,
     regions: 5, quotaRows: layout.quotaCount, images: '4 loaded', overflow: 'none', isolation: 'enabled', status }, null, 2));

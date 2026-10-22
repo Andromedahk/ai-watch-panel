@@ -5,6 +5,9 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
+
+const { EVENTS, hookCommand } = createRequire(import.meta.url)('../electron/claude-hooks.cjs');
 
 const execute = promisify(execFile);
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-resources-'));
@@ -82,6 +85,8 @@ try {
 
   const rainbow = page.locator('.provider-card[data-provider="antigravity"] .avatar-halo > span');
   await expect(rainbow).toHaveCount(1);
+  // Antigravity lists every model, so at 200×900 its card starts below the fold; bring it into view first.
+  await page.locator('.provider-card[data-provider="antigravity"]').evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
   await expect.poll(() => pseudoAnimation(rainbow)).toEqual({ name: 'halo-spectrum', state: 'running', duration: '10s' });
   const spectrum = await rainbow.evaluate(element => {
     const style = getComputedStyle(element, '::before');
@@ -93,13 +98,15 @@ try {
   assert.match(spectrum.background, /conic-gradient/);
   assert.equal(spectrum.willChange, 'transform');
   assert.deepEqual(spectrum.declarations, ['transform']);
+  await page.locator('.provider-viewport').evaluate(element => { element.scrollTop = 0; });
+  await expect(claude).toHaveAttribute('data-animation-paused', 'false');
   // Only an explicit permission denial may request another grant. Execution
   // failures and granted-but-unreadable windows need distinct user feedback.
   const snapshot = await page.evaluate(() => window.panel.getStatus());
   for (const [access, error, expected] of [
     ['granted', 'timeout', '已授权，暂无法读取活动'],
     ['unknown', 'invalid-output', '活动读取失败'],
-    ['denied', undefined, '待授权'],
+    ['denied', undefined, '辅助功能未授权'],
   ]) {
     const status = { ...snapshot, claude: { ...snapshot.claude, activity: 'unknown', activeTasks: 0,
       activityAccessState: access, activityAccessRequired: access === 'denied', activityProbeError: error } };
@@ -107,7 +114,9 @@ try {
       BrowserWindow.getAllWindows()[0].webContents.send('panel:status-changed', value);
     }, status);
     await expect(claude.locator('.task-line')).toContainText(expected);
-    if (access !== 'denied') await expect(claude.locator('.task-line')).not.toContainText('待授权');
+    // A denial swaps the source tag for a one-click button that opens the Accessibility pane.
+    await expect(claude.locator('.task-line .grant-access')).toHaveCount(access === 'denied' ? 1 : 0);
+    if (access !== 'denied') await expect(claude.locator('.task-line')).not.toContainText('未授权');
   }
   await page.evaluate(() => window.panel.refreshStatus());
   await expect(avatar).toHaveAttribute('data-glow', 'running');
@@ -117,7 +126,7 @@ try {
   await expect(claude).toHaveAttribute('data-animation-paused', 'true');
   await expect(avatar).toHaveAttribute('data-glow', 'running');
   await expect.poll(() => pseudoAnimation(avatar)).toEqual({ name: 'logo-breathe', state: 'paused', duration: '5s' });
-  await expect.poll(() => claude.locator('.status-dot.active').evaluate(element => getComputedStyle(element).animationPlayState)).toBe('paused');
+  await expect.poll(() => claude.locator('.status-dot.active').evaluateAll(elements => elements.every(element => getComputedStyle(element).animationPlayState === 'paused'))).toBe(true);
   await expect.poll(() => pseudoAnimation(rainbow)).toEqual({ name: 'halo-spectrum', state: 'paused', duration: '10s' });
   const hiddenLight = page.locator('.hidden-activity-light[data-provider="claude"]');
   await expect(hiddenLight).toHaveAttribute('data-glow', 'running');
@@ -198,6 +207,26 @@ try {
       try { await window.panel.setClaudeSource(value); return false; } catch { return true; }
     }, invalid), true);
   }
+  // Claude Code status hooks: test profiles register them in a private settings copy only.
+  const hookSettings = path.join(profile, 'claude-config', 'settings.json');
+  const hooksToggle = page.getByRole('checkbox', { name: 'Claude Code 状态钩子', exact: true });
+  await expect(hooksToggle).not.toBeChecked();
+  await hooksToggle.click(); await expect(hooksToggle).toBeChecked();
+  const registered = JSON.parse(await readFile(hookSettings, 'utf8'));
+  const registeredScript = path.join(profile, 'ai-watch-claude-hook.sh');
+  assert.equal(Object.keys(registered.hooks).length, EVENTS.length);
+  for (const event of EVENTS) {
+    const commands = registered.hooks[event].flatMap(group => group.hooks).map(hook => hook.command);
+    assert.deepEqual(commands, [hookCommand(registeredScript, event)]);
+  }
+  assert.equal(JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).claudeHooksEnabled, true);
+  assert.equal((await page.evaluate(() => window.panel.getState())).claudeHooksStatus.installed, true);
+  for (const invalid of ['true', 1, null, {}]) {
+    assert.equal(await page.evaluate(async value => { try { await window.panel.setClaudeHooks(value); return false; } catch { return true; } }, invalid), true);
+  }
+  await hooksToggle.click(); await expect(hooksToggle).not.toBeChecked();
+  assert.deepEqual(JSON.parse(await readFile(hookSettings, 'utf8')), {});
+  assert.equal(JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).claudeHooksEnabled, false);
   assert.equal((await page.evaluate(() => window.panel.getState())).claudeSource, 'code');
   await page.evaluate(() => localStorage.setItem('AI_WATCH_CACHE_KEEP', 'KEEP'));
   await writeFile(path.join(profile, 'claude-desktop-plan.json'), 'KEEP');
@@ -266,7 +295,7 @@ try {
       'rejected cache root preserves startup/settings/storage/plan', 'main and helper exit'],
     processAudits, metrics,
   }, null, 2));
-  console.log('Resource checks passed: visible/offscreen/hidden animation states, running hidden activity indicator, transform spectrum, Claude source controls, invalid IPC, fixture access isolation, restart persistence, safe startup after rejected cache root and no remaining main/renderer/helpers after all exits.');
+  console.log('Resource checks passed: visible/offscreen/hidden animation states, running hidden activity indicator, transform spectrum, Claude source controls, Claude Code status hook registration in a private settings copy, invalid IPC, fixture access isolation, restart persistence, safe startup after rejected cache root and no remaining main/renderer/helpers after all exits.');
   if (cpuEnabled) console.log(JSON.stringify({ syntheticFixture: true, metrics }, null, 2));
 } finally {
   if (app) await closeAndVerify();

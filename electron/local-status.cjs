@@ -41,10 +41,16 @@ function withDatabase(file, read) {
 }
 async function processes() {
   if (process.platform === 'win32') return null;
-  const { stdout } = await execute('ps', ['-ax', '-o', 'pid=,comm='], { timeout: 2000, maxBuffer: 1024 * 1024 });
-  return stdout.split('\n').flatMap((line) => {
-    const match = line.trim().match(/^(\d+)\s+(.+)$/);
-    return match ? [{ pid: Number(match[1]), command: match[2] }] : [];
+  const { stdout } = await execute('ps', ['-ax', '-o', 'pid=,%cpu=,comm='], { timeout: 2000, maxBuffer: 1024 * 1024 });
+  return parseProcessList(stdout);
+}
+// `ps` prints the decaying CPU average with the locale's decimal separator.
+function parseProcessList(stdout) {
+  return String(stdout).split('\n').flatMap((line) => {
+    const match = line.trim().match(/^(\d+)\s+(\d+(?:[.,]\d+)?)\s+(.+)$/);
+    if (!match) return [];
+    const cpu = Number(match[2].replace(',', '.'));
+    return [{ pid: Number(match[1]), cpu: Number.isFinite(cpu) ? cpu : 0, command: match[3] }];
   });
 }
 function postLocal(port, token, method) {
@@ -348,4 +354,4 @@ class LocalStatusReader {
         : '本地服务未连接；尝试只读任务缓存，历史运行标记不作为当前运行证据。' };
   }
 }
-module.exports = { LocalStatusReader, postLocal, readTail };
+module.exports = { LocalStatusReader, postLocal, readTail, parseProcessList };

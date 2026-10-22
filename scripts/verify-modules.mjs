@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const all = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi', 'qwen', 'workbuddy'];
-const names = { claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity', deepseek: 'DeepSeek Harness', zcode: 'ZCode', kimi: 'Kimi Code', qwen: 'Qwen（千问）', workbuddy: 'WorkBuddy' };
+const names = { claude: 'Claude', codex: 'Codex', antigravity: 'Antigravity', deepseek: 'DeepSeek Harness', zcode: 'ZCode', kimi: 'Kimi Code', qwen: 'Qwen（千问）', workbuddy: 'WorkBuddy' };
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-modules-'));
 const launch = () => electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: 'fixture' } });
 let app = await launch();
@@ -17,6 +17,18 @@ try {
   const light = id => page.locator(`.hidden-activity-light[data-provider="${id}"]`);
   const order = () => page.locator('.provider-card').evaluateAll(cards => cards.map(el => el.dataset.provider));
   const hiddenIds = () => page.locator('.hidden-activity-light').evaluateAll(lights => lights.map(el => el.dataset.provider));
+  const visibilityRatio = id => card(id).evaluate(el => new Promise(resolve => {
+    const observer = new IntersectionObserver(([entry]) => {
+      observer.disconnect(); resolve(entry.intersectionRatio);
+    }, { root: el.parentElement, threshold: [0, .6, 1] });
+    observer.observe(el);
+  }));
+  const expectVisibility = async (ids, visible) => {
+    for (const id of ids) {
+      if (visible) await expect.poll(() => visibilityRatio(id)).toBeGreaterThanOrEqual(.6);
+      else await expect.poll(() => visibilityRatio(id)).toBeLessThan(.6);
+    }
+  };
   const state = () => page.evaluate(() => window.panel.getState());
   const open = () => page.getByRole('button', { name: '打开配置', exact: true }).click();
   const close = async () => {
@@ -50,12 +62,15 @@ try {
   await ready(); await page.bringToFront();
   // Allow the native work area to settle before testing long-press gestures.
   await page.waitForTimeout(1000);
+  // Keep offscreen checks independent of the current display's native work-area height.
+  await page.setViewportSize({ width: 360, height: 900 });
+  await expect.poll(() => page.evaluate(() => [innerWidth, innerHeight])).toEqual([360, 900]);
   await expect.poll(order).toEqual(all);
   assert.deepEqual((await state()).enabledProviders, all);
   const bounds = (await state()).bounds;
   const header = await page.locator('.control-region').boundingBox();
   const firstHeight = (await card('claude').boundingBox()).height;
-  assert.ok(Math.abs(header.height * 2 - firstHeight) < 1);
+  assert.ok(firstHeight > header.height, 'Cards must be taller than the toolbar');
   const layout = await viewport().evaluate(el => ({ overflowX: el.scrollWidth > el.clientWidth, overflowY: el.scrollHeight > el.clientHeight, childCount: el.children.length }));
   assert.deepEqual(layout, { overflowX: false, overflowY: true, childCount: 8 });
   assert.equal(await page.locator('.provider-viewport .avatar img').evaluateAll(images => images.length === 8 && images.every(image => image.complete && image.naturalWidth > 0)), true);
@@ -63,11 +78,17 @@ try {
     const rect = el.getBoundingClientRect();
     return { left: rect.left, right: innerWidth - rect.right, top: rect.top, bottom: rect.bottom, radius: getComputedStyle(el).borderRadius };
   }));
-  for (const item of spaces) { assert.equal(item.left, 8); assert.equal(item.right, 8); assert.equal(item.radius, '14px'); }
-  for (let i = 1; i < spaces.length; i++) assert.ok(Math.abs(spaces[i].top - spaces[i - 1].bottom - 8) < 1);
+  // Every card shares the same gutters, radius and vertical gap as the first one.
+  const gap = spaces[1].top - spaces[0].bottom;
+  assert.ok(gap >= 0 && gap <= 16, `Unexpected card gap ${gap}`);
+  for (const item of spaces) {
+    assert.ok(Math.abs(item.left - spaces[0].left) < 1 && Math.abs(item.right - spaces[0].right) < 1 && Math.abs(item.left - item.right) < 1);
+    assert.equal(item.radius, spaces[0].radius);
+  }
+  for (let i = 1; i < spaces.length; i++) assert.ok(Math.abs(spaces[i].top - spaces[i - 1].bottom - gap) < 1);
   console.log('Module geometry and eight image assets passed.');
 
-  // Every enabled count keeps the same native geometry and four-card viewport.
+  // Every enabled count keeps the same native geometry; only a long list scrolls.
   await open();
   for (const ids of Array.from({ length: all.length + 1 }, (_, length) => all.slice(0, length))) {
     await selectEnabled(ids); await close();
@@ -81,7 +102,9 @@ try {
       await expect(page.getByRole('dialog')).toBeVisible();
     } else {
       assert.ok(Math.abs((await card(ids[0]).boundingBox()).height - firstHeight) < 1, 'Card height must not stretch when fewer modules are enabled');
-      assert.equal(await viewport().evaluate(el => el.scrollHeight > el.clientHeight), ids.length > 4);
+      const overflows = await viewport().evaluate(el => el.scrollHeight > el.clientHeight);
+      if (ids.length <= 1) assert.equal(overflows, false);
+      if (ids.length === all.length) assert.equal(overflows, true);
       await open();
     }
   }
@@ -89,14 +112,15 @@ try {
   await page.getByRole('checkbox', { name: '测试模式', exact: true }).check();
   await expect(page.locator('.test-provider select')).toHaveCount(16);
   await page.getByRole('button', { name: '全部待机', exact: true }).click();
-  await activity('zcode', 'running'); await activity('kimi', 'running');
+  await activity('workbuddy', 'running'); await activity('kimi', 'running');
   await close(); await scroll('top');
-  await expect.poll(hiddenIds).toEqual(['zcode', 'kimi']);
+  await expectVisibility(['kimi', 'workbuddy'], false);
+  await expect.poll(hiddenIds).toEqual(['kimi', 'workbuddy']);
   const lightStyle = id => light(id).evaluate(el => ({
     color: getComputedStyle(el).getPropertyValue('--halo-color').trim(),
     animations: [getComputedStyle(el), getComputedStyle(el, '::before'), getComputedStyle(el, '::after')].map(style => ({ name: style.animationName, duration: style.animationDuration })),
   }));
-  for (const [id, color] of [['zcode', '#6f35b5'], ['kimi', '#8de8ee']]) {
+  for (const [id, color] of [['kimi', '#8de8ee'], ['workbuddy', '#14c9a5']]) {
     await expect(light(id)).toHaveAttribute('data-glow', 'running');
     const style = await lightStyle(id);
     assert.equal(style.color, color);
@@ -106,14 +130,15 @@ try {
   await mkdir('docs/screenshots', { recursive: true });
   await page.screenshot({ path: 'docs/screenshots/module-overflow.png' });
   // Indicators are buttons: clicking reveals the right provider and clears its hidden alert.
-  await light('kimi').click();
-  await expect.poll(() => card('kimi').evaluate(el => {
+  await light('workbuddy').click();
+  await expect.poll(() => card('workbuddy').evaluate(el => {
     const card = el.getBoundingClientRect(), view = el.parentElement.getBoundingClientRect();
     return card.top >= view.top - 1 && card.bottom <= view.bottom + 1;
   })).toBe(true);
+  await expectVisibility(['kimi', 'workbuddy'], true);
   await expect(light('kimi')).toHaveCount(0);
-  await expect(light('zcode')).toHaveCount(0);
-  for (const id of ['zcode', 'kimi']) {
+  await expect(light('workbuddy')).toHaveCount(0);
+  for (const id of ['workbuddy', 'kimi']) {
     const metrics = await card(id).evaluate(el => {
       const heading = el.querySelector('.card-heading').getBoundingClientRect();
       const quota = el.querySelector('.quota-area').getBoundingClientRect();
@@ -127,7 +152,7 @@ try {
     });
     assert.equal(metrics.overflow, false); assert.equal(metrics.overlap, false);
     assert.equal(metrics.imageLoaded, true); assert.equal(metrics.titleFits, true);
-    assert.equal(metrics.color, id === 'zcode' ? '#6f35b5' : '#8de8ee');
+    assert.equal(metrics.color, id === 'workbuddy' ? '#14c9a5' : '#8de8ee');
   }
   await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.provider-card[data-provider="kimi"] .avatar'), '::before').opacity) > .9);
   await page.screenshot({ path: 'docs/screenshots/modules-new.png' });
@@ -135,18 +160,20 @@ try {
   assert.deepEqual((await state()).bounds, bounds);
 
   // Waiting uses the provider color, except Codex waiting takes red precedence over running.
-  await open(); await activity('zcode', 'waiting'); await activity('codex', 'mixed'); await close();
-  await scroll('bottom'); await expect(light('codex')).toHaveAttribute('data-glow', 'attention');
+  await open(); await activity('workbuddy', 'waiting'); await activity('codex', 'mixed'); await close();
+  await scroll('bottom'); await expectVisibility(['codex'], false);
+  await expect(light('codex')).toHaveAttribute('data-glow', 'attention');
   assert.equal((await lightStyle('codex')).color, '#ff555f');
-  await light('codex').click(); await expect(light('codex')).toHaveCount(0);
-  await scroll('top'); await expect(light('zcode')).toHaveAttribute('data-glow', 'running');
-  assert.equal((await lightStyle('zcode')).color, '#6f35b5');
+  await light('codex').click(); await expectVisibility(['codex'], true);
+  await expect(light('codex')).toHaveCount(0);
+  await scroll('top'); await expect(light('workbuddy')).toHaveAttribute('data-glow', 'running');
+  assert.equal((await lightStyle('workbuddy')).color, '#14c9a5');
   // Disable an active provider: no card or hidden-activity light remains for it.
-  await open(); await toggleEnabled('zcode', false);
-  await close(); await expect(card('zcode')).toHaveCount(0); await expect(light('zcode')).toHaveCount(0);
+  await open(); await toggleEnabled('workbuddy', false);
+  await close(); await expect(card('workbuddy')).toHaveCount(0); await expect(light('workbuddy')).toHaveCount(0);
   await expect(light('kimi')).toHaveCount(1);
-  await open(); await toggleEnabled('zcode', true);
-  await activity('kimi', 'idle'); await activity('zcode', 'idle'); await close();
+  await open(); await toggleEnabled('workbuddy', true);
+  await activity('kimi', 'idle'); await activity('workbuddy', 'idle'); await close();
   await expect(page.locator('.hidden-activity-light')).toHaveCount(0);
   console.log('Hidden-activity colors, waiting precedence, reveal and clearing passed.');
 
@@ -182,7 +209,7 @@ try {
   await expect(card('workbuddy')).toHaveClass(/is-dragging/);
   await page.mouse.move(box.x + box.width / 2, view.y + view.height - 12, { steps: 12 });
   await expect.poll(() => viewport().evaluate(el => el.scrollTop), { timeout: 10000 }).toBeGreaterThan(firstHeight);
-  await expect(page.locator('.sort-hint bdi')).toHaveText('8', { timeout: 10000 });
+  await expect(page.locator('.sort-hint')).toContainText('第 8 位', { timeout: 10000 });
   await page.mouse.up(); await expect.poll(order).toEqual(all);
   await expect.poll(async () => (await state()).providerOrder).toEqual(all);
   assert.deepEqual((await state()).bounds, bounds);
@@ -212,7 +239,7 @@ try {
   await expect.poll(order).toEqual(['kimi', 'claude']);
   assert.deepEqual((await state()).enabledProviders, savedEnabled); assert.deepEqual((await state()).providerOrder, savedOrder);
   await expect(page.locator('main')).toHaveAttribute('data-test-mode', 'false');
-  console.log('Module checks passed: eight logos, 8px geometry, all enabled counts from 0 through 8, fixed header, scroll, colored hidden activity, Codex red precedence, waiting/idle/disabled clearing, reveal button, animation/theme compatibility, cross-screen keyboard and auto-scroll drag, subset sorting, validated IPC, saved selection and cold restart.');
+  console.log('Module checks passed: eight logos, shared card geometry, all enabled counts from 0 through 8, fixed header, scroll, colored hidden activity, Codex red precedence, waiting/idle/disabled clearing, reveal button, animation/theme compatibility, cross-screen keyboard and auto-scroll drag, subset sorting, validated IPC, saved selection and cold restart.');
 } finally {
   await app.close(); await rm(profile, { recursive: true, force: true });
 }

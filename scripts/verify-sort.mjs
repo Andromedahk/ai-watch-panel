@@ -33,12 +33,14 @@ try {
   const header = await page.locator('.control-region').boundingBox();
   const layout = await page.locator('.provider-card').evaluateAll(cards => cards.map(el => {
     const r = el.getBoundingClientRect();
-    return { left: r.left, right: innerWidth - r.right, radius: getComputedStyle(el).borderRadius, top: r.top, bottom: r.bottom };
+    return { left: r.left, right: innerWidth - r.right, top: r.top, bottom: r.bottom };
   }));
-  for (const card of layout) { assert.equal(card.left, 8); assert.equal(card.right, 8); assert.equal(card.radius, '14px'); }
-  for (let i = 1; i < layout.length; i++) assert.ok(Math.abs(layout[i].top - layout[i - 1].bottom - 8) < .1);
-  assert.ok(Math.abs(layout[0].top - header.y - header.height - 8) < .1);
-  assert.ok(Math.abs(bounds.height - layout[3].bottom - 8) < .1);
+  // The watch skin is one framed list: rows share the same inset, touch without gaps
+  // and stay below the header and overview.
+  for (const card of layout) { assert.ok(card.left >= 8 && card.left <= 14); assert.ok(Math.abs(card.right - card.left) < 1); }
+  for (let i = 1; i < layout.length; i++) assert.ok(Math.abs(layout[i].top - layout[i - 1].bottom) < 1.5);
+  assert.ok(layout[0].top >= header.y + header.height);
+  assert.ok(layout[3].bottom <= bounds.height);
   const grab = async (id, hold = true) => {
     // The avatar is an application-launch button; drag from the explicit index grip.
     const box = await card(id).locator('.card-index').boundingBox(); const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
@@ -52,7 +54,6 @@ try {
   await page.mouse.move(point.x, point.y + 200); await page.mouse.up();
   assert.deepEqual(await order(), original);
   await expect(page.locator('.is-dragging')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Antigravity 下一页额度' }).click();
   await page.getByRole('button', { name: '切换余额币种' }).click();
 
   point = await grab('claude');
@@ -65,7 +66,6 @@ try {
   await expect(page.getByRole('status')).toHaveText('模块顺序已保存');
   assert.deepEqual((await page.evaluate(() => window.panel.getState())).bounds, bounds);
   assert.deepEqual(await page.locator('.control-region').boundingBox(), header);
-  await expect(card('antigravity').locator('.quota-pagination')).toHaveText('2/5');
   await expect(card('deepseek').locator('.balance-total strong')).toHaveText('2.10');
 
   point = await grab('claude');
@@ -94,5 +94,5 @@ try {
   await app.close(); app = await launch(); page = await app.firstWindow(); await ready();
   await expect.poll(order).toEqual(finalOrder);
   assert.deepEqual((await page.evaluate(() => window.panel.getState())).providerOrder, [...finalOrder, 'zcode', 'kimi', 'qwen', 'workbuddy']);
-  console.log('Card sorting passed: 8px spacing, rounded cards, hold gesture, quick-move cancellation, Escape, keyboard, control clicks, state preservation, fixed header/window, collapsed order, IPC validation, cold restart.');
+  console.log('Card sorting passed: list layout, hold gesture, quick-move cancellation, Escape, keyboard, control clicks, state preservation, fixed header/window, collapsed order, IPC validation, cold restart.');
 } finally { await app.close(); await rm(profile, { recursive: true, force: true }); }

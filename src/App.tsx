@@ -1,14 +1,19 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
-import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, ChevronLeft, ChevronRight, GripVertical, LockKeyhole, MapPin, Minimize, PanelTopClose, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, LockKeyhole, MapPin, Minimize, PanelTopClose, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
 import packageInfo from '../package.json';
-import { providers as baseProviders, providerIds, animeImages as defaultAnimeImages } from './data';
+import { providers as baseProviders, providerIds } from './data';
 import { useVisibleCards } from './useVisibleCards';
+import { replayEntrance } from './motion';
+import { demoJournal, loadJournal, record, saveJournal } from './journal';
+import { DEFAULT_INSIGHT_ORDER, InsightsArea, useInsightSpace } from './view/insights';
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
-import Big from 'big.js';
 import { I18nContext, useI18n, createI18n, readLanguage, languages, localizeProvider, localizeStatus, type Language } from './i18n';
-import type { LocalStatus, LocalProviderStatus, PanelState, Preferences, Provider, ProviderId, Quota, Theme, KimiSource, ClaudeSource, Layout } from './types';
+import { buildView } from './view/model';
+import { GrantAccessContext, Portrait, RED_ALERT } from './view/parts';
+import { Overview, ProviderCard, RailItem, summarize } from './view/skins';
+import type { InsightId, Insights, LocalStatus, PanelState, Preferences, Provider, ProviderId, Theme, KimiSource, ClaudeSource, Layout, Skin } from './types';
 const providers = baseProviders;
 
 const previewState: PanelState = {
@@ -18,14 +23,30 @@ const previewState: PanelState = {
   widgetsEnabled: false, widgetsAvailable: false, widgetSyncError: false, widgetBackground: false, widgetLastPublishedAt: null,
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
-  kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, layout: 'single', windowLayout: 'single',
-  animeMode: readAnimeMode(),
+  kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, layout: 'single', windowLayout: 'single',
+  animeMode: readAnimeMode(), insights: readInsights(), insightOrder: readInsightOrder(), skin: readSkin(),
   language: window.panel ? 'zh-CN' : readLanguage(),
   theme: window.panel ? 'system' : readTheme(),
   resolvedTheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
 };
+function readInsights(): Insights {
+  let value: Partial<Insights> | null = null;
+  try { value = JSON.parse(localStorage.getItem('ai-watch:insights') || 'null'); } catch { /* defaults */ }
+  return Object.fromEntries((['timeline', 'resets', 'trend', 'mascot'] as InsightId[]).map(id => [id, value?.[id] !== false])) as Insights;
+}
+function readInsightOrder(): InsightId[] {
+  try {
+    const value = JSON.parse(localStorage.getItem('ai-watch:insight-order') || 'null');
+    if (Array.isArray(value) && value.length === DEFAULT_INSIGHT_ORDER.length && new Set(value).size === value.length && value.every(id => DEFAULT_INSIGHT_ORDER.includes(id))) return [...value];
+  } catch { /* older or malformed preferences retain the original order */ }
+  return [...DEFAULT_INSIGHT_ORDER];
+}
 function readAnimeMode() {
   try { return localStorage.getItem('ai-watch:anime-mode') === 'true'; } catch { return false; }
+}
+function readSkin(): Skin {
+  try { const skin = localStorage.getItem('ai-watch:skin'); return skin === 'dial' || skin === 'party' ? skin : 'watch'; }
+  catch { return 'watch'; }
 }
 function readTheme(): Theme {
   try { const theme = localStorage.getItem('ai-watch:theme'); return theme === 'dark' || theme === 'light' ? theme : 'system'; }
@@ -58,85 +79,6 @@ function readImages(anime = false): Partial<Record<ProviderId, string>> {
   try { return JSON.parse(localStorage.getItem(anime ? 'ai-watch:anime-images' : 'ai-watch:images') ?? '{}'); }
   catch { return {}; }
 }
-function Avatar({ provider, image, monitor = false, anime = false }: { provider: Provider; image?: string; monitor?: boolean; anime?: boolean }) {
-  const { language, t, date, number, percent, label: translatedLabel } = useI18n();
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [image, anime]);
-  const attention = provider.id === 'codex' && (provider.local?.activity === 'waiting' || (provider.local?.waitingTasks || 0) > 0);
-  const glow = monitor ? attention ? 'attention' : provider.running ? 'running' : 'off' : 'off';
-  return <div className="avatar" data-provider={provider.id} data-glow={glow} data-default-image={!image && !anime} data-anime={anime}>
-    {provider.id === 'antigravity' && glow === 'running' && <span className="avatar-halo" aria-hidden="true"><span /></span>}
-    <div className="avatar-face">
-    {failed ? <span>{provider.name.slice(0, 1)}</span> : <img src={image || (anime ? `./anime/${defaultAnimeImages[provider.id]}` : `./${provider.image}`)} alt={t("{p0} 助手图片", { p0: provider.name })} onError={() => setFailed(true)} />}
-    </div>
-  </div>;
-}
-function LaunchAvatar({ provider, image, anime, onOpen, busy = false }: {
-  provider: Provider; image?: string; anime: boolean; onOpen: () => void; busy?: boolean;
-}) {
-  const { language, t, date, number, percent, label: translatedLabel } = useI18n();
-  return <button type="button" className="avatar-launch" aria-label={t("打开 {p0}", { p0: provider.name })} title={t("打开 {p0}", { p0: provider.name })} disabled={busy} onClick={onOpen}>
-    <Avatar provider={provider} image={image} anime={anime} monitor />
-  </button>;
-}
-function money(value: string) {
-  const number = new Big(value);
-  if (number.gt(0) && number.lt('0.01')) return '<0.01';
-  if (number.lt(0) && number.gt('-0.01')) return '−<0.01';
-  return number.toFixed(2);
-}
-function BalanceCard({ local }: { local: LocalProviderStatus }) {
-  const { language, t, date, number, percent, label: translatedLabel } = useI18n();
-  const wallets = local.balance?.wallets || [];
-  const [page, setPage] = useState(0);
-  const current = Math.min(page, Math.max(0, wallets.length - 1));
-  const wallet = wallets[current];
-  const stale = local.balance?.stale;
-  return <div className="balance-content" aria-label={t("DeepSeek 账户余额")}>
-    {wallet ? <>
-      <div className="balance-caption"><span>{stale ? t("历史余额 · 待更新") : t("账户可用余额")}</span>
-        {wallets.length > 1 && <button className="currency-switch" onClick={() => setPage((current + 1) % wallets.length)} aria-label={t("切换余额币种")}>{wallet.currency} ↔</button>}
-      </div>
-      <div dir="ltr" className={`balance-total ${stale ? 'is-stale' : ''}`} title={`${wallet.currency} ${wallet.total}`}><small>{wallet.currency === 'CNY' ? '¥' : '$'}</small><strong>{number(money(wallet.total), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><span>{wallet.currency}</span></div>
-      <div className="balance-parts"><span>{t("现金")}<b title={wallet.paid}>{number(money(wallet.paid), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span><span>{t("赠送")}<b title={wallet.bonus}>{number(money(wallet.bonus), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span></div>
-    </> : <div className="balance-empty"><strong>{local.connection === 'auth-required' ? t("等待 Harness 登录") : local.connection === 'ready' ? t("暂无钱包记录") : t("余额暂不可用")}</strong><p>{local.detail}</p></div>}
-  </div>;
-}
-function creditNumber(value: string) {
-  try {
-    const number = new Big(value);
-    if (number.gt(0) && number.lt('0.01')) return '<0.01';
-    return number.toFixed(2).replace(/\.?0+$/, '').replace(/^$/, '0');
-  } catch { return '—'; }
-}
-function PlanBadge({ provider, compact = false }: { provider: Provider; compact?: boolean }) {
-  const { language, t, date, number, percent, label: translatedLabel } = useI18n();
-  const local = provider.local;
-  const plan = local?.plan;
-  const expired = Boolean(plan?.expiresAt && Date.parse(plan.expiresAt) <= Date.now());
-  const label = plan?.name || (local ? t("套餐未知") : t("示例套餐"));
-  const displayLabel = compact && !plan?.name ? local ? t("未知") : t("示例") : label;
-  const state = plan?.name ? plan.stale ? t("历史") : expired ? t("已到期") : '' : '';
-  return <div className={`plan-summary ${plan?.stale ? 'is-stale' : ''}`} aria-label={t("{p0} 套餐档位", { p0: provider.name })}
-    title={[t("套餐：{p0}", { p0: label }), plan?.status && translatedLabel(plan.status), state, plan?.expiresAt ? t("有效期至 {p0}", { p0: date(plan.expiresAt) }) : ''].filter(Boolean).join(' · ')}>
-    <span className="plan-kind">{t("套餐")}</span><bdi className="plan-name">{displayLabel}</bdi>{state && <span className="plan-status">{state}</span>}
-  </div>;
-}
-function EntitlementCard({ provider, page, pageSize = 2 }: { provider: Provider; page: number; pageSize?: number }) {
-  const { language, t, date, number, percent, label: translatedLabel } = useI18n();
-  const local = provider.local;
-  const credits = local?.credits;
-  const items = local ? credits?.items || [] : [{ label: t("示例积分"), remaining: '1234.5', unit: t("积分"), total: '2000' }];
-  return <div className="entitlement-content">
-    <div className="credits-list" aria-label={t("{p0} 剩余积分", { p0: provider.name })}>
-      {items.length ? items.slice(page * pageSize, page * pageSize + pageSize).map((item, index) => <div className={`credit-item ${credits?.stale ? 'is-stale' : ''}`} key={`${item.label}:${index}`}
-        title={[item.label, item.remaining === null ? t("剩余未知") : t("剩余 {p0} {p1}", { p0: item.remaining, p1: item.unit }), item.total != null ? t("总量 {p0} {p1}", { p0: item.total, p1: item.unit }) : '', item.reset ? t("重置 / 到期时间 {p0}", { p0: date(item.reset) }) : '', credits?.stale ? t("历史快照，当前值待更新") : ''].filter(Boolean).join(' · ')}>
-        <div className="credit-label">{item.label}</div>
-        <div className="credit-amount"><span>{credits?.stale ? t("历史") : item.remaining === null ? t("未知") : t("剩余")}</span><strong className="credit-value"><bdi dir="ltr">{item.remaining === null ? '—' : number(creditNumber(item.remaining), { maximumFractionDigits: 2, useGrouping: language !== 'zh-CN' })}</bdi></strong><small>{item.unit}</small></div>
-      </div>) : <div className="credits-empty"><strong>{local?.accessRequired ? t("等待登录读取授权") : local?.connection === 'auth-required' ? t("等待客户端登录") : local?.connection === 'error' ? t("积分读取失败") : t("积分 / 额度未知")}</strong><span>—</span><p title={local?.detail}>{local?.detail || t("等待首次读取")}</p></div>}
-    </div>
-  </div>;
-}
 function TaskDetails({ provider, testing }: { provider: Provider; testing: boolean }) {
   const { t, date, number, percent } = useI18n();
   const rows = provider.local?.taskDetails || [];
@@ -158,67 +100,6 @@ function TaskDetails({ provider, testing }: { provider: Provider; testing: boole
     </div>
   </div>;
 }
-function ProviderCard({ provider, index, image, anime = false, onOpen, launchBusy, testing = false, fullscreen = false, animationPaused = false, sortProps, dragging = false }: {
-  provider: Provider; index: number; image?: string; anime?: boolean; onOpen: () => void; launchBusy?: boolean; testing?: boolean; fullscreen?: boolean; animationPaused?: boolean; sortProps?: HTMLAttributes<HTMLElement>; dragging?: boolean;
-}) {
-  const [page, setPage] = useState(0);
-  const { language, t, date, number, percent, label: translatedLabel } = useI18n();
-  const local = provider.local;
-  const isEntitlement = provider.id === 'qwen' || provider.id === 'workbuddy';
-  const itemCount = isEntitlement ? local?.credits?.items.length || 0 : provider.quotas.length;
-  const pageSize = fullscreen ? 1 : isEntitlement || anime ? 2 : 3;
-  const pages = Math.max(1, Math.ceil(itemCount / pageSize));
-  const currentPage = Math.min(page, pages - 1);
-  useEffect(() => setPage((old) => Math.min(old, pages - 1)), [pages]);
-  const quotas = provider.quotas.length ? provider.quotas.slice(currentPage * pageSize, currentPage * pageSize + pageSize)
-    : [{ model: t("模型额度"), period: t("尚未读取"), remaining: null, reset: '' }];
-  const isBalance = local?.id === 'deepseek';
-  const isClaudeDesktop = local?.id === 'claude' && local.claudeSource === 'desktop';
-  const source = testing ? t("测试数据") : !local ? t("演示") : local.connection === 'offline' ? t("未运行")
-    : local.accessRequired ? t("待授权") : local.connection === 'auth-required' ? t("待登录") : local.source === 'account' ? isBalance ? t("账号余额") : t("账号额度")
-    : local.source === 'local-api' ? t("本地服务") : local.source === 'cache' ? isBalance ? t("历史记录") : local.id === 'codex' && local.plan?.status === '官方查询缓存' ? t("查询缓存") : t("本地记录") : t("未连接");
-  const phase = !local ? provider.running ? t("演示运行") : t("演示待机")
-    : { running: t("运行中"), idle: t("待机"), waiting: local.id === 'codex' ? local.waitingReason === 'input' ? t("待回答") : local.waitingReason === 'approval' ? t("待授权") : t("待处理") : t("待确认"), unknown: t("未知"), offline: t("离线") }[local.activity];
-  const time = local?.observedAt ? date(local.observedAt, {hour: '2-digit', minute: '2-digit'}) : '';
-  function quotaTitle(quota: Quota) {
-    const reset = quota.reset && local ? `${quota.resetKind === 'expiry' ? t("到期时间") : t("重置时间")} ${date(quota.reset)}` : quota.reset;
-    return `${quota.model} · ${quota.period}${reset ? ` · ${reset}` : ''}${quota.variants?.length ? t(" · 合并：{p0}；剩余额度取较低值", { p0: quota.variants.join(', ') }) : ''}${quota.stale ? t(" · 已过时，历史剩余 {p0}%", { p0: quota.remaining ?? '未知' }) : ''}`;
-  }
-  return <section {...sortProps} className={`provider-card ${provider.running ? 'is-running' : ''} ${dragging ? 'is-dragging' : ''}`} style={{ '--accent': provider.color, ...sortProps?.style } as CSSProperties}
-    aria-label={t("{p0} 面板", { p0: provider.name })} data-provider={provider.id} data-animation-paused={animationPaused} data-attention={local?.id === 'codex' && local.activity === 'waiting'} tabIndex={0} aria-describedby="card-sort-help" onDragStart={event => event.preventDefault()}>
-    <div className="card-heading">
-      <LaunchAvatar provider={provider} image={image} anime={anime} onOpen={onOpen} busy={launchBusy} />
-      <div className="identity"><span className="eyebrow">{local?.id === 'claude' ? t(local.claudeSource === 'desktop' ? '桌面版' : '终端版') : provider.subtitle}</span><h2><bdi>{provider.name}</bdi></h2>{provider.id !== 'deepseek' && <PlanBadge provider={provider} compact={anime} />}</div>
-      <span className="card-index" title={t("长按卡片拖动排序")}><GripVertical size={10} aria-hidden="true" /><span>0{index + 1}</span></span>
-    </div>
-    <div className="quota-area">
-      <div className="quota-tools">
-        <span className={`source-tag ${local ? 'local' : ''}`} title={local ? `${local.detail}${local.observedAt ? t(" 额度记录于 {p0}", { p0: date(local.observedAt) }) : ''}` : t("仅用于布局的演示数据")}>{source}</span>
-        {!isBalance && pages > 1 ? <div className="quota-pagination" aria-label={t("{p0} 额度分页", { p0: provider.name })}>
-          <button aria-label={t("{p0} 上一页额度", { p0: provider.name })} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={11} /></button>
-          <span title={t("共 {p0} 项{p1}", { p0: itemCount, p1: isEntitlement ? '积分 / 次数' : '模型额度' })}><bdi dir="ltr">{number(currentPage + 1)}/{number(pages)}</bdi></span>
-          <button aria-label={t("{p0} 下一页额度", { p0: provider.name })} disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight size={11} /></button>
-        </div> : <span className="quota-time" title={local?.observedAt ? t("记录于 {p0}", { p0: date(local.observedAt) }) : ''}>{local ? local.id === 'claude' && !local.quotas.length ? t(isClaudeDesktop ? "额度未知" : "未提供 Code 额度") : time ? t("记录 {p0}", { p0: time }) : isBalance ? t("自动识别登录态") : t("额度未知") : t("示例额度")}</span>}
-      </div>
-      {isEntitlement ? <EntitlementCard provider={provider} page={currentPage} pageSize={pageSize} /> : isBalance ? <BalanceCard local={local} /> : local?.id === 'claude' && !local.quotas.length ? <div className="claude-empty"><strong>{t(isClaudeDesktop ? "额度未知" : "Code 额度暂不可用")}</strong><p>{!isClaudeDesktop && local.plan?.name === 'Free' ? t("Free 账号不包含 Code 权限") : t("当前本地记录未提供额度窗口")}</p><small>{isClaudeDesktop ? local.surfaces?.desktop : local.surfaces?.terminal}</small></div> : <div className="quota-list" aria-label={t("{p0}剩余额度", { p0: testing ? '测试' : local ? '本地' : '演示' })}>
-        {quotas.map((quota, row) => {
-          const known = quota.remaining !== null && !quota.stale;
-          const historical = provider.id === 'codex' && quota.stale && quota.remaining !== null;
-          const visible = known || historical;
-          return <div className={`quota ${known ? '' : 'quota-unknown'} ${historical ? 'quota-historical' : ''}`} key={`${quota.model}:${quota.period}:${row}`} title={quotaTitle(quota)}>
-            <div className="quota-label"><span><bdi className="model-name">{local?.id === 'antigravity' ? quota.model.replace(/^Claude /, '').replace(/\(High\)/gi, t("· 高")).replace(/\(Medium\)/gi, t("· 中")).replace(/\(Low\)/gi, t("· 低")).replace(/\(Thinking\)/gi, t("· 思考")) : quota.model}</bdi>{local?.id !== 'antigravity' && <small>{quota.period}</small>}</span><strong><span className="remaining-label">{historical ? t("历史") : quota.stale ? t("过时") : known ? t("剩余") : t("未知")}</span><bdi dir="ltr">{visible ? percent(quota.remaining!) : '—'}</bdi></strong></div>
-            <div className="quota-track" role="progressbar" aria-label={t("{p0} {p1} 剩余额度", { p0: quota.model, p1: quota.period })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={known ? quota.remaining! : undefined} aria-valuetext={historical ? t("历史剩余 {p0}%，当前额度待更新", { p0: quota.remaining }) : known ? percent(quota.remaining!) : quota.stale ? t("记录已过时") : t("未知")}>
-              {known && <div className={`quota-fill ${quota.remaining! < 30 ? 'is-low' : ''}`} style={{ width: `${quota.remaining}%` }} />}
-            </div>
-          </div>;
-        })}
-      </div>}
-    </div>
-    {fullscreen && <TaskDetails provider={provider} testing={testing} />}
-    <div className="task-line" title={local?.activityDetail || local?.detail}><span className={`status-dot ${provider.running ? 'active' : ''} ${local?.activity === 'unknown' ? 'unknown' : local?.activity === 'waiting' ? 'waiting' : ''}`} /><span>{local?.activityAccessRequired ? t('待授权') : local?.activity === 'unknown' && local.activityProbeError && local.activityProbeError !== 'unsupported-platform' ? t(local.activityAccessState === 'granted' ? '已授权，暂无法读取活动' : '活动读取失败') : provider.task}</span><span className="task-status">{phase}</span></div>
-  </section>;
-}
-
 export default function App() {
   const [state, setState] = useState(previewState);
   const [pageHidden, setPageHidden] = useState(document.hidden);
@@ -239,6 +120,7 @@ export default function App() {
   const [images, setImages] = useState(() => readImages());
   const [animeImages, setAnimeImages] = useState(() => readImages(true));
   const [animeSaving, setAnimeSaving] = useState(false);
+  const [skinSaving, setSkinSaving] = useState(false);
   const [launching, setLaunching] = useState<ProviderId | null>(null);
   const [choosingApp, setChoosingApp] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -252,6 +134,7 @@ export default function App() {
   const [kimiSourceSaving, setKimiSourceSaving] = useState(false);
   const [claudeSourceSaving, setClaudeSourceSaving] = useState(false);
   const [claudeNetworkSaving, setClaudeNetworkSaving] = useState(false);
+  const [claudeHooksSaving, setClaudeHooksSaving] = useState(false);
   const [cacheClearing, setCacheClearing] = useState(false);
   const [widgetsSaving, setWidgetsSaving] = useState(false);
   const storeLabel = state.platform === 'darwin' ? t("收纳到菜单栏") : t("收纳到托盘");
@@ -261,7 +144,16 @@ export default function App() {
     ? { ...provider, name: 'Claude', subtitle: 'ANTHROPIC' } : provider).map(provider => localizeProvider(provider, i18n));
   const viewport = useRef<HTMLDivElement>(null);
   const enabledOrder = state.providerOrder.filter(id => state.enabledProviders.includes(id));
-  const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode);
+  const layoutKey = `${state.skin}:${state.layout}:${state.animeMode}`;
+  const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode, layoutKey);
+  const main = useRef<HTMLElement>(null);
+  const [entrance, setEntrance] = useState(0);
+  const stage = useRef<HTMLDivElement>(null);
+  const [liveJournal, setLiveJournal] = useState(() => loadJournal());
+  const [testJournal, setTestJournal] = useState(() => demoJournal());
+  const [insightsSaving, setInsightsSaving] = useState(false);
+  const [insightOrderSaving, setInsightOrderSaving] = useState(false);
+  const [insightSorting, setInsightSorting] = useState(false);
   const resolvedTheme = state.theme === 'system' ? state.resolvedTheme : state.theme;
   const [draft, setDraft] = useState<Preferences>(previewState);
   const modal = useRef<HTMLDialogElement>(null);
@@ -287,7 +179,7 @@ export default function App() {
   const settingsStatus = displayStatus && { ...displayStatus, ...Object.fromEntries(providerIds.map(id => [id, localizeStatus(displayStatus[id], i18n)])) } as LocalStatus | null;
   const activeTasks = visibleProviders.reduce((total, provider) => total + (displayStatus?.[provider.id]?.activeTasks || 0), 0);
   const refreshTime = displayStatus?.sampledAt ? date(displayStatus.sampledAt, {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : t("读取中");
-  const sorting = useCardSort(enabledOrder, order => { void saveVisibleOrder(order); }, settingsOpen || state.collapsed || orderSaving || modulesSaving);
+  const sorting = useCardSort(enabledOrder, order => { void saveVisibleOrder(order); }, settingsOpen || state.collapsed || orderSaving || modulesSaving || insightSorting);
   const hiddenActive = translatedProviders.filter(provider => !visibleCards.has(provider.id)
     && (provider.running || provider.local?.activity === 'waiting'));
   function revealProvider(id: ProviderId) {
@@ -326,6 +218,41 @@ export default function App() {
       else { localStorage.setItem('ai-watch:anime-mode', String(value)); setState(current => ({ ...current, animeMode: value })); }
     } catch { setNotice(t("二次元模式保存失败，请重试")); }
     finally { setAnimeSaving(false); }
+  }
+  async function changeInsight(id: InsightId, value: boolean) {
+    if (insightsSaving) return;
+    const next = { ...(state.insights || readInsights()), [id]: value };
+    setInsightsSaving(true);
+    try {
+      if (window.panel) setState(await window.panel.setInsights(next));
+      else { localStorage.setItem('ai-watch:insights', JSON.stringify(next)); setState(current => ({ ...current, insights: next })); }
+    } catch { setNotice(t('下半屏设置保存失败，请重试')); }
+    finally { setInsightsSaving(false); }
+  }
+  async function saveInsightOrder(order: InsightId[]) {
+    if (insightOrderSaving) return;
+    const previous = state.insightOrder || readInsightOrder();
+    setInsightOrderSaving(true); setState(current => ({ ...current, insightOrder: order }));
+    try {
+      if (window.panel) setState(await window.panel.setInsightOrder(order));
+      else localStorage.setItem('ai-watch:insight-order', JSON.stringify(order));
+      setNotice(t('模块顺序已保存'));
+    } catch { setState(current => ({ ...current, insightOrder: previous })); setNotice(t('顺序保存失败，已恢复原顺序')); }
+    finally { setInsightOrderSaving(false); }
+  }
+  async function changeSkin(value: Skin) {
+    if (skinSaving || value === state.skin) return;
+    setSkinSaving(true);
+    try {
+      if (window.panel) setState(await window.panel.setSkin(value));
+      else { localStorage.setItem('ai-watch:skin', value); setState(current => ({ ...current, skin: value })); }
+    } catch { setNotice(t('界面风格保存失败，请重试')); }
+    finally { setSkinSaving(false); }
+  }
+  async function grantClaudeAccess() {
+    if (!window.panel || testMode) { setNotice(t('授权辅助功能请使用桌面版')); return; }
+    try { setLocalStatus(await window.panel.requestClaudeActivityAccess()); setNotice(t('请在系统设置的“辅助功能”中允许 AI Watch，然后回到面板')); }
+    catch { setNotice(t('保存失败，请重试')); }
   }
   async function openProvider(provider: Provider) {
     if (testMode) { if (state.collapsed) await collapse(false); setNotice(t("测试模式：已模拟打开 {p0}", { p0: provider.name })); return; }
@@ -394,6 +321,18 @@ export default function App() {
     finally { setClaudeNetworkSaving(false); }
   }
 
+  async function changeClaudeHooks(enabled: boolean) {
+    if (claudeHooksSaving || !window.panel) return;
+    setClaudeHooksSaving(true);
+    try {
+      const next = await window.panel.setClaudeHooks(enabled); setState(next);
+      const error = next.claudeHooksStatus?.error;
+      setNotice(!error ? '' : error === 'settings-invalid' ? t('Claude Code 设置文件格式有误，未做修改') : error === 'unsupported-platform' ? t('此系统暂不支持状态钩子') : t('无法写入 Claude Code 设置'));
+    }
+    catch { setNotice(t('保存失败，请重试')); }
+    finally { setClaudeHooksSaving(false); }
+  }
+
   async function changeLanguage(language: Language) {
     if (languageSaving) return;
     setLanguageSaving(true);
@@ -437,12 +376,26 @@ export default function App() {
     const statusListener = bridge.onStatus(acceptStatus);
     return () => { stateListener(); statusListener(); };
   }, []);
+  // The journal keeps only ids, states, times and percentages; test mode has its own sample journal.
+  useEffect(() => { if (localStatus) setLiveJournal(current => record(current, localStatus)); }, [localStatus]);
+  useEffect(() => { const timer = setTimeout(() => saveJournal(liveJournal), 2000); return () => clearTimeout(timer); }, [liveJournal]);
+  useEffect(() => { if (testMode) setTestJournal(demoJournal()); }, [testMode]);
+  useEffect(() => { if (testMode) setTestJournal(current => record(current, testStatus)); }, [testMode, testStatus]);
   useLayoutEffect(() => {
     document.documentElement.lang = i18n.language; document.documentElement.dir = i18n.dir;
     document.title = `AI Watch · ${t('AI 工具监看面板')}`;
   }, [i18n.language]);
   useLayoutEffect(() => { document.documentElement.dataset.layout = state.collapsed ? 'single' : state.layout; }, [state.layout, state.collapsed]);
-  useLayoutEffect(() => { document.documentElement.dataset.theme = resolvedTheme; }, [resolvedTheme]);
+  useLayoutEffect(() => {
+    // Swap palettes in one frame: colour transitions are for state changes, not for a theme flip.
+    const root = document.documentElement;
+    root.classList.add('theme-switching'); root.dataset.theme = resolvedTheme;
+    let second = 0; const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => root.classList.remove('theme-switching')); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); root.classList.remove('theme-switching'); };
+  }, [resolvedTheme]);
+  useLayoutEffect(() => { document.documentElement.dataset.skin = state.skin; }, [state.skin]);
+  // Agent cards load in again after a refresh, a skin / layout / mode switch and when the stored panel is reopened.
+  useLayoutEffect(() => { if (!state.stored && !state.collapsed) replayEntrance(main.current); }, [entrance, layoutKey, state.stored, state.collapsed]);
   useEffect(() => {
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused.matches('.provider-card')) focused.scrollIntoView({ block: 'nearest' });
@@ -465,14 +418,14 @@ export default function App() {
   }, [settingsOpen]);
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && state.layout === 'fullscreen' && !settingsOpen && !sorting.sorting) { event.preventDefault(); void changeLayout(state.windowLayout); }
+      if (!event.defaultPrevented && event.key === 'Escape' && state.layout === 'fullscreen' && !settingsOpen && !sorting.sorting && !insightSorting) { event.preventDefault(); void changeLayout(state.windowLayout); }
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'b' && !state.desktop) {
         event.preventDefault(); setState((old) => ({ ...old, collapsed: !old.collapsed }));
       }
     };
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
-  }, [state.desktop, state.layout, settingsOpen, sorting.sorting]);
+  }, [state.desktop, state.layout, settingsOpen, sorting.sorting, insightSorting]);
 
   async function toggleLock() {
     try {
@@ -497,9 +450,11 @@ export default function App() {
       if (testMode) {
         await new Promise(resolve => setTimeout(resolve, 450));
         setTestSampledAt(new Date().toISOString()); setNotice(t("测试画面已刷新"));
+        setEntrance(value => value + 1);
       } else if (window.panel) {
         setLocalStatus(await window.panel.refreshStatus());
         setNotice(t("本地状态已重新读取"));
+        setEntrance(value => value + 1);
       } else setNotice(t("浏览器预览使用演示数据；本地接入请打开桌面版"));
     } catch { setNotice(t("本地状态读取失败，稍后自动重试")); }
     finally {
@@ -545,156 +500,208 @@ export default function App() {
     } catch { setNotice(t("无法读取这张图片")); }
   }
 
-  return <I18nContext.Provider value={i18n}><main lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
-    {state.collapsed ? <aside className="collapsed-rail" aria-label={t("收起的监看面板")}>
-      <div className="rail-grip"><GripVertical size={15} /></div>
-      <button className="rail-expand" title={t("展开面板")} aria-label={t("展开面板")} onClick={() => collapse(false)}>{state.side === 'right' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}</button>
-      <span className="rail-brand">AI</span>
-      <div className="rail-providers">{translatedProviders.map((provider) => <div key={provider.id} title={`${provider.name} · ${provider.local?.task || (provider.running ? t("演示运行中") : t("演示待机"))}`} style={{ '--accent': provider.color } as CSSProperties}>
-        <LaunchAvatar provider={provider} image={(state.animeMode ? animeImages : images)[provider.id]} anime={state.animeMode} onOpen={() => void openProvider(provider)} busy={launching === provider.id} /><span className={`status-dot ${provider.running ? 'active' : provider.local?.activity === 'waiting' ? 'waiting' : provider.local?.activity === 'unknown' ? 'unknown' : ''}`} />
-      </div>)}</div>
-      <button className="rail-store" aria-label={storeLabel} title={storeHint} disabled={!state.trayAvailable} onClick={storePanel}><PanelTopClose size={15} /></button>
-      <button className={`rail-lock ${state.locked ? 'selected' : ''}`} title={t("锁定窗口")} aria-label={t("锁定窗口")} aria-pressed={state.locked} onClick={toggleLock}>{state.locked ? <LockKeyhole size={15} /> : <UnlockKeyhole size={15} />}</button>
-      {testMode ? <button className="rail-demo test-badge" aria-label={t("测试模式设置")} onClick={async () => { await collapse(false); openSettings(); }}>{t("测试")}</button> : <span className="rail-demo">{state.desktop ? t("本地") : t("演示")}</span>}
+  const views = translatedProviders.map(provider => buildView(provider, i18n, Boolean(displayStatus?.isTestData)));
+  const summary = summarize(views);
+  const skin = state.skin;
+  const imageFor = (id: ProviderId) => (state.animeMode ? animeImages : images)[id];
+  const insights = state.insights || readInsights();
+  const insightSpace = useInsightSpace(stage, viewport, `${layoutKey}:${state.collapsed}:${views.map(view => view.id).join(',')}:${Object.values(insights).join(',')}`, sorting.sorting);
+  const stamp = state.desktop || testMode ? refreshTime : '';
+  const badge = testMode ? <button className="demo-tag test-badge" aria-label={t('测试模式设置')} onClick={openSettings}>{t('测试模式')}</button>
+    : <span className="demo-tag">{localStatus?.isTestData ? t('测试') : state.desktop ? t('本地') : t('演示')}</span>;
+  const lockButton = (className = '') => <button className={`${className} ${state.locked && state.layout !== 'fullscreen' ? 'selected' : ''}`} disabled={state.layout === 'fullscreen'} aria-label={t('锁定窗口')} aria-pressed={state.locked && state.layout !== 'fullscreen'}
+    title={state.locked ? t('解除跨桌面锁定') : t('锁定：置顶并显示在所有桌面')} onClick={toggleLock}>{state.locked ? <LockKeyhole /> : <UnlockKeyhole />}</button>;
+  const skinOptions: { id: Skin; name: string; hint: string }[] = [
+    { id: 'watch', name: t('值守台'), hint: t('先提醒要你处理的，再列出全部') },
+    { id: 'dial', name: t('表盘'), hint: t('每个助手一圈额度，安静好读') },
+    { id: 'party', name: t('角色栏'), hint: t('像游戏队伍面板，角色当主角') },
+  ];
+  const section = (id: string) => modal.current?.querySelector<HTMLElement>(`[data-section="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+
+  return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={state.desktop ? () => void grantClaudeAccess() : null}><main ref={main} lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
+    {state.collapsed ? <aside className="collapsed-rail" aria-label={t('收起的监看面板')}>
+      <button className="rail-expand" title={t('展开面板')} aria-label={t('展开面板')} onClick={() => collapse(false)}>{state.side === 'right' ? <ArrowLeftToLine size={18} /> : <ArrowRightToLine size={18} />}</button>
+      <div className="rail-counts" title={t('运行中 {p0} · 等你处理 {p1}', { p0: summary.running, p1: summary.waiting.length })}>
+        <span data-kind="running"><strong>{number(summary.running)}</strong>{t('运行')}</span>
+        <span data-kind="waiting" data-active={summary.waiting.length > 0}><strong>{number(summary.waiting.length)}</strong>{t('待处理')}</span>
+      </div>
+      <div className="rail-providers">{views.map(view => <RailItem key={view.id} view={view} skin={skin} anime={state.animeMode} image={imageFor(view.id)} busy={launching === view.id} onOpen={() => void openProvider(view.provider)} />)}</div>
+      <div className="rail-tools">
+        <button className="rail-store" aria-label={storeLabel} title={storeHint} disabled={!state.trayAvailable} onClick={storePanel}><PanelTopClose size={16} /></button>
+        {lockButton('rail-lock')}
+        {testMode ? <button className="rail-demo test-badge" aria-label={t('测试模式设置')} onClick={async () => { await collapse(false); openSettings(); }}>{t('测试')}</button> : <span className="rail-demo">{state.desktop ? t('本地') : t('演示')}</span>}
+      </div>
     </aside> : <div className={`panel-regions ${sorting.sorting ? 'is-sorting' : ''}`}>
       <header className="control-region">
-        <div className="brand-line"><div className="brand"><Activity size={15} strokeWidth={1.7} /><h1 dir="ltr">AI WATCH</h1></div><GripVertical size={13} className="drag-hint" /></div>
-        <div className="overview" title={testMode ? t("当前运行数、任务、额度与余额均为手动选择的测试数据。") : t("运行数只统计本地接入且有运行证据的任务；未知状态和演示卡片不计入。")}><span><span className={`tiny-dot ${activeTasks ? 'active' : ''}`} /><span className="running-summary">{state.desktop || testMode ? t("{p0} 项运行", { p0: activeTasks }) : t("界面预览")}</span> {testMode ? <button className="demo-tag test-badge" aria-label={t("测试模式设置")} onClick={openSettings}>{t("测试模式")}</button> : <span className="demo-tag">{localStatus?.isTestData ? t("测试") : state.desktop ? t("本地") : t("演示")}</span>}</span><time dir="ltr">{state.desktop || testMode ? refreshTime : t("演示数据")}</time></div>
-        <nav className="toolbar" aria-label={t("面板控制")}>
-          <button disabled={state.layout === 'fullscreen'} className={state.locked && state.layout !== 'fullscreen' ? 'selected' : ''} aria-label={t("锁定窗口")} aria-pressed={state.locked && state.layout !== 'fullscreen'} title={state.locked ? t("解除跨桌面锁定") : t("锁定：置顶并显示在所有桌面")} onClick={toggleLock}>{state.locked ? <LockKeyhole /> : <UnlockKeyhole />}</button>
-          <button aria-label={t("收起面板")} title={t("收起为状态窄条")} onClick={() => collapse(true)}>{state.side === 'right' ? <ArrowRightToLine /> : <ArrowLeftToLine />}</button>
+        <div className="brand"><Activity size={17} strokeWidth={2} aria-hidden="true" /><h1 dir="ltr">AI WATCH</h1></div>
+        <nav className="toolbar" aria-label={t('面板控制')}>
+          <button aria-label={t('刷新面板')} title={testMode ? t('刷新测试画面') : t('重新读取本地额度与任务状态')} disabled={refreshing} onClick={refresh}><RefreshCw className={refreshing ? 'spinning' : ''} /></button>
+          {lockButton()}
           <button aria-label={storeLabel} title={storeHint} disabled={!state.trayAvailable} onClick={storePanel}><PanelTopClose /></button>
-          <button aria-label={t("刷新面板")} title={testMode ? t("刷新测试画面") : t("重新读取本地额度与任务状态")} disabled={refreshing} onClick={refresh}><RefreshCw className={refreshing ? 'spinning' : ''} /></button>
-          {state.layout === 'fullscreen' && <button aria-label={t("退出全屏")} title={t("退出全屏")} disabled={layoutSaving} onClick={() => void changeLayout(state.windowLayout)}><Minimize /></button>}
-          <button aria-label={t("打开配置")} title={t("配置面板")} onClick={openSettings}><Settings2 /></button>
+          {state.layout === 'fullscreen' && <button aria-label={t('退出全屏')} title={t('退出全屏')} disabled={layoutSaving} onClick={() => void changeLayout(state.windowLayout)}><Minimize /></button>}
+          {state.layout !== 'fullscreen' && <button className="primary" aria-label={t('收起面板')} title={t('收起为状态窄条')} onClick={() => collapse(true)}>{state.side === 'right' ? <ArrowRightToLine /> : <ArrowLeftToLine />}</button>}
+          <button aria-label={t('打开配置')} title={t('配置面板')} onClick={openSettings}><Settings2 /></button>
         </nav>
       </header>
-      <div ref={viewport} className="provider-viewport" aria-label={t("工具模块列表")} aria-busy={orderSaving || modulesSaving} tabIndex={0}>
-      {!visibleProviders.length && <div className="empty-providers"><p>{t("尚未启用模块")}</p><button onClick={openSettings}>{t("选择监看模块")}</button></div>}
-      {translatedProviders.map((provider, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${provider.id}`} provider={provider} index={index} image={(state.animeMode ? animeImages : images)[provider.id]} anime={state.animeMode} onOpen={() => void openProvider(provider)} launchBusy={launching === provider.id} testing={Boolean(displayStatus?.isTestData)} fullscreen={state.layout === 'fullscreen'} animationPaused={settingsOpen || !visibleCards.has(provider.id)} dragging={sorting.activeId === provider.id}
-        sortProps={{ style: sorting.style(provider.id), onPointerDown: event => sorting.start(event, provider.id), onKeyDown: event => {
-          if (event.target !== event.currentTarget || !event.altKey || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) || sorting.sorting) return;
-          event.preventDefault();
-          const cards = [...viewport.current!.querySelectorAll<HTMLElement>(':scope > .provider-card')];
-          const columns = cards.filter(card => Math.abs(card.getBoundingClientRect().top - cards[0].getBoundingClientRect().top) < 2).length;
-          const delta = event.key === 'ArrowUp' ? -columns : event.key === 'ArrowDown' ? columns : (event.key === 'ArrowLeft' ? -1 : 1) * (i18n.dir === 'rtl' ? -1 : 1);
-          const next = [...enabledOrder], target = Math.max(0, Math.min(enabledOrder.length - 1, index + delta));
-          if (target !== index) { next.splice(index, 1); next.splice(target, 0, provider.id); void saveVisibleOrder(next); }
-        } }} />)}
+      <Overview skin={skin} summary={summary} live={state.desktop || testMode} stamp={stamp} badge={badge} anime={state.animeMode}
+        image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)} onReveal={view => revealProvider(view.id)} />
+      <div ref={stage} className="provider-stage">
+      <div ref={viewport} className="provider-viewport" aria-label={t('工具模块列表')} aria-busy={orderSaving || modulesSaving} tabIndex={0}>
+        {!visibleProviders.length && <div className="empty-providers"><p>{t('尚未启用模块')}</p><button onClick={openSettings}>{t('选择监看模块')}</button></div>}
+        {views.map((view, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${view.id}`} view={view} skin={skin} index={index} anime={state.animeMode} image={imageFor(view.id)}
+          busy={launching === view.id} onOpen={() => void openProvider(view.provider)} fullscreen={state.layout === 'fullscreen'}
+          details={state.layout === 'fullscreen' ? <TaskDetails provider={view.provider} testing={Boolean(displayStatus?.isTestData)} /> : undefined}
+          animationPaused={settingsOpen || !visibleCards.has(view.id)} dragging={sorting.activeId === view.id}
+          sortProps={{ style: sorting.style(view.id), onPointerDown: event => sorting.start(event, view.id), onKeyDown: event => {
+            if (event.target !== event.currentTarget || !event.altKey || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) || sorting.sorting) return;
+            event.preventDefault();
+            const cards = [...viewport.current!.querySelectorAll<HTMLElement>(':scope > .provider-card')];
+            const columns = cards.filter(card => Math.abs(card.getBoundingClientRect().top - cards[0].getBoundingClientRect().top) < 2).length;
+            const delta = event.key === 'ArrowUp' ? -columns : event.key === 'ArrowDown' ? columns : (event.key === 'ArrowLeft' ? -1 : 1) * (i18n.dir === 'rtl' ? -1 : 1);
+            const next = [...enabledOrder], target = Math.max(0, Math.min(enabledOrder.length - 1, index + delta));
+            if (target !== index) { next.splice(index, 1); next.splice(target, 0, view.id); void saveVisibleOrder(next); }
+          } }} />)}
+      </div>
+      {!sorting.sorting && <InsightsArea insights={insights} height={insightSpace.height} width={insightSpace.width} views={views}
+        order={state.insightOrder || readInsightOrder()} onOrder={order => void saveInsightOrder(order)} onSortingChange={setInsightSorting}
+        sortingDisabled={settingsOpen || state.collapsed || insightOrderSaving || insightsSaving || layoutSaving || animeSaving}
+        journal={testMode ? testJournal : liveJournal} anime={state.animeMode} image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)} />}
       </div>
     </div>}
-    {!state.collapsed && !settingsOpen && !sorting.sorting && hiddenActive.length > 0 && <div className="hidden-activity" aria-label={t("屏幕外模块活动")}>
-      {hiddenActive.map(provider => <button key={provider.id} className="hidden-activity-light" data-provider={provider.id}
-        data-glow={provider.id === 'codex' && provider.local?.activity === 'waiting' ? 'attention' : 'running'}
-        aria-label={t("{p0} {p1}，点击查看", { p0: provider.name, p1: provider.local?.activity === 'waiting' ? '等待处理' : '正在运行' })}
-        title={t("{p0} · {p1} · 点击查看", { p0: provider.name, p1: provider.local?.activity === 'waiting' ? '等待处理' : '正在运行' })}
+    {!state.collapsed && !settingsOpen && !sorting.sorting && hiddenActive.length > 0 && <div className="hidden-activity" aria-label={t('屏幕外模块活动')}>
+      {hiddenActive.map(provider => <button key={provider.id} className="hidden-activity-light" data-provider={provider.id} style={{ '--accent': provider.color } as CSSProperties}
+        data-glow={provider.local?.activity === 'waiting' && RED_ALERT.has(provider.id) ? 'attention' : 'running'}
+        aria-label={t('{p0} {p1}，点击查看', { p0: provider.name, p1: provider.local?.activity === 'waiting' ? '等待处理' : '正在运行' })}
+        title={t('{p0} · {p1} · 点击查看', { p0: provider.name, p1: provider.local?.activity === 'waiting' ? '等待处理' : '正在运行' })}
         onClick={() => revealProvider(provider.id)}><span className="sr-only">{provider.name}</span></button>)}
     </div>}
-    <span id="card-sort-help" className="sr-only">{t("长按卡片拖动排序；Escape 取消。Alt 加方向键按行列排序。")}</span>
-    {sorting.sorting && <div className="sort-hint" role="status" title={t("排序说明")}>{t("排序")} · <bdi dir="ltr">{number((sorting.target ?? 0) + 1)}</bdi></div>}
+    <span id="card-sort-help" className="sr-only">{t('长按卡片拖动排序；Escape 取消。Alt 加方向键按行列排序。')}</span>
+    {sorting.sorting && <div className="sort-hint" role="status" title={t('排序说明')}>{t('排序')} · {t('第 {p0} 位', { p0: (sorting.target ?? 0) + 1 })}</div>}
     <dialog ref={modal} className="settings-dialog" aria-labelledby="settings-title" onCancel={() => setSettingsOpen(false)}>
-      <div className="settings-heading"><div><span className="eyebrow">PREFERENCES</span><h2 id="settings-title">{t("面板配置")}</h2></div><button className="icon-button" aria-label={t("关闭配置")} onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
+      <div className="settings-heading"><h2 id="settings-title">{t('面板配置')}</h2><button className="icon-button" aria-label={t('关闭配置')} onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
+      <nav className="settings-nav" aria-label={t('配置分区')}>
+        {[['look', t('外观')], ['modules', t('模块')], ['data', t('数据来源')], ['window', t('窗口')], ['images', t('图片与应用')], ['about', t('关于')]].map(([id, label]) =>
+          <button key={id} type="button" onClick={() => section(id)}>{label}</button>)}
+      </nav>
       <div className="settings-content">
-        <fieldset className="layout-settings"><legend>{t('窗口模式')}</legend>
-          <select aria-label={t('窗口模式')} value={state.layout} disabled={layoutSaving} onChange={event => void changeLayout(event.target.value as Layout)}>
-            <option value="single">{t('单列模式')}</option><option value="double">{t('双排模式')}</option><option value="fullscreen">{t('全屏模式')}</option>
-          </select><p className="appearance-hint">{t('双排宽度加倍；全屏显示任务详情。Escape 退出全屏。')}</p>
-        </fieldset>
-        {state.platform === 'darwin' && <fieldset className="appearance-settings"><legend>{t('桌面小组件')}</legend>
-          <p className="appearance-hint">{t('在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。')}</p>
-          <p className="appearance-hint">{t('总览跟随“监看模块”的选择和排序。')}</p>
-          <label className="switch-row"><span>{t('同步小组件')}<small>{t('仅共享额度摘要与状态')}</small></span><input type="checkbox" aria-label={t('同步小组件')} checked={state.widgetsEnabled} disabled={!state.widgetsAvailable || widgetsSaving} onChange={async event => {
-            const enabled = event.target.checked;
-            setWidgetsSaving(true);
-            try { if (window.panel) setState(await window.panel.setWidgetsEnabled(enabled)); }
-            catch { setNotice(t('小组件同步失败，请重试')); }
-            finally { setWidgetsSaving(false); }
-          }} /></label>
-          {!state.widgetsAvailable && <p className="appearance-hint">{t('此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。')}</p>}
-          {state.widgetSyncError && <p className="appearance-hint" role="status">{t('小组件同步失败，请重试')}</p>}
-          <p className="appearance-hint">{t('macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。')}</p>
-          <button className="dock-button" disabled={!state.widgetsEnabled || !state.widgetsAvailable || widgetsSaving} onClick={async () => {
-            setWidgetsSaving(true);
-            try { if (window.panel) setState(await window.panel.widgetBackground()); }
-            catch { setNotice(t('小组件同步失败，请重试')); }
-            finally { setWidgetsSaving(false); }
-          }}>{t('仅保留桌面小组件')}</button>
-          <p className="appearance-hint">{t('隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。')}</p>
-        </fieldset>}
-        <fieldset className="language-settings"><legend>{t('语言')}</legend>
-          <select aria-label={t('语言')} value={state.language} disabled={languageSaving} onChange={event => void changeLanguage(event.target.value as Language)}>
-            <option value="system">{t('跟随系统')}</option>
-            {languages.map(language => <option key={language.id} value={language.id} lang={language.id} dir={language.dir}>{language.name}</option>)}
-          </select><p className="appearance-hint">{t('语言说明')}</p>
-        </fieldset>
-        <TestControls enabled={testMode} config={testConfig} onToggle={toggleTestMode} onChange={changeTestSelection}
-          onPreset={preset => { setTestConfig(current => applyTestPreset(current, preset)); setTestSampledAt(new Date().toISOString()); }}
-          onView={() => setSettingsOpen(false)} />
-        <fieldset className="module-settings"><legend>{t("监看模块 · 已启用")} <bdi dir="ltr">{number(state.enabledProviders.length)} / {number(providers.length)}</bdi></legend>
-          <p className="appearance-hint">{t("即时保存；超过四个可上下滚动。底边彩灯提示滚出视野的活动，点击可定位。")}</p>
-          <div className="module-options">{state.providerOrder.map(id => {
-            const provider = providers.find(item => item.id === id)!;
-            return <label key={id} className="module-option"><input type="checkbox" aria-label={t("启用 {p0}", { p0: provider.name })} checked={state.enabledProviders.includes(id)} disabled={modulesSaving} onChange={event => void changeEnabled(id, event.target.checked)} /><span>{provider.name}</span></label>;
-          })}</div>
-          <p className="appearance-hint">{t("取消勾选的模块不显示、不提醒；顺序仍保留。")}</p>
-        </fieldset>
-        <fieldset className="appearance-settings"><legend>{t('Claude 数据来源')}</legend>
-          <div className="segmented" aria-label={t('Claude 数据来源')}>{(['desktop', 'code'] as const).map(source => <button key={source} className={state.claudeSource === source ? 'selected' : ''} aria-pressed={state.claudeSource === source} disabled={claudeSourceSaving} onClick={() => void changeClaudeSource(source)}>{source === 'desktop' ? 'Claude Desktop' : 'Claude Code'}</button>)}</div>
-          <p className="appearance-hint">{t('桌面版与 Code 分开读取，切换后清除上个来源的套餐和状态。')}</p>
-          <label className="switch-row"><span>{t('联网查询 Claude 额度')}<small>{t('复用所选客户端的本地登录')}</small></span><input aria-label={t('联网查询 Claude 额度')} type="checkbox" checked={state.claudeNetworkAllowed} disabled={!state.desktop || claudeNetworkSaving} onChange={event => void changeClaudeNetworkAccess(event.target.checked)} /></label>
-          <p className="appearance-hint">{t('仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。')}</p>
-          {state.claudeSource === 'desktop' && <><button className="dock-button" disabled={!state.desktop || claudeSourceSaving} onClick={async () => {
-            if (!window.panel) return; setClaudeSourceSaving(true);
-            try { setLocalStatus(await window.panel.requestClaudeActivityAccess()); }
-            catch { setNotice(t('来源切换失败，请重试')); }
-            finally { setClaudeSourceSaving(false); }
-          }}>{t('识别桌面活动（辅助功能）')}</button><p className="appearance-hint">{t('仅识别发送和停止按钮；需要系统辅助功能授权，不读取聊天正文。')}</p></>}
-        </fieldset>
-        <fieldset className="appearance-settings"><legend>{t("Kimi 数据来源")}</legend>
-          <div className="segmented" aria-label={t("Kimi 数据来源")}>{(['code', 'work'] as const).map(source => <button key={source} className={state.kimiSource === source ? 'selected' : ''} aria-pressed={state.kimiSource === source} aria-label={t("选择 Kimi {p0} 来源", { p0: source === 'work' ? 'Work' : 'Code' })} disabled={!state.desktop || kimiSourceSaving} onClick={() => void changeKimiSource(source)}>Kimi {source === 'work' ? 'Work' : 'Code'}</button>)}</div>
-          <p className="appearance-hint">{t("Work 读取正在运行的桌面客户端账号及会员共享积分，活动状态暂为未知。Code 读取独立 CLI 的额度与本机服务。来源失败时保留所选客户端。")}</p>
-        </fieldset>
-        <fieldset className="appearance-settings"><legend>{t("千问登录读取")}</legend>
-          <label className="switch-row"><span>{t("读取千问登录状态")}<small>{t("仅查询套餐和积分")}</small></span><input aria-label={t("读取千问登录状态")} type="checkbox" checked={state.qwenKeychainAllowed} disabled={!state.desktop || qwenAccessSaving} onChange={event => void changeQwenAccess(event.target.checked)} /></label>
-          <p className="appearance-hint">{t("仅访问千问专属的系统钥匙串记录，可能需要系统授权。登录信息不保存到面板；关闭会清除已读取的套餐和积分。拒绝授权后不会自动反复弹窗，可处理授权后手动刷新。")}</p>
-        </fieldset>
-        <fieldset className="appearance-settings"><legend>{t("外观")}</legend>
-          <label className="switch-row"><span>{t("二次元模式")}<small>{t("大图占卡片约四分之一")}</small></span><input aria-label={t("二次元模式")} type="checkbox" checked={state.animeMode} disabled={animeSaving} onChange={event => void changeAnimeMode(event.target.checked)} /></label>
-          <p className="appearance-hint">{t("使用专属角色图片，WorkBuddy 暂用占位图；可在下方替换。普通 LOGO 独立保留。")}</p>
-          <label className="switch-row"><span>{t("跟随系统")}<small>{t("自动切换浅色和深色外观")}</small></span><input aria-label={t("跟随系统")} type="checkbox" checked={state.theme === 'system'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'system' : resolvedTheme)} /></label>
-          <label className="switch-row"><span>{t("暗夜模式")}<small>{state.theme === 'system' ? t("手动切换后停止跟随系统") : t("已手动指定外观")}</small></span><input aria-label={t("暗夜模式")} type="checkbox" checked={resolvedTheme === 'dark'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'dark' : 'light')} /></label>
-          <p className="appearance-hint">{resolvedTheme === 'dark' ? t("深色") : t("浅色")} {t("· 立即生效并保存")}</p>
-        </fieldset>
-        <fieldset><legend>{t('缓存维护')}</legend><button className="dock-button" disabled={!state.desktop || cacheClearing} onClick={async () => {
-          if (!window.panel) return; setCacheClearing(true);
-          try { const result = await window.panel.clearCache(); setNotice(t('已清理缓存 · {p0} MB', { p0: number(result.freedBytes / 1024 / 1024, { maximumFractionDigits: 1 }) })); }
-          catch { setNotice(t('缓存清理失败，请重试')); }
-          finally { setCacheClearing(false); }
-        }}>{t('清理缓存')}</button><p className="appearance-hint">{t('清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。')}</p></fieldset>
-        <fieldset><legend>{t("默认停靠位置")}</legend><div className="segmented"><button className={draft.side === 'left' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'left' })}>{t("左侧")}</button><button className={draft.side === 'right' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'right' })}>{t("右侧")}</button></div></fieldset>
-        <label className="switch-row"><span>{t("跨桌面锁定")}<small>{t("置顶并跟随桌面切换")}</small></span><input type="checkbox" checked={draft.locked} onChange={(event) => setDraft({ ...draft, locked: event.target.checked })} /></label>
-        <label className="switch-row"><span>{t("状态灯动画")}<small>{t("LOGO 外沿每 5 秒呼吸一次")}</small></span><input type="checkbox" checked={draft.animate} onChange={(event) => setDraft({ ...draft, animate: event.target.checked })} /></label>
-        <button className="dock-button" onClick={async () => {
-          try { if (window.panel) setState(await window.panel.dock()); setNotice(t("已重新贴边")); }
-          catch { setNotice(t("重新贴边失败")); }
-        }}><MapPin size={14} />{t("重新贴到屏幕边缘")}</button>
-        <div className="settings-section"><h3>{t("助手图片")}</h3><p>{t("透明图片效果更好")}</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
-          <Avatar provider={provider} image={images[provider.id]} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={t("替换 {p0} 图片", { p0: provider.name })}>{t("替换")}</button>
-        </div>)}</div>
-        <div className="settings-section"><h3>{t("二次元图片")}</h3><p>{t("独立保存；推荐透明背景，完整显示不裁切")}</p>{providers.map(provider => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
-          <Avatar provider={provider} image={animeImages[provider.id]} anime /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id, true)} aria-label={t("替换 {p0} 二次元图片", { p0: provider.name })}>{t("替换")}</button>
-        </div>)}</div>
-        <div className="settings-section"><h3>{t("启动应用")}</h3><p>{t("点击卡片或收起栏图标打开应用；未找到时可手动选择安装位置。")}</p>{providers.map(provider => <div className="app-option" key={provider.id}>
-          <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={t("选择 {p0} 启动应用", { p0: provider.name })}>{t("选择应用")}</button>
-        </div>)}</div>
-        <div className="settings-note"><span className="note-title">{`${t("本地")} · v${packageInfo.version}`}</span><p>{t("Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。")}</p><p>{t("DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。")}</p><p>{t('桌面版与 Code 分开读取，切换后清除上个来源的套餐和状态。')}</p>
-          {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{settingsStatus?.[id]?.detail}<br />{settingsStatus?.[id]?.activityDetail && <>{settingsStatus?.[id]?.activityDetail}<br /></>}{settingsStatus?.[id]?.observedAt ? t("记录时间：{p0}", { p0: date(settingsStatus?.[id]?.observedAt!) }) : t("尚无可用记录")}</p>)}</>}
-          <p>{state.desktop ? t("桌面版 · 显示缩放 {p0}×", { p0: state.scaleFactor }) : t("浏览器预览 · 窗口操作请使用桌面版")}</p></div>
+        <section className="settings-group" data-section="look"><h3>{t('外观')}</h3>
+          <fieldset className="skin-settings"><legend>{t('界面风格')}</legend>
+            <div className="skin-options">{skinOptions.map(option => <button key={option.id} type="button" className={`skin-option ${skin === option.id ? 'selected' : ''}`} data-skin-option={option.id}
+              aria-pressed={skin === option.id} disabled={skinSaving} onClick={() => void changeSkin(option.id)}>
+              <span className="skin-preview" aria-hidden="true"><i /><i /><i /></span><strong>{option.name}</strong><small>{option.hint}</small></button>)}</div>
+          </fieldset>
+          <label className="switch-row"><span>{t('二次元模式')}<small>{t('三种风格都用角色图片替换 LOGO')}</small></span><input aria-label={t('二次元模式')} type="checkbox" checked={state.animeMode} disabled={animeSaving} onChange={event => void changeAnimeMode(event.target.checked)} /></label>
+          <label className="switch-row"><span>{t('跟随系统')}<small>{t('自动切换浅色和深色外观')}</small></span><input aria-label={t('跟随系统')} type="checkbox" checked={state.theme === 'system'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'system' : resolvedTheme)} /></label>
+          <label className="switch-row"><span>{t('暗夜模式')}<small>{state.theme === 'system' ? t('手动切换后停止跟随系统') : t('已手动指定外观')}</small></span><input aria-label={t('暗夜模式')} type="checkbox" checked={resolvedTheme === 'dark'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'dark' : 'light')} /></label>
+          <fieldset className="layout-settings"><legend>{t('窗口模式')}</legend>
+            <select aria-label={t('窗口模式')} value={state.layout} disabled={layoutSaving} onChange={event => void changeLayout(event.target.value as Layout)}>
+              <option value="single">{t('单列模式')}</option><option value="double">{t('双排模式')}</option><option value="fullscreen">{t('全屏模式')}</option>
+            </select><p className="appearance-hint">{t('双排宽度加倍；全屏显示任务详情。Escape 退出全屏。')}</p>
+          </fieldset>
+          <fieldset className="insight-settings"><legend>{t('下半屏')}</legend>
+            {([['timeline', t('动态时间线'), t('各助手开始、等待和完成的记录')], ['resets', t('额度重置日程'), t('按时间排列下一次额度恢复')],
+              ['trend', t('额度趋势'), t('近 24 小时最紧额度的变化')], ['mascot', t('看板娘'), t('仅二次元模式显示，随状态换表情')]] as [InsightId, string, string][]).map(([id, label, hint]) =>
+              <label key={id} className="switch-row"><span>{label}<small>{hint}</small></span><input aria-label={label} type="checkbox" checked={insights[id]} disabled={insightsSaving} onChange={event => void changeInsight(id, event.target.checked)} /></label>)}
+            <p className="appearance-hint">{t('可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。')}</p>
+          </fieldset>
+          <fieldset className="language-settings"><legend>{t('语言')}</legend>
+            <select aria-label={t('语言')} value={state.language} disabled={languageSaving} onChange={event => void changeLanguage(event.target.value as Language)}>
+              <option value="system">{t('跟随系统')}</option>
+              {languages.map(language => <option key={language.id} value={language.id} lang={language.id} dir={language.dir}>{language.name}</option>)}
+            </select><p className="appearance-hint">{t('语言说明')}</p>
+          </fieldset>
+        </section>
+        <section className="settings-group" data-section="modules"><h3>{t('模块')}</h3>
+          <fieldset className="module-settings"><legend>{t('监看模块 · 已启用')} <bdi dir="ltr">{number(state.enabledProviders.length)} / {number(providers.length)}</bdi></legend>
+            <div className="module-options">{state.providerOrder.map(id => {
+              const provider = providers.find(item => item.id === id)!;
+              return <label key={id} className="module-option" style={{ '--accent': provider.color } as CSSProperties}><input type="checkbox" aria-label={t('启用 {p0}', { p0: provider.name })} checked={state.enabledProviders.includes(id)} disabled={modulesSaving} onChange={event => void changeEnabled(id, event.target.checked)} /><span>{provider.name}</span></label>;
+            })}</div>
+            <p className="appearance-hint">{t('取消勾选的模块不显示、不提醒；顺序仍保留。长按卡片可拖动排序。')}</p>
+          </fieldset>
+          <TestControls enabled={testMode} config={testConfig} onToggle={toggleTestMode} onChange={changeTestSelection}
+            onPreset={preset => { setTestConfig(current => applyTestPreset(current, preset)); setTestSampledAt(new Date().toISOString()); }}
+            onView={() => setSettingsOpen(false)} />
+        </section>
+        <section className="settings-group" data-section="data"><h3>{t('数据来源')}</h3>
+          <fieldset><legend>{t('Claude 数据来源')}</legend>
+            <div className="segmented" aria-label={t('Claude 数据来源')}>{(['desktop', 'code'] as const).map(source => <button key={source} className={state.claudeSource === source ? 'selected' : ''} aria-pressed={state.claudeSource === source} disabled={claudeSourceSaving} onClick={() => void changeClaudeSource(source)}>{source === 'desktop' ? 'Claude Desktop' : 'Claude Code'}</button>)}</div>
+            <p className="appearance-hint">{t('桌面版与 Code 分开读取，切换后清除上个来源的套餐和状态。')}</p>
+            <label className="switch-row"><span>{t('联网查询 Claude 额度')}<small>{t('复用所选客户端的本地登录')}</small></span><input aria-label={t('联网查询 Claude 额度')} type="checkbox" checked={state.claudeNetworkAllowed} disabled={!state.desktop || claudeNetworkSaving} onChange={event => void changeClaudeNetworkAccess(event.target.checked)} /></label>
+            <p className="appearance-hint">{t('仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。')}</p>
+            <label className="switch-row"><span>{t('Claude Code 状态钩子')}<small>{t('即时识别运行、授权和提问，无需辅助功能')}</small></span><input aria-label={t('Claude Code 状态钩子')} type="checkbox" checked={state.claudeHooksEnabled} disabled={!state.desktop || claudeHooksSaving || state.claudeHooksStatus?.supported === false} onChange={event => void changeClaudeHooks(event.target.checked)} /></label>
+            <p className="appearance-hint">{t('开启后在 Claude Code 用户设置中登记一个只写本地文件的钩子，终端与桌面版 Code 会话都会上报；只记录事件类型和会话编号，不记录对话内容。关闭即移除，不影响你自己的钩子。')}</p>
+            {state.claudeSource === 'desktop' && <><button className="dock-button" disabled={!state.desktop || claudeSourceSaving} onClick={async () => {
+              if (!window.panel) return; setClaudeSourceSaving(true);
+              try { setLocalStatus(await window.panel.requestClaudeActivityAccess()); }
+              catch { setNotice(t('来源切换失败，请重试')); }
+              finally { setClaudeSourceSaving(false); }
+            }}>{t('识别桌面活动（辅助功能）')}</button><p className="appearance-hint">{t('仅识别发送和停止按钮；需要系统辅助功能授权，不读取聊天正文。')}</p></>}
+          </fieldset>
+          <fieldset><legend>{t('Kimi 数据来源')}</legend>
+            <div className="segmented" aria-label={t('Kimi 数据来源')}>{(['code', 'work'] as const).map(source => <button key={source} className={state.kimiSource === source ? 'selected' : ''} aria-pressed={state.kimiSource === source} aria-label={t('选择 Kimi {p0} 来源', { p0: source === 'work' ? 'Work' : 'Code' })} disabled={!state.desktop || kimiSourceSaving} onClick={() => void changeKimiSource(source)}>Kimi {source === 'work' ? 'Work' : 'Code'}</button>)}</div>
+            <p className="appearance-hint">{t('Work 读取正在运行的桌面客户端账号及会员共享积分，活动状态暂为未知。Code 读取独立 CLI 的额度与本机服务。来源失败时保留所选客户端。')}</p>
+          </fieldset>
+          <fieldset><legend>{t('千问登录读取')}</legend>
+            <label className="switch-row"><span>{t('读取千问登录状态')}<small>{t('仅查询套餐和积分')}</small></span><input aria-label={t('读取千问登录状态')} type="checkbox" checked={state.qwenKeychainAllowed} disabled={!state.desktop || qwenAccessSaving} onChange={event => void changeQwenAccess(event.target.checked)} /></label>
+            <p className="appearance-hint">{t('仅访问千问专属的系统钥匙串记录，可能需要系统授权。登录信息不保存到面板；关闭会清除已读取的套餐和积分。拒绝授权后不会自动反复弹窗，可处理授权后手动刷新。')}</p>
+          </fieldset>
+          {state.platform === 'darwin' && <fieldset><legend>{t('桌面小组件')}</legend>
+            <p className="appearance-hint">{t('在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。')}</p>
+            <p className="appearance-hint">{t('总览跟随“监看模块”的选择和排序。')}</p>
+            <label className="switch-row"><span>{t('同步小组件')}<small>{t('仅共享额度摘要与状态')}</small></span><input type="checkbox" aria-label={t('同步小组件')} checked={state.widgetsEnabled} disabled={!state.widgetsAvailable || widgetsSaving} onChange={async event => {
+              const enabled = event.target.checked;
+              setWidgetsSaving(true);
+              try { if (window.panel) setState(await window.panel.setWidgetsEnabled(enabled)); }
+              catch { setNotice(t('小组件同步失败，请重试')); }
+              finally { setWidgetsSaving(false); }
+            }} /></label>
+            {!state.widgetsAvailable && <p className="appearance-hint">{t('此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。')}</p>}
+            {state.widgetSyncError && <p className="appearance-hint" role="status">{t('小组件同步失败，请重试')}</p>}
+            <p className="appearance-hint">{t('macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。')}</p>
+            <button className="dock-button" disabled={!state.widgetsEnabled || !state.widgetsAvailable || widgetsSaving} onClick={async () => {
+              setWidgetsSaving(true);
+              try { if (window.panel) setState(await window.panel.widgetBackground()); }
+              catch { setNotice(t('小组件同步失败，请重试')); }
+              finally { setWidgetsSaving(false); }
+            }}>{t('仅保留桌面小组件')}</button>
+            <p className="appearance-hint">{t('隐藏面板、Dock 和菜单栏图标，后台继续监看。点击小组件或再次打开 AI Watch 恢复。')}</p>
+          </fieldset>}
+        </section>
+        <section className="settings-group" data-section="window"><h3>{t('窗口')}</h3>
+          <fieldset><legend>{t('默认停靠位置')}</legend><div className="segmented"><button className={draft.side === 'left' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'left' })}>{t('左侧')}</button><button className={draft.side === 'right' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'right' })}>{t('右侧')}</button></div></fieldset>
+          <label className="switch-row"><span>{t('跨桌面锁定')}<small>{t('置顶并跟随桌面切换')}</small></span><input type="checkbox" checked={draft.locked} onChange={(event) => setDraft({ ...draft, locked: event.target.checked })} /></label>
+          <label className="switch-row"><span>{t('状态灯动画')}<small>{t('运行中的状态灯缓慢呼吸')}</small></span><input type="checkbox" checked={draft.animate} onChange={(event) => setDraft({ ...draft, animate: event.target.checked })} /></label>
+          <button className="dock-button" onClick={async () => {
+            try { if (window.panel) setState(await window.panel.dock()); setNotice(t('已重新贴边')); }
+            catch { setNotice(t('重新贴边失败')); }
+          }}><MapPin size={14} />{t('重新贴到屏幕边缘')}</button>
+          <fieldset><legend>{t('缓存维护')}</legend><button className="dock-button" disabled={!state.desktop || cacheClearing} onClick={async () => {
+            if (!window.panel) return; setCacheClearing(true);
+            try { const result = await window.panel.clearCache(); setNotice(t('已清理缓存 · {p0} MB', { p0: number(result.freedBytes / 1024 / 1024, { maximumFractionDigits: 1 }) })); }
+            catch { setNotice(t('缓存清理失败，请重试')); }
+            finally { setCacheClearing(false); }
+          }}>{t('清理缓存')}</button><p className="appearance-hint">{t('清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。')}</p></fieldset>
+        </section>
+        <section className="settings-group" data-section="images"><h3>{t('图片与应用')}</h3>
+          <div className="settings-section"><h4>{t('助手图片')}</h4><p>{t('透明图片效果更好')}</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
+            <Portrait provider={provider} image={images[provider.id]} anime={false} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={t('替换 {p0} 图片', { p0: provider.name })}>{t('替换')}</button>
+          </div>)}</div>
+          <div className="settings-section"><h4>{t('二次元图片')}</h4><p>{t('独立保存；推荐正方形透明背景，小头像会自动对准脸部')}</p>{providers.map(provider => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
+            <Portrait provider={provider} image={animeImages[provider.id]} anime /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id, true)} aria-label={t('替换 {p0} 二次元图片', { p0: provider.name })}>{t('替换')}</button>
+          </div>)}</div>
+          <div className="settings-section"><h4>{t('启动应用')}</h4><p>{t('点击卡片或收起栏图标打开应用；未找到时可手动选择安装位置。')}</p>{providers.map(provider => <div className="app-option" key={provider.id}>
+            <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={t('选择 {p0} 启动应用', { p0: provider.name })}>{t('选择应用')}</button>
+          </div>)}</div>
+        </section>
+        <section className="settings-group settings-note" data-section="about"><h3>{t('关于')}</h3><span className="note-title">{`${t('本地')} · v${packageInfo.version}`}</span><p>{t('Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。')}</p><p>{t('DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。')}</p>
+          {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{settingsStatus?.[id]?.detail}<br />{settingsStatus?.[id]?.activityDetail && <>{settingsStatus?.[id]?.activityDetail}<br /></>}{settingsStatus?.[id]?.observedAt ? t('记录时间：{p0}', { p0: date(settingsStatus?.[id]?.observedAt!) }) : t('尚无可用记录')}</p>)}</>}
+          <p>{state.desktop ? t('桌面版 · 显示缩放 {p0}×', { p0: state.scaleFactor }) : t('浏览器预览 · 窗口操作请使用桌面版')}</p></section>
       </div>
-      <div className="settings-footer"><button className="save-button" onClick={saveSettings}><Check size={15} />{t("保存配置")}</button>{state.desktop && <button className="quit-button" onClick={() => window.panel?.quit()}>{t("退出面板")}</button>}</div>
+      <div className="settings-footer"><button className="save-button" onClick={saveSettings}><Check size={15} />{t('保存配置')}</button>{state.desktop && <button className="quit-button" onClick={() => window.panel?.quit()}>{t('退出面板')}</button>}</div>
       {notice && settingsOpen && <div className="toast" role="status">{notice}</div>}
     </dialog>
     <input ref={fileInput} className="hidden-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void readFile(event.target.files?.[0]); event.target.value = ''; }} />
     {notice && !settingsOpen && <div className="toast" role="status">{notice}</div>}
-  </main></I18nContext.Provider>;
+  </main></GrantAccessContext.Provider></I18nContext.Provider>;
 }

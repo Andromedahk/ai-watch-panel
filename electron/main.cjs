@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, shell, systemPreferences } = require('electron');
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
 const { traySummary } = require('./tray-summary.cjs');
@@ -6,13 +6,14 @@ const { WidgetPublisher, loadWidgetBridge } = require('./widget-publisher.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, PROVIDER_ORDER } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, isInsightOrder, PROVIDER_ORDER, COLLAPSED_WIDTH } = require('./window-policy.cjs');
 const { requestKimiWorkSubscription } = require('./kimi-work-api.cjs');
 const { requestZcodeJson } = require('./zcode-account-api.cjs');
 const { WindowLayout } = require('./window-layout.cjs');
 const { taskDetail } = require('./task-details.cjs');
 const { LocalStatusReader } = require('./local-status.cjs');
-const { ClaudeStatusReader } = require('./claude-status.cjs');
+const { ClaudeStatusReader, resolveClaudePaths } = require('./claude-status.cjs');
+const { ClaudeHooks } = require('./claude-hooks.cjs');
 const { createClaudeActivityBridge } = require('./claude-activity-bridge.cjs');
 const { readDesktopActivity } = require('./claude-desktop.cjs');
 const { ProviderLauncher } = require('./provider-launcher.cjs');
@@ -32,6 +33,23 @@ let statusSnapshot = statusReader.current;
 const fixtureVariant = process.env.AI_WATCH_TEST_STATUS;
 const fixtureMode = Boolean(process.env.AI_WATCH_TEST_PROFILE && ['fixture', 'glow-running', 'glow-attention'].includes(fixtureVariant));
 const providerLauncher = new ProviderLauncher({ fixtureMode });
+let claudeHooks = null, claudeHooksStatus = { supported: process.platform !== 'win32', installed: false };
+// Test profiles register hooks in a private copy of the settings file, never the user's real one.
+function createClaudeHooks() {
+  const settingsFile = process.env.AI_WATCH_TEST_PROFILE ? path.join(app.getPath('userData'), 'claude-config', 'settings.json')
+    : path.join(resolveClaudePaths().config, 'settings.json');
+  claudeHooks = new ClaudeHooks({ settingsFile, dataDir: app.getPath('userData') });
+  statusReader.claudeReader.hooks = claudeHooks;
+}
+async function applyClaudeHooks(enabled) {
+  try {
+    if (enabled) await claudeHooks.install(); else await claudeHooks.uninstall();
+    claudeHooksStatus = await claudeHooks.status();
+  } catch (error) {
+    claudeHooksStatus = { supported: claudeHooks.supported, installed: false, error: ['settings-invalid', 'settings-unreadable', 'unsupported-platform'].includes(error.message) ? error.message : 'write-failed' };
+    throw error;
+  }
+}
 async function refreshLocalStatus(force = false) {
   statusSnapshot = fixtureMode
     ? JSON.parse(await fs.promises.readFile(path.join(__dirname, '../tests/fixtures/local-status.json'), 'utf8'))
@@ -107,6 +125,7 @@ function currentState() {
     widgetsAvailable: widgetPublisher?.available === true, widgetSyncError: widgetPublisher?.error === true,
     widgetBackground: panelTray?.widgetBackground === true,
     widgetLastPublishedAt: widgetPublisher?.lastPublishedAt || null,
+    claudeHooksStatus,
     resolvedLanguage: currentLanguage().language,
     resolvedTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
@@ -165,7 +184,7 @@ async function setCollapsed(value) {
   if (value) {
     expandedBounds = window.getBounds();
     const old = expandedBounds;
-    const newWidth = 46;
+    const newWidth = COLLAPSED_WIDTH;
     setBounds({ ...old, width: newWidth, x: preferences.side === 'right' ? old.x + old.width - newWidth : old.x });
   } else {
     const current = window.getBounds();
@@ -208,6 +227,9 @@ else {
       }
     }
     statusReader.claudeReader.setDesktopPlanCacheFile(path.join(app.getPath('userData'), 'claude-desktop-plan.json'));
+    createClaudeHooks();
+    // Refresh the script on start so a moved or updated app keeps reporting; failures stay visible in settings.
+    if (preferences.claudeHooksEnabled) await applyClaudeHooks(true).catch(() => {});
     widgetPublisher = new WidgetPublisher({ bridge: loadWidgetBridge({ app, fixtureMode,
       fixtureWidgets: process.env.AI_WATCH_TEST_WIDGETS === '1' }) });
     statusReader.setKimiSource(preferences.kimiSource);
@@ -325,7 +347,7 @@ else {
     });
     handle('panel:configure', (value) => {
       const next = validPreferences({ ...value, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
-        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, providerApps: preferences.providerApps });
+        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, claudeHooksEnabled: preferences.claudeHooksEnabled, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, insights: preferences.insights, insightOrder: preferences.insightOrder, skin: preferences.skin, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -336,6 +358,27 @@ else {
       const previous = preferences.animeMode;
       preferences.animeMode = value;
       try { savePreferences(); } catch (error) { preferences.animeMode = previous; throw error; }
+      emitState(); return currentState();
+    });
+    handle('panel:insights', (value) => {
+      if (!isInsights(value)) throw new Error('Invalid insights');
+      const previous = preferences.insights;
+      preferences.insights = { ...value };
+      try { savePreferences(); } catch (error) { preferences.insights = previous; throw error; }
+      emitState(); return currentState();
+    });
+    handle('panel:insight-order', (value) => {
+      if (!isInsightOrder(value)) throw new Error('Invalid insight order');
+      const previous = preferences.insightOrder;
+      preferences.insightOrder = [...value];
+      try { savePreferences(); } catch (error) { preferences.insightOrder = previous; throw error; }
+      emitState(); return currentState();
+    });
+    handle('panel:skin', (value) => {
+      if (!isSkin(value)) throw new Error('Invalid skin');
+      const previous = preferences.skin;
+      preferences.skin = value;
+      try { savePreferences(); } catch (error) { preferences.skin = previous; throw error; }
       emitState(); return currentState();
     });
     handle('panel:open-provider', (id) => providerLauncher.launch(id,
@@ -391,8 +434,24 @@ else {
       return currentState();
     });
     handle('panel:claude-activity-access', async () => {
-      if (!fixtureMode && preferences.claudeSource === 'desktop') await statusReader.claudeReader.requestActivityAccess();
+      if (!fixtureMode && preferences.claudeSource === 'desktop') {
+        const result = await statusReader.claudeReader.requestActivityAccess();
+        // macOS only prompts once per signature. A rebuilt ad hoc copy keeps a stale,
+        // switched-on entry that no longer matches, so open the pane to re-add it.
+        if (result.supported && result.trusted === false) {
+          await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility').catch(() => {});
+        }
+      }
       return refreshLocalStatus(true);
+    });
+    handle('panel:claude-hooks', async (value) => {
+      if (typeof value !== 'boolean') throw new Error('Invalid Claude hooks setting');
+      await applyClaudeHooks(value).catch(() => {});
+      // Only a successful install counts as on; a failed removal still turns reporting off.
+      preferences.claudeHooksEnabled = value && claudeHooksStatus.installed;
+      savePreferences(); emitState();
+      await refreshLocalStatus(true);
+      return currentState();
     });
     handle('panel:claude-network-access', async (value) => {
       if (typeof value !== 'boolean') throw new Error('Invalid Claude network setting');

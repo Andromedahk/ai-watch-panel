@@ -1,7 +1,13 @@
 const path = require('node:path');
 const { isLanguage } = require('./i18n.cjs');
-const RATIO = 4.5;
-const COLLAPSED_WIDTH = 46;
+// Panel width follows the screen height within a readable range; the 4.5 : 1 ratio is retired.
+const WIDTH_DIVISOR = 3.4;
+const MIN_WIDTH = 300;
+const MAX_WIDTH = 420;
+const COLLAPSED_WIDTH = 64;
+const SKINS = ['watch', 'dial', 'party'];
+const isSkin = value => SKINS.includes(value);
+const columnWidth = height => Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(height / WIDTH_DIVISOR)));
 // Work-area changes from the Dock/menu bar are not monitor geometry changes.
 function displayGeometry(display) {
   const { x, y, width, height } = display.bounds;
@@ -27,6 +33,14 @@ function migrateEnabled(value) {
   }
   return enabled;
 }
+// Lower-half panels shown under the cards when the window has spare height.
+const INSIGHTS = ['timeline', 'resets', 'trend', 'mascot'];
+const INSIGHT_ORDER = ['resets', 'trend', 'timeline', 'mascot'];
+const isInsightOrder = value => Array.isArray(value) && value.length === INSIGHT_ORDER.length
+  && new Set(value).size === INSIGHT_ORDER.length && value.every(id => INSIGHT_ORDER.includes(id));
+const isInsights = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+  && Object.keys(value).length === INSIGHTS.length && INSIGHTS.every(key => typeof value[key] === 'boolean');
+const validInsights = value => Object.fromEntries(INSIGHTS.map(key => [key, value?.[key] !== false]));
 const isTheme = value => ['system', 'light', 'dark'].includes(value);
 const isKimiSource = value => ['code', 'work'].includes(value);
 const isClaudeSource = value => ['desktop', 'code'].includes(value);
@@ -37,7 +51,7 @@ function isProviderOrder(value) {
 }
 
 function panelBounds(workArea, side = 'right', collapsed = false, layout = 'single') {
-  const width = collapsed ? COLLAPSED_WIDTH : Math.min(workArea.width, Math.max(1, Math.round(workArea.height / RATIO)) * (layout === 'double' ? 2 : 1));
+  const width = collapsed ? COLLAPSED_WIDTH : Math.min(workArea.width, columnWidth(workArea.height) * (layout === 'double' ? 2 : 1));
   if (layout === 'fullscreen' && !collapsed) return { ...workArea };
   return {
     x: side === 'left' ? workArea.x : workArea.x + workArea.width - width,
@@ -74,10 +88,14 @@ function validPreferences(value) {
     kimiSource: isKimiSource(value?.kimiSource) ? value.kimiSource : 'code',
     claudeSource: isClaudeSource(value?.claudeSource) ? value.claudeSource : 'desktop',
     claudeNetworkAllowed: value?.claudeNetworkAllowed === true,
+    claudeHooksEnabled: value?.claudeHooksEnabled === true,
     cacheCleanupPending: value?.cacheCleanupPending === true,
     widgetsEnabled: value?.widgetsEnabled === true,
     kimiWorkApp: validProviderApps({ kimi: value?.kimiWorkApp }).kimi || null,
     animeMode: value?.animeMode === true,
+    insights: validInsights(value?.insights && typeof value.insights === 'object' && !Array.isArray(value.insights) ? value.insights : {}),
+    insightOrder: isInsightOrder(value?.insightOrder) ? [...value.insightOrder] : [...INSIGHT_ORDER],
+    skin: isSkin(value?.skin) ? value.skin : 'watch',
     layout: isLayout(value?.layout) ? value.layout : 'single',
     windowLayout: value?.windowLayout === 'double' ? 'double' : 'single',
     providerApps: validProviderApps(value?.providerApps),
@@ -86,4 +104,4 @@ function validPreferences(value) {
   };
 }
 
-module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, PROVIDER_ORDER, RATIO, COLLAPSED_WIDTH };
+module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, isInsightOrder, INSIGHT_ORDER, INSIGHTS, PROVIDER_ORDER, SKINS, COLLAPSED_WIDTH, MIN_WIDTH, MAX_WIDTH, WIDTH_DIVISOR, columnWidth };

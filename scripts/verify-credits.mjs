@@ -13,8 +13,24 @@ try {
   let page = await app.firstWindow();
   const ready = () => page.waitForFunction(() => Boolean(document.querySelector('main')?.getAttribute('data-sampled-at')));
   await ready();
+  await page.bringToFront();
+  // Keep offscreen checks independent of the current display's native work-area height.
+  await page.setViewportSize({ width: 360, height: 900 });
+  await expect.poll(() => page.evaluate(() => [innerWidth, innerHeight])).toEqual([360, 900]);
   const card = id => page.locator(`.provider-card[data-provider="${id}"]`);
   const light = id => page.locator(`.hidden-activity-light[data-provider="${id}"]`);
+  const visibilityRatio = id => card(id).evaluate(el => new Promise(resolve => {
+    const observer = new IntersectionObserver(([entry]) => {
+      observer.disconnect(); resolve(entry.intersectionRatio);
+    }, { root: el.parentElement, threshold: [0, .6, 1] });
+    observer.observe(el);
+  }));
+  const expectVisibility = async visible => {
+    for (const id of Object.keys(names)) {
+      if (visible) await expect.poll(() => visibilityRatio(id)).toBeGreaterThanOrEqual(.6);
+      else await expect.poll(() => visibilityRatio(id)).toBeLessThan(.6);
+    }
+  };
   const settings = () => page.getByRole('button', { name: '打开配置', exact: true }).click();
   const qwenAccess = () => page.getByRole('checkbox', { name: '读取千问登录状态', exact: true });
   const close = async () => {
@@ -58,7 +74,7 @@ try {
     }, value), true);
   }
   await page.getByRole('checkbox', { name: '测试模式', exact: true }).check();
-  await expect(page.getByRole('combobox')).toHaveCount(16);
+  await expect(page.locator('.test-provider select')).toHaveCount(16);
   await page.getByRole('button', { name: '全部待机', exact: true }).click();
   for (const id of Object.keys(names)) {
     await page.getByRole('combobox', { name: `${names[id]} 测试任务状态`, exact: true }).selectOption('running');
@@ -66,6 +82,7 @@ try {
   }
   await close();
   await page.locator('.provider-viewport').evaluate(el => el.scrollTo({ top: 0, behavior: 'instant' }));
+  await expectVisibility(false);
   await expect.poll(() => page.locator('.hidden-activity-light').evaluateAll(elements => elements.map(el => el.dataset.provider))).toEqual(['qwen', 'workbuddy']);
   for (const id of Object.keys(names)) {
     await expect(light(id)).toHaveAttribute('data-glow', 'running');
@@ -73,6 +90,7 @@ try {
     assert.equal(await light(id).evaluate(el => getComputedStyle(el, '::before').animationDuration), '5s');
   }
   await light('workbuddy').click();
+  await expectVisibility(true);
   await expect(light('workbuddy')).toHaveCount(0); await expect(light('qwen')).toHaveCount(0);
   await scrollBottom();
   for (const id of Object.keys(names)) {
@@ -81,21 +99,17 @@ try {
     await expect(region.locator('.plan-name')).not.toHaveText('套餐未知');
     await expect(region.locator('.credits-list')).toHaveAttribute('aria-label', `${names[id]} 剩余积分`);
     await expect(region.locator('.credit-item')).toHaveCount(2);
-    await expect(region.locator('.quota-pagination')).toHaveText('1/2');
-    const labels = await region.locator('.credit-label').allTextContents();
+    // Two pools fit on the card; the rest stay reachable through the "另有 N 项" summary.
+    const more = region.locator('.more-quotas');
+    await expect(more).toHaveText('另有 2 项');
+    const labels = await region.locator('.credit-label').evaluateAll(els => els.map(el => el.firstChild.textContent));
     const firstValues = await region.locator('.credit-value').allTextContents();
     assert.ok(firstValues.every(value => Number.isFinite(firstNumber(value)) && firstNumber(value) > 0));
     assert.equal(firstNumber(firstValues[0]), 1234.5);
-    const units = [await region.locator('.credits-list').innerText()];
-    await region.getByRole('button', { name: `${names[id]} 下一页额度`, exact: true }).click();
-    await expect(region.locator('.quota-pagination')).toHaveText('2/2');
-    await expect(region.getByRole('button', { name: `${names[id]} 下一页额度`, exact: true })).toBeDisabled();
-    labels.push(...await region.locator('.credit-label').allTextContents());
-    units.push(await region.locator('.credits-list').innerText());
+    const hidden = (await more.getAttribute('title')).split('\n');
+    labels.push(...hidden.map(line => line.split(' · ')[0]));
     assert.equal(new Set(labels).size, 4, 'All four separate credit pools must be reachable');
-    assert.match(units.join(' '), /积分/); assert.match(units.join(' '), /次/);
-    await region.getByRole('button', { name: `${names[id]} 上一页额度`, exact: true }).click();
-    assert.deepEqual(await region.locator('.credit-value').allTextContents(), firstValues);
+    assert.match(await region.locator('.credits-list').innerText(), /积分/); assert.match(hidden.join(' '), /次/);
     const metrics = await cardMetrics(id);
     assert.equal(metrics.overflow, false); assert.equal(metrics.overlap, false);
     assert.equal(metrics.titleFits, true); assert.equal(metrics.imageLoaded, true); assert.equal(metrics.color, colors[id]);
@@ -123,7 +137,7 @@ try {
   for (const mode of ['unknown', 'signed-out', 'error']) {
     await setData(mode);
     for (const id of Object.keys(names)) {
-      await expect(card(id).locator('.plan-name')).toHaveText('套餐未知');
+      await expect(card(id).locator('.plan-name')).toHaveText('未知');
       await expect(card(id).locator('.credit-value')).toHaveCount(0);
       await expect(card(id).getByRole('progressbar')).toHaveCount(0);
       await expect(card(id).locator('.quota-area')).not.toContainText(/(?:剩余|余额)\s*0(?:\D|$)/);
@@ -146,7 +160,7 @@ try {
   for (const id of Object.keys(names)) {
     await expect(card(id).locator('.credit-value')).toHaveText('—');
     await expect(card(id).locator('.credit-amount')).toContainText('未知');
-    await expect(card(id).locator('.plan-name')).toHaveText('套餐未知');
+    await expect(card(id).locator('.plan-name')).toHaveText('未知');
   }
   // Exercise the production source label using a synthetic event only; no credential read or authorization is requested.
   const accessSnapshot = { ...unknownSnapshot, isTestData: false,
@@ -159,7 +173,7 @@ try {
   await settings(); await page.getByRole('checkbox', { name: '测试模式', exact: true }).check(); await close();
   await setData('normal');
   for (const id of Object.keys(names)) {
-    await expect(card(id).locator('.quota-pagination')).toHaveText('1/2');
+    await expect(card(id).locator('.more-quotas')).toHaveText('另有 2 项');
     assert.equal((await cardMetrics(id)).overflow, false);
   }
   assert.equal(JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).qwenKeychainAllowed, true);
@@ -170,7 +184,7 @@ try {
   assert.equal((await page.evaluate(() => window.panel.getState())).qwenKeychainAllowed, false);
   await close(); await app.close(); app = await launch(); page = await app.firstWindow(); await ready();
   assert.equal((await page.evaluate(() => window.panel.getState())).qwenKeychainAllowed, false);
-  console.log('Credits checks passed: eight cards, sixteen test controls, Qwen and WorkBuddy logos/colors, hidden indicators, plan labels, two-page credit pools and units, low/zero/full, historical values, unknown/signed-out/error without fake zero, recovered normal layout, explicit login-access preference validation and cold restart in fixture mode.');
+  console.log('Credits checks passed: eight cards, sixteen test controls, Qwen and WorkBuddy logos/colors, hidden indicators, plan labels, two visible credit pools plus an overflow summary, low/zero/full, historical values, unknown/signed-out/error without fake zero, recovered normal layout, explicit login-access preference validation and cold restart in fixture mode.');
 } finally {
   await app.close(); await rm(profile, { recursive: true, force: true });
 }
