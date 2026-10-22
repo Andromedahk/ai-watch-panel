@@ -1,10 +1,12 @@
 // Lower-half panels keep their full contents in a separate vertical scroller.
-import { useEffect, useLayoutEffect, useState, type CSSProperties, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { DAY, type Journal, type JournalEvent } from '../journal';
-import type { InsightId, Insights } from '../types';
+import type { InsightId, Insights, ProviderId } from '../types';
 import { LOW, type ProviderView } from './model';
 import { Portrait } from './parts';
+import quipBook from './quips.json';
 
 const MARGIN = 12;
 /** Top-to-bottom order; the mascot stands at the bottom edge. */
@@ -114,9 +116,27 @@ function Trend({ views, journal, anime, image }: PanelProps) {
   </section>;
 }
 
-type Mood = 'alert' | 'busy' | 'worried' | 'rest' | 'empty';
+type Mood = 'alert' | 'busy' | 'worried' | 'rest' | 'empty' | 'chat';
+/** Idle chatter per agent as [Chinese, English]; other languages show the English line. */
+const quips = quipBook as Record<ProviderId, [string, string][]>;
+type Quip = { id: ProviderId; index: number; status: string };
+
+/** Hand the bubble to another shown agent, skipping lines heard recently. */
+function nextQuip(views: ProviderView[], speaker: ProviderId | undefined, recent: string[]) {
+  const speakers = views.filter(view => quips[view.id]?.length);
+  const pool = speakers.length > 1 ? speakers.filter(view => view.id !== speaker) : speakers;
+  const view = pool[Math.floor(Math.random() * pool.length)];
+  if (!view) return undefined;
+  const all = quips[view.id].map((_, index) => index), fresh = all.filter(index => !recent.includes(`${view.id}:${index}`));
+  const choices = fresh.length ? fresh : all;
+  return { id: view.id, index: choices[Math.floor(Math.random() * choices.length)] };
+}
+
 function Mascot({ views, anime, image, onOpen }: PanelProps) {
-  const { t, number, percent } = useI18n();
+  const { t, number, percent, language } = useI18n();
+  const [quip, setQuip] = useState<Quip | null>(null);
+  const [spins, setSpins] = useState(0);
+  const recent = useRef<string[]>([]);
   const waiting = views.find(view => view.attention), running = views.filter(view => view.state === 'running');
   const low = views.filter(view => view.tightest !== null && view.tightest < LOW).sort((a, b) => a.tightest! - b.tightest!)[0];
   let mood: Mood, focus: ProviderView | undefined, line: string;
@@ -133,13 +153,28 @@ function Mascot({ views, anime, image, onOpen }: PanelProps) {
   } else if (views.length) {
     mood = 'rest'; focus = views[0]; line = t('大家都在休息，喝杯茶吧');
   } else { mood = 'empty'; line = t('还没有助手上线'); }
+  // A refreshed line stays until the room's status changes, so alerts always win.
+  const status = line, speaker = quip?.status === status ? views.find(view => view.id === quip.id) : undefined;
+  // Non-Chinese languages show the English line, kept left-to-right inside RTL layouts.
+  const english = !language.startsWith('zh') && Boolean(quip && speaker);
+  if (quip && speaker) { mood = 'chat'; focus = speaker; line = quips[speaker.id][quip.index][english ? 1 : 0]; }
+  const refresh = () => {
+    const next = nextQuip(views, focus?.id, recent.current);
+    if (!next) return;
+    recent.current = [...recent.current, `${next.id}:${next.index}`].slice(-60);
+    setQuip({ ...next, status });
+    setSpins(count => count + 1);
+  };
   return <section className="insight insight-mascot" data-insight="mascot" data-mood={mood} aria-label={t('看板娘')}
     style={focus ? { '--accent': focus.color } as CSSProperties : undefined}>
+    {views.length > 0 && <button type="button" className="mascot-refresh" data-spin={spins > 0 || undefined} title={t('换一句')} aria-label={t('换一句')} onClick={refresh}>
+      <RefreshCw key={spins} aria-hidden="true" />
+    </button>}
     {focus && <button type="button" className="mascot-figure" title={t('打开 {p0}', { p0: focus.name })} aria-label={t('打开 {p0}', { p0: focus.name })} onClick={() => onOpen(focus!)}>
       <Portrait provider={focus.provider} image={image(focus)} anime={anime} crop="bust" />
       {mood === 'rest' && <span className="mascot-zzz" aria-hidden="true">z<i>z</i><b>z</b></span>}
     </button>}
-    <p className="mascot-bubble" role="status"><span key={line}>{line}</span></p>
+    <p className="mascot-bubble" role="status"><span key={line} lang={english ? 'en' : undefined} dir={english ? 'ltr' : undefined}>{line}</span></p>
   </section>;
 }
 

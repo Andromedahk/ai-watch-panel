@@ -20,6 +20,21 @@
 
 ---
 
+## 2026-10-23 · Claude（Anthropic / Claude App 云端会话，经桌面连接写入本 worktree）· 看板娘刷新台词
+
+- 分支：`claude/ui-redesign`，起点 `84fa04d`（未提交）。
+- 目的：按人类要求在看板娘模块右上角加刷新按钮，随机让不同 AI Agent 说不同内容，至少 200 条台词。
+- 操作：
+  - 新增 `src/view/quips.json`：8 位助手各 30 条，共 240 条，每条为 [简体中文, 英文]；人设按人类设定（Codex 龙娘、DeepSeek 大肥鱼、Antigravity 北美猫娘等）。
+  - `src/view/insights.tsx`：看板娘新增 `chat` 心情和刷新按钮；随机挑选另一位已显示的助手，近 60 条内尽量不重复；状态提示一变化即自动切回；非中文界面显示英文，并在 RTL 中保持 LTR。
+  - `src/view/skins.css`：刷新按钮样式、旋转与出场动画，气泡下移避开按钮；17 种语言新增“换一句”。
+  - 新增 `tests/mascot-quips.test.cjs`；更新 README 用法与更新记录。
+- 验证：`tsc --noEmit`、`vite build` 通过；`node --test tests/mascot-quips.test.cjs tests/i18n.test.cjs` 8 项通过。Linux 云端 Chromium 打开构建产物（浏览器预览模式），watch / dial / party × 中文 / 英文 / 阿拉伯语 × 300–760px 各点击 12 次：每次换人换句，按钮在面板内且不与气泡重叠，无页面错误；目视截图确认。
+- 未验证：未在 macOS Electron 中运行 `test:insights`、`test:corners`；未打包安装。
+- 需要人类决定：是否提交、打包并替换已安装的 App。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 insights_acceptance、insights_locales 子 Agent）· 下半屏滚动与宽布局立绘
 
 - 分支：`claude/ui-redesign`，起点 `d01e08c`。

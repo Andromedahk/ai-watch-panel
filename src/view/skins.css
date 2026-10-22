@@ -628,6 +628,12 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
 .insight-mascot[data-mood="worried"] .mascot-bubble { color: var(--low); }
 .insight-mascot[data-mood="rest"] .mascot-figure { filter: saturate(.85); }
 .mascot-zzz { position: absolute; top: 14px; inset-inline-end: 6px; font: italic 700 13px var(--font); color: var(--faint); }
+/* Refresh hands the bubble to a random agent; the bubble sits low enough to clear it. */
+.mascot-refresh { position: absolute; top: 8px; inset-inline-end: 8px; z-index: 1; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%;
+  background: var(--raised); color: var(--muted); box-shadow: 0 0 0 1px var(--line-strong); }
+.mascot-refresh:hover { color: var(--text); background: var(--button-hover); }
+.mascot-refresh svg { width: 14px; height: 14px; }
+.insight-mascot .mascot-bubble { margin-block-start: 26px; }
 .mascot-zzz i, .mascot-zzz b { display: inline-block; font-style: inherit; font-weight: inherit; }
 .mascot-zzz i { font-size: 11px; translate: 2px -8px; } .mascot-zzz b { font-size: 9px; translate: 4px -15px; }
 
@@ -734,4 +740,7 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
 @keyframes mascot-hop { 0%, 60%, 100% { translate: 0 0; scale: 1; } 10% { scale: 1.03 .96; } 22% { translate: 0 -5px; scale: .99 1.02; } 36% { translate: 0 0; scale: 1.02 .98; } }
 @keyframes bubble-nudge { 0%, 60%, 100% { rotate: 0deg; } 20% { rotate: -2deg; } 30% { rotate: 1.5deg; } 40% { rotate: 0deg; } }
 @keyframes mascot-breathe { 0%, 100% { scale: 1; } 50% { scale: 1.012 1.02; } }
+.mascot-refresh[data-spin] svg { animation: mascot-spin .5s var(--ease-out); }
+.insight-mascot[data-mood="chat"] .mascot-figure { animation: mascot-hop 1s var(--ease-out); }
+@keyframes mascot-spin { from { rotate: -360deg; } }
 @keyframes zzz { 0%, 100% { opacity: .35; translate: 0 2px; } 50% { opacity: 1; translate: 0 -2px; } }
