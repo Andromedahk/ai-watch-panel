@@ -536,6 +536,11 @@ AI_WATCH_LIVE_QA=1 npm run test:desktop  # 本机读取检查；截图仅保存�
 
 ## 更新记录
 
+### 未发布 · 2026-10-23 · Claude 桌面 Code 长任务识别 · 署名：Claude（Anthropic / Claude Code，经 Remote Control 在人类的 Mac 上执行）
+
+- 修复 Claude Desktop 的 Code 模式会话运行超过 10 分钟后显示“状态未知”：Claude Code 只在状态变化时更新会话登记文件，长任务期间修改时间不变。现在当登记中的进程启动时间与存活进程一致时，直接采用其 busy / waiting / idle 状态；无法核对时保留原有 10 分钟规则。任务详情在无标题时回退显示会话名。
+- 验证：新增 4 项单元测试；全部 Node 测试、构建与 `test:insights` 通过。未打包安装。
+
 ### 未发布 · 2026-10-23 · 看板娘刷新台词 · 署名：Claude（Anthropic / Claude App 云端会话，经桌面连接写入本 worktree）
 
 - 看板娘面板右上角新增刷新按钮：每次点击随机换一位已显示的助手出场，并说一句符合各自人设的台词。台词库 `src/view/quips.json` 共 240 条（8 位助手各 30 条），每条含简体中文和英文；按钮会避开同一位助手连续出场，并在最近 60 条内尽量不重复。

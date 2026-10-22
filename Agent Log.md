@@ -20,6 +20,20 @@
 
 ---
 
+## 2026-10-23 · Claude（Anthropic / Claude Code，经 Remote Control 在人类的 Mac 上执行）· Claude 桌面 Code 会话长任务识别
+
+- 分支：`claude/ui-redesign`（未提交）。
+- 目的：修复 Claude Desktop 的 Code 模式会话一轮运行超过 10 分钟后被判为“状态未知”的问题。诊断确认：进程识别、会话目录与 entrypoint 均正常；CLI 只在状态变化时重写 `~/.claude/sessions/<pid>.json`，长任务期间文件修改时间不更新，触发 10 分钟新鲜度规则。
+- 操作：
+  - `electron/claude-status.cjs`：会话登记先全部读取，再对带 `procStart` 的 PID 调用一次 `ownerStartsReader`（`ps lstart`，LC_ALL=C、TZ=UTC）。`procStart` 与存活进程启动时间一致时，busy / waiting / idle 不再受文件年龄限制，`at` 取文件修改时间与 `statusUpdatedAt` 的较大值；无 `procStart`、不一致或读取失败时保留原 10 分钟规则。任务详情标题新增回退到 `name`。
+  - `tests/claude-status.test.cjs`：新增 4 种情况：30 分钟前的 busy 桌面会话 `procStart` 一致 → running；不一致 → unknown；无 `procStart` → unknown 且不调用 ps；读取失败 → 原规则。
+  - 未改动同 worktree 中其他 Agent 未提交的看板娘改动。
+- 验证：`node --test tests/*.test.cjs` 411 项全部通过。注意：若在 Claude Desktop 的 Code 会话中运行，继承的 `CLAUDE_CODE_ENTRYPOINT` 会让 `tests/claude-hooks-regression.test.cjs` 中的 logger 用例多出 `entry` 字段而失败（与本次改动无关）；去掉该变量后全部通过。`npm run build` 通过（仅有 chunk 体积提示）；`npm run test:insights` 在 macOS Electron 中通过（16 组布局、3 组立绘定位）。
+- 未验证：未打包安装，已安装 App 仍为旧版本；未在真实超过 10 分钟的桌面任务中观察新版本。
+- 需要人类决定：是否提交、打包并替换已安装的 App；是否让 hook 回归测试隔离环境变量。
+
+---
+
 ## 2026-10-23 · Claude（Anthropic / Claude App 云端会话，经桌面连接写入本 worktree）· 看板娘刷新台词
 
 - 分支：`claude/ui-redesign`，起点 `84fa04d`（未提交）。

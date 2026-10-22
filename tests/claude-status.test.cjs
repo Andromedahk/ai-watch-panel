@@ -123,3 +123,31 @@ test('Claude plan refuses permissive, symlinked, oversized or invalid login file
   const outside = path.join(home, 'other.json'); await fs.writeFile(outside, text, { mode: 0o600 });
   await fs.symlink(outside, file); assert.equal((await reader.poll([], now)).plan.name, null);
 });
+
+test('Claude keeps a long busy desktop turn running only when procStart proves the live owner', async () => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-watch-claude-owner-'));
+  try {
+    const dir = path.join(home, '.claude', 'sessions'); await fs.mkdir(dir, { recursive: true });
+    const file = path.join(dir, '40.json'); const old = now - 30 * 60000;
+    const put = async extra => {
+      await fs.writeFile(file, JSON.stringify({ pid: 40, status: 'busy', entrypoint: 'claude-desktop', sessionId: 'S', statusUpdatedAt: old, ...extra }));
+      await fs.utimes(file, old / 1000, old / 1000);
+    };
+    const poll = ownerStartsReader => new ClaudeStatusReader({ home, env: {}, source: 'desktop', ownerStartsReader,
+      usageReader: { poll: async () => ({ state: 'disabled' }), clearSource() {} },
+      desktopActivityReader: async () => ({ activity: 'unknown', trusted: null, supported: true, plan: null }) })
+      .poll([{ pid: 1, command: '/app/Claude', cpu: 0 }, { pid: 40, command: '/app/claude', cpu: 0 }], now);
+    const starts = async () => new Map([[40, 'Thu Oct 22 17:25:40 2026']]);
+    await put({ procStart: 'Thu Oct 22  17:25:40 2026 ' });
+    let result = await poll(starts); assert.equal(result.activity, 'running'); assert.equal(result.activeTasks, 1);
+    await put({ procStart: 'Thu Oct 22 09:00:00 2026' });
+    result = await poll(starts); assert.equal(result.activity, 'unknown'); assert.equal(result.activeTasks, 0);
+    await put({});
+    let asked = false;
+    result = await poll(async () => { asked = true; return starts(); });
+    assert.equal(result.activity, 'unknown'); assert.equal(asked, false);
+    await put({ procStart: 'Thu Oct 22 17:25:40 2026' });
+    result = await poll(async () => { throw new Error('ps failed'); });
+    assert.equal(result.activity, 'unknown'); assert.equal(result.activeTasks, 0);
+  } finally { await fs.rm(home, { recursive: true, force: true }); }
+});

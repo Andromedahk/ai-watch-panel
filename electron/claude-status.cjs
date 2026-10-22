@@ -246,7 +246,7 @@ class ClaudeStatusReader {
     const sessions = path.join(config, 'sessions');
     try { names = (await fs.readdir(sessions)).filter(n => /^\d+\.json$/.test(n)); }
     catch (error) { failed = error.code !== 'ENOENT'; }
-    const states = new Map(), classified = new Set(), registrations = new Map();
+    const states = new Map(), classified = new Set(), registrations = new Map(), rows = [];
     for (const name of names.filter(n => pids.has(Number(n.slice(0, -5)))).slice(0, 128)) {
       try {
         const file = path.join(sessions, name);
@@ -257,12 +257,25 @@ class ClaudeStatusReader {
         const session = typeof row.sessionId === 'string' && row.sessionId ? row.sessionId : null;
         registrations.set(row.pid, { session, surface });
         if ((source === 'desktop') !== (surface === 'desktop')) continue;
-        const stat = await fs.stat(file);
-        const fresh = stat.mtimeMs <= now + 120000 && now - stat.mtimeMs <= FRESH_MS;
-        const phase = row.status === 'idle' ? 'idle' : fresh && row.status === 'busy' ? 'running'
-          : fresh && row.status === 'waiting' ? 'waiting' : 'unknown';
-        states.set(row.pid, { phase, surface, session, at: stat.mtimeMs, ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName) } : {}) });
+        rows.push({ row, surface, session, stat: await fs.stat(file) });
       } catch { failed = true; }
+    }
+    // The CLI rewrites its registration only when the status changes, so a long
+    // turn leaves an old mtime. A procStart equal to the live PID's start time
+    // proves the file belongs to this process and its status is still current.
+    let rowStarts = new Map();
+    const startPids = [...new Set(rows.filter(r => typeof r.row.procStart === 'string').map(r => r.row.pid))].slice(0, 64);
+    if (startPids.length) {
+      try { rowStarts = await this.ownerStartsReader(startPids); } catch { /* No owner identity: keep the freshness rule. */ }
+    }
+    for (const { row, surface, session, stat } of rows) {
+      const live = rowStarts instanceof Map && typeof row.procStart === 'string'
+        && rowStarts.get(row.pid) === row.procStart.trim().replace(/\s+/g, ' ');
+      const fresh = live || (stat.mtimeMs <= now + 120000 && now - stat.mtimeMs <= FRESH_MS);
+      const phase = row.status === 'idle' ? 'idle' : fresh && row.status === 'busy' ? 'running'
+        : fresh && row.status === 'waiting' ? 'waiting' : 'unknown';
+      const updated = live && Number.isFinite(row.statusUpdatedAt) && row.statusUpdatedAt <= now + 120000 ? row.statusUpdatedAt : 0;
+      states.set(row.pid, { phase, surface, session, at: Math.max(stat.mtimeMs, updated), ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName || row.name) } : {}) });
     }
     // The logger captures the nearest actual Claude Code owner when the event
     // occurs. It must still be alive: never fall back to a surviving ancestor of
