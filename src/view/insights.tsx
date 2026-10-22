@@ -7,6 +7,7 @@ import type { InsightId, Insights, ProviderId } from '../types';
 import { LOW, type ProviderView } from './model';
 import { Portrait } from './parts';
 import quipBook from './quips.json';
+import { autoSlot, featured } from './mascot-cadence';
 import { useInsightSort } from '../useInsightSort';
 
 const MARGIN = 12;
@@ -135,11 +136,15 @@ function nextQuip(views: ProviderView[], speaker: ProviderId | undefined, recent
   return { id: view.id, index: choices[Math.floor(Math.random() * choices.length)] };
 }
 
-function Mascot({ views, anime, image, onOpen, sortHandle, sortProps }: PanelProps) {
+function Mascot({ views, anime, image, onOpen, sortHandle, sortProps, interval, paused }: PanelProps) {
   const { t, number, percent, language } = useI18n();
   const [quip, setQuip] = useState<Quip | null>(null);
   const [spins, setSpins] = useState(0);
+  // Every refresh, manual or automatic, bumps the cycle: it replays the entrance and restarts the countdown.
+  const [cycle, setCycle] = useState(0);
+  const [turn, setTurn] = useState(0);
   const recent = useRef<string[]>([]);
+  const ticks = useRef(0);
   const waiting = views.find(view => view.attention), running = views.filter(view => view.state === 'running');
   const low = views.filter(view => view.tightest !== null && view.tightest < LOW).sort((a, b) => a.tightest! - b.tightest!)[0];
   let mood: Mood, focus: ProviderView | undefined, line: string;
@@ -148,8 +153,9 @@ function Mascot({ views, anime, image, onOpen, sortHandle, sortProps }: PanelPro
     const reason = waiting.provider.local?.waitingReason;
     line = reason === 'approval' ? t('{p0} 在等你授权哦', { p0: waiting.name }) : reason === 'input' ? t('{p0} 有问题想问你', { p0: waiting.name }) : t('{p0} 在等你处理', { p0: waiting.name });
   } else if (running.length) {
-    mood = 'busy'; focus = running[0];
-    line = running.length === 1 ? t('{p0} 正在努力干活', { p0: running[0].name }) : t('{p0} 位助手正在努力干活', { p0: number(running.length) });
+    // The first status line counts everyone; later status slots take turns featuring each running agent.
+    mood = 'busy'; focus = turn && running.length > 1 ? featured(running, turn - 1)! : running[0];
+    line = running.length === 1 || turn ? t('{p0} 正在努力干活', { p0: focus.name }) : t('{p0} 位助手正在努力干活', { p0: number(running.length) });
   } else if (low) {
     mood = 'worried'; focus = low;
     line = t('{p0} 的额度只剩 {p1} 了，省着点用', { p0: low.name, p1: percent(low.tightest!) });
@@ -160,34 +166,60 @@ function Mascot({ views, anime, image, onOpen, sortHandle, sortProps }: PanelPro
   // Once a status change dismisses a quip, returning to that state must not revive it.
   const status = JSON.stringify(views.map(view => [view.id, view.state, view.attention, view.provider.local?.waitingReason,
     view.tightest !== null && view.tightest < LOW ? view.tightest : null]));
-  useEffect(() => { setQuip(current => current?.status === status ? current : null); }, [status]);
+  // A status change shows its line at once and restarts the quip / status rhythm.
+  useEffect(() => {
+    setQuip(current => current?.status === status ? current : null);
+    ticks.current = 0; setTurn(0);
+  }, [status]);
   const speaker = quip?.status === status ? views.find(view => view.id === quip.id) : undefined;
   // Non-Chinese languages show the English line, kept left-to-right inside RTL layouts.
   const english = !language.startsWith('zh') && Boolean(quip && speaker);
   if (quip && speaker) { mood = 'chat'; focus = speaker; line = quips[speaker.id][quip.index][english ? 1 : 0]; }
-  const refresh = () => {
+  const say = () => {
     const next = nextQuip(views, focus?.id, recent.current);
-    if (!next) return;
+    if (!next) return false;
     recent.current = [...recent.current, `${next.id}:${next.index}`].slice(-60);
     setQuip({ ...next, status });
-    setSpins(count => count + 1);
+    return true;
   };
-  return <section {...sortProps} className="insight insight-mascot" data-insight="mascot" data-mood={mood} aria-label={t('看板娘')}
-    style={{ ...sortProps?.style, ...(focus ? { '--accent': focus.color } : {}) } as CSSProperties}>
+  const refresh = () => {
+    if (!say()) return;
+    setSpins(count => count + 1); setCycle(count => count + 1);
+  };
+  const auto = () => {
+    ticks.current += 1;
+    if (autoSlot(ticks.current, Boolean(waiting || running.length)) === 'status') {
+      setQuip(null);
+      if (!waiting && running.length > 1) setTurn(count => count + 1);
+    } else say();
+    setCycle(count => count + 1);
+  };
+  const latest = useRef(auto);
+  latest.current = auto;
+  const live = interval > 0 && views.length > 0;
+  // One timer per cycle: any refresh, or resuming from a pause, restarts the full interval.
+  useEffect(() => {
+    if (!live || paused) return;
+    const timer = setTimeout(() => latest.current(), interval * 1000);
+    return () => clearTimeout(timer);
+  }, [live, paused, interval, cycle]);
+  return <section {...sortProps} className="insight insight-mascot" data-insight="mascot" data-mood={mood} data-auto-refresh={live || undefined} aria-label={t('看板娘')}
+    style={{ ...sortProps?.style, ...(focus ? { '--accent': focus.color } : {}), '--mascot-interval': `${interval}s` } as CSSProperties}>
     {sortHandle}
     {views.length > 0 && <button type="button" className="mascot-refresh" data-spin={spins > 0 || undefined} title={t('换一句')} aria-label={t('换一句')} onClick={refresh}>
       <RefreshCw key={spins} aria-hidden="true" />
     </button>}
-    {focus && <button type="button" className="mascot-figure" title={t('打开 {p0}', { p0: focus.name })} aria-label={t('打开 {p0}', { p0: focus.name })} onClick={() => onOpen(focus!)}>
-      <Portrait provider={focus.provider} image={image(focus)} anime={anime} crop="bust" />
+    {focus && <button type="button" className="mascot-figure" data-cycle={cycle} title={t('打开 {p0}', { p0: focus.name })} aria-label={t('打开 {p0}', { p0: focus.name })} onClick={() => onOpen(focus!)}>
+      <span key={cycle} className="mascot-entrance"><Portrait provider={focus.provider} image={image(focus)} anime={anime} crop="bust" /></span>
       {mood === 'rest' && <span className="mascot-zzz" aria-hidden="true">z<i>z</i><b>z</b></span>}
     </button>}
-    <p className="mascot-bubble" role="status"><span key={line} lang={english ? 'en' : undefined} dir={english ? 'ltr' : undefined}>{line}</span></p>
+    <p className="mascot-bubble" role="status" data-beat={cycle % 2}><span key={`${cycle}:${line}`} lang={english ? 'en' : undefined} dir={english ? 'ltr' : undefined}>{line}</span></p>
+    {live && <span key={`${cycle}:${paused}`} className="mascot-timer" data-paused={paused || undefined} aria-hidden="true" />}
   </section>;
 }
 
 type PanelProps = { views: ProviderView[]; journal: Journal; anime: boolean; image: (view: ProviderView) => string | undefined; onOpen: (view: ProviderView) => void;
-  sortHandle?: ReactNode; sortProps?: HTMLAttributes<HTMLElement> };
+  sortHandle?: ReactNode; sortProps?: HTMLAttributes<HTMLElement>; interval: number; paused: boolean };
 
 export function InsightsArea({ insights, order, onOrder, sortingDisabled, onSortingChange, height, width, ...props }: PanelProps & {
   insights: Insights; order: InsightId[]; onOrder: (order: InsightId[]) => void; sortingDisabled: boolean; onSortingChange: (sorting: boolean) => void; height: number; width: number;

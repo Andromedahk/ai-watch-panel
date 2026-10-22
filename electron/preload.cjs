@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('panel', {
   setAnimeMode: (enabled) => ipcRenderer.invoke('panel:anime-mode', enabled),
   setInsights: (insights) => ipcRenderer.invoke('panel:insights', insights),
   setInsightOrder: (order) => ipcRenderer.invoke('panel:insight-order', order),
+  setMascotInterval: (seconds) => ipcRenderer.invoke('panel:mascot-interval', seconds),
   setSkin: (skin) => ipcRenderer.invoke('panel:skin', skin),
   openProvider: (provider) => ipcRenderer.invoke('panel:open-provider', provider),
   chooseProviderApp: (provider) => ipcRenderer.invoke('panel:choose-provider-app', provider),

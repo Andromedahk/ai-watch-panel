@@ -4,11 +4,11 @@ const quips = require('../src/view/quips.json');
 
 const providers = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi', 'qwen', 'workbuddy'];
 
-test('every agent has its own mascot lines, at least 200 in total', () => {
+test('every agent has its own mascot lines, at least 1200 in total', () => {
   assert.deepEqual(Object.keys(quips).sort(), [...providers].sort());
   const total = providers.reduce((sum, id) => sum + quips[id].length, 0);
-  assert.ok(total >= 200, `only ${total} lines`);
-  for (const id of providers) assert.ok(quips[id].length >= 20, `${id} has too few lines`);
+  assert.ok(total >= 1200, `only ${total} lines`);
+  for (const id of providers) assert.ok(quips[id].length >= 140, `${id} has too few lines`);
 });
 
 test('each line has a Chinese and an English version that fit the bubble', () => {

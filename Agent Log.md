@@ -20,6 +20,22 @@
 
 ---
 
+## 2026-10-23 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 看板娘自动刷新与 1200 条台词
+
+- 分支：`claude/next-features`（独立 worktree），本地提交，未推送。
+- 目的：人类要求看板娘自动刷新（默认 15 秒，可设 5–300 秒或关闭）、显示刷新进度条和刷新动画、有助手工作时按 3 句闲聊 : 1 次工作状态的节奏播报，并把台词从 240 条扩充到 1200 条、加入二次元梗。
+- 操作：
+  - `electron/window-policy.cjs`、`electron/main.cjs`、`electron/preload.cjs`、`src/types.ts`：新增偏好 `mascotInterval`（0 表示关闭，否则为 5–300 的整数秒，默认 15），校验、持久化及设置接口。
+  - `src/view/mascot-cadence.ts`（新增）：间隔边界、取值钳制、3:1 节奏及运行中助手轮换。`src/App.tsx`：外观 → 下半屏的开关与滑块。`src/view/insights.tsx`、`src/view/skins.css`：自动刷新计时、进度条、入场动画，设置打开时暂停，手动换句重置倒计时。
+  - 17 个语言文件新增 5 条设置文案。
+  - `src/view/quips.json`：8 位助手各 150 条中英双语台词，共 1200 条。台词分 4 段经协调会话转交，在忽略目录 `.local/qa/mascot/` 中逐段落盘并校验后按固定格式合并，SHA-256 与源文件一致。
+  - 测试：新增 `tests/mascot-refresh.test.cjs`；`tests/mascot-quips.test.cjs` 要求总数 ≥ 1200、每位助手 ≥ 140；`tests/window-policy.test.cjs` 覆盖新偏好；`scripts/verify-insights.mjs` 新增自动刷新验收。
+- 验证：`node --test tests/*.test.cjs` 446 项全部通过；`npx tsc --noEmit`、`git diff --check`、`npm run build`（仅既有大 chunk 提示）通过；`npm run test:insights` 通过（16 种布局、3 项立绘、15 项自动刷新、7 项排序检查）；`npm run test:corners`、`npm run test:i18n` 通过。台词 1200 条，中文与英文各自无重复。二次元模式换句截图保存在忽略的 `.local/qa/`。
+- 失败或未验证项：本轮无测试失败。只在 Playwright 测试页中验收，未打包、未替换已安装 App；未在真实长时间工作中观察 3:1 节奏；Windows / Linux 未实机验证；新增非中英文案未经母语者审校。
+- 未完成 / 需要人类决定：是否合并、推送及重新安装由人类决定。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 verify_main_merge 子 Agent）· 当前版本合并到 main
 
 - 分支：`main`，起点 `97c6080`；来源 `claude/ui-redesign` 的 `908896e`。开始时源 worktree 干净且与远端一致，更新远端引用后确认 `main` 为来源祖先、落后 19 个提交。

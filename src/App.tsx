@@ -6,6 +6,7 @@ import { useVisibleCards } from './useVisibleCards';
 import { replayEntrance } from './motion';
 import { demoJournal, loadJournal, record, saveJournal } from './journal';
 import { DEFAULT_INSIGHT_ORDER, InsightsArea, useInsightSpace } from './view/insights';
+import { MASCOT_INTERVAL_DEFAULT, MASCOT_INTERVAL_MAX, MASCOT_INTERVAL_MIN, clampMascotInterval, isMascotInterval } from './view/mascot-cadence';
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
@@ -24,7 +25,7 @@ const previewState: PanelState = {
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
   kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, layout: 'single', windowLayout: 'single',
-  animeMode: readAnimeMode(), insights: readInsights(), insightOrder: readInsightOrder(), skin: readSkin(),
+  animeMode: readAnimeMode(), insights: readInsights(), insightOrder: readInsightOrder(), mascotInterval: readMascotInterval(), skin: readSkin(),
   language: window.panel ? 'zh-CN' : readLanguage(),
   theme: window.panel ? 'system' : readTheme(),
   resolvedTheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
@@ -40,6 +41,12 @@ function readInsightOrder(): InsightId[] {
     if (Array.isArray(value) && value.length === DEFAULT_INSIGHT_ORDER.length && new Set(value).size === value.length && value.every(id => DEFAULT_INSIGHT_ORDER.includes(id))) return [...value];
   } catch { /* older or malformed preferences retain the original order */ }
   return [...DEFAULT_INSIGHT_ORDER];
+}
+function readMascotInterval() {
+  try {
+    const value = JSON.parse(localStorage.getItem('ai-watch:mascot-interval') || 'null');
+    return isMascotInterval(value) ? value : MASCOT_INTERVAL_DEFAULT;
+  } catch { return MASCOT_INTERVAL_DEFAULT; }
 }
 function readAnimeMode() {
   try { return localStorage.getItem('ai-watch:anime-mode') === 'true'; } catch { return false; }
@@ -153,6 +160,11 @@ export default function App() {
   const [testJournal, setTestJournal] = useState(() => demoJournal());
   const [insightsSaving, setInsightsSaving] = useState(false);
   const [insightOrderSaving, setInsightOrderSaving] = useState(false);
+  const [mascotSaving, setMascotSaving] = useState(false);
+  // The slider previews locally and saves once it settles; turning auto refresh back on restores the last interval.
+  const [mascotDraft, setMascotDraft] = useState<number | null>(null);
+  const mascotSave = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const lastMascotInterval = useRef(MASCOT_INTERVAL_DEFAULT);
   const [insightSorting, setInsightSorting] = useState(false);
   const resolvedTheme = state.theme === 'system' ? state.resolvedTheme : state.theme;
   const [draft, setDraft] = useState<Preferences>(previewState);
@@ -228,6 +240,21 @@ export default function App() {
       else { localStorage.setItem('ai-watch:insights', JSON.stringify(next)); setState(current => ({ ...current, insights: next })); }
     } catch { setNotice(t('下半屏设置保存失败，请重试')); }
     finally { setInsightsSaving(false); }
+  }
+  async function changeMascotInterval(seconds: number) {
+    const previous = state.mascotInterval ?? readMascotInterval();
+    if (seconds === previous) return;
+    setMascotSaving(true); setState(current => ({ ...current, mascotInterval: seconds }));
+    try {
+      if (window.panel) setState(await window.panel.setMascotInterval(seconds));
+      else localStorage.setItem('ai-watch:mascot-interval', JSON.stringify(seconds));
+    } catch { setState(current => ({ ...current, mascotInterval: previous })); setNotice(t('看板娘刷新设置保存失败，请重试')); }
+    finally { setMascotSaving(false); }
+  }
+  function draftMascotInterval(value: number) {
+    const seconds = clampMascotInterval(value);
+    setMascotDraft(seconds); clearTimeout(mascotSave.current);
+    mascotSave.current = setTimeout(() => { setMascotDraft(null); void changeMascotInterval(seconds); }, 400);
   }
   async function saveInsightOrder(order: InsightId[]) {
     if (insightOrderSaving) return;
@@ -505,6 +532,9 @@ export default function App() {
   const skin = state.skin;
   const imageFor = (id: ProviderId) => (state.animeMode ? animeImages : images)[id];
   const insights = state.insights || readInsights();
+  const mascotInterval = mascotDraft ?? state.mascotInterval ?? readMascotInterval();
+  if (mascotInterval > 0) lastMascotInterval.current = mascotInterval;
+  const mascotSeconds = mascotInterval || lastMascotInterval.current;
   const insightSpace = useInsightSpace(stage, viewport, `${layoutKey}:${state.collapsed}:${views.map(view => view.id).join(',')}:${Object.values(insights).join(',')}`, sorting.sorting);
   const stamp = state.desktop || testMode ? refreshTime : '';
   const badge = testMode ? <button className="demo-tag test-badge" aria-label={t('测试模式设置')} onClick={openSettings}>{t('测试模式')}</button>
@@ -565,7 +595,8 @@ export default function App() {
       {!sorting.sorting && <InsightsArea insights={insights} height={insightSpace.height} width={insightSpace.width} views={views}
         order={state.insightOrder || readInsightOrder()} onOrder={order => void saveInsightOrder(order)} onSortingChange={setInsightSorting}
         sortingDisabled={settingsOpen || state.collapsed || insightOrderSaving || insightsSaving || layoutSaving || animeSaving}
-        journal={testMode ? testJournal : liveJournal} anime={state.animeMode} image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)} />}
+        journal={testMode ? testJournal : liveJournal} anime={state.animeMode} image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)}
+        interval={mascotInterval} paused={settingsOpen || pageHidden || state.stored || state.collapsed} />}
       </div>
     </div>}
     {!state.collapsed && !settingsOpen && !sorting.sorting && hiddenActive.length > 0 && <div className="hidden-activity" aria-label={t('屏幕外模块活动')}>
@@ -602,6 +633,12 @@ export default function App() {
             {([['timeline', t('动态时间线'), t('各助手开始、等待和完成的记录')], ['resets', t('额度重置日程'), t('按时间排列下一次额度恢复')],
               ['trend', t('额度趋势'), t('近 24 小时最紧额度的变化')], ['mascot', t('看板娘'), t('仅二次元模式显示，随状态换表情')]] as [InsightId, string, string][]).map(([id, label, hint]) =>
               <label key={id} className="switch-row"><span>{label}<small>{hint}</small></span><input aria-label={label} type="checkbox" checked={insights[id]} disabled={insightsSaving} onChange={event => void changeInsight(id, event.target.checked)} /></label>)}
+            <label className="switch-row"><span>{t('看板娘自动刷新')}<small>{t('按间隔换一位助手说话；有助手在工作时，每 3 句后播报一次工作状态')}</small></span><input aria-label={t('看板娘自动刷新')} type="checkbox" checked={mascotInterval > 0} disabled={mascotSaving}
+              onChange={event => { clearTimeout(mascotSave.current); setMascotDraft(null); void changeMascotInterval(event.target.checked ? lastMascotInterval.current : 0); }} /></label>
+            <label className="interval-row" data-disabled={mascotInterval === 0 || undefined}><span>{t('刷新间隔')}</span>
+              <input type="range" aria-label={t('刷新间隔')} min={MASCOT_INTERVAL_MIN} max={MASCOT_INTERVAL_MAX} step={1} value={mascotSeconds} disabled={mascotInterval === 0}
+                aria-valuetext={t('{p0} 秒', { p0: number(mascotSeconds) })} onChange={event => draftMascotInterval(Number(event.target.value))} />
+              <output>{t('{p0} 秒', { p0: number(mascotSeconds) })}</output></label>
             <p className="appearance-hint">{t('可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。')}</p>
           </fieldset>
           <fieldset className="language-settings"><legend>{t('语言')}</legend>

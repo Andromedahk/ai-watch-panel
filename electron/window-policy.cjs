@@ -41,6 +41,9 @@ const isInsightOrder = value => Array.isArray(value) && value.length === INSIGHT
 const isInsights = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
   && Object.keys(value).length === INSIGHTS.length && INSIGHTS.every(key => typeof value[key] === 'boolean');
 const validInsights = value => Object.fromEntries(INSIGHTS.map(key => [key, value?.[key] !== false]));
+// 看板娘 auto refresh: whole seconds in 5–300, or 0 when disabled.
+const MASCOT_INTERVAL = 15;
+const isMascotInterval = value => value === 0 || (Number.isInteger(value) && value >= 5 && value <= 300);
 const isTheme = value => ['system', 'light', 'dark'].includes(value);
 const isKimiSource = value => ['code', 'work'].includes(value);
 const isClaudeSource = value => ['desktop', 'code'].includes(value);
@@ -95,6 +98,7 @@ function validPreferences(value) {
     animeMode: value?.animeMode === true,
     insights: validInsights(value?.insights && typeof value.insights === 'object' && !Array.isArray(value.insights) ? value.insights : {}),
     insightOrder: isInsightOrder(value?.insightOrder) ? [...value.insightOrder] : [...INSIGHT_ORDER],
+    mascotInterval: isMascotInterval(value?.mascotInterval) ? value.mascotInterval : MASCOT_INTERVAL,
     skin: isSkin(value?.skin) ? value.skin : 'watch',
     layout: isLayout(value?.layout) ? value.layout : 'single',
     windowLayout: value?.windowLayout === 'double' ? 'double' : 'single',
@@ -104,4 +108,4 @@ function validPreferences(value) {
   };
 }
 
-module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, isInsightOrder, INSIGHT_ORDER, INSIGHTS, PROVIDER_ORDER, SKINS, COLLAPSED_WIDTH, MIN_WIDTH, MAX_WIDTH, WIDTH_DIVISOR, columnWidth };
+module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, isInsightOrder, isMascotInterval, MASCOT_INTERVAL, INSIGHT_ORDER, INSIGHTS, PROVIDER_ORDER, SKINS, COLLAPSED_WIDTH, MIN_WIDTH, MAX_WIDTH, WIDTH_DIVISOR, columnWidth };

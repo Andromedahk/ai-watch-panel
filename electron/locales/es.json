@@ -539,5 +539,10 @@
   "近 24 小时": "últimas 24 horas",
   "下半屏设置保存失败，请重试": "No se pudo guardar la configuración de los paneles inferiores. Inténtalo de nuevo",
   "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Desplázate hacia arriba y hacia abajo para ver todos los paneles inferiores activados. El historial queda en este dispositivo y no incluye el contenido de las tareas.",
-  "拖动排序，或按 Alt + 方向键移动；Escape 取消": "Arrastra o usa Alt + flechas para ordenar; Escape cancela"
+  "拖动排序，或按 Alt + 方向键移动；Escape 取消": "Arrastra o usa Alt + flechas para ordenar; Escape cancela",
+  "看板娘自动刷新": "Actualización automática de la mascota",
+  "按间隔换一位助手说话；有助手在工作时，每 3 句后播报一次工作状态": "Cede la palabra a otro asistente cada cierto tiempo; mientras alguno trabaja, tras cada 3 frases muestra su estado",
+  "刷新间隔": "Intervalo de actualización",
+  "{p0} 秒": "{p0} s",
+  "看板娘刷新设置保存失败，请重试": "No se pudo guardar la actualización de la mascota. Inténtalo de nuevo."
 }

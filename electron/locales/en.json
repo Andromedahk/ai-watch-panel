@@ -539,5 +539,10 @@
   "近 24 小时": "last 24 hours",
   "下半屏设置保存失败，请重试": "Couldn’t save lower panel settings. Try again.",
   "可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。": "Scroll up and down to view all enabled lower panels. The history stays on this device and never includes task content.",
-  "拖动排序，或按 Alt + 方向键移动；Escape 取消": "Drag to reorder, or use Alt + arrow keys; Escape cancels"
+  "拖动排序，或按 Alt + 方向键移动；Escape 取消": "Drag to reorder, or use Alt + arrow keys; Escape cancels",
+  "看板娘自动刷新": "Mascot auto refresh",
+  "按间隔换一位助手说话；有助手在工作时，每 3 句后播报一次工作状态": "Hands the bubble to another assistant on a timer; while one is working, every 4th line is a status update",
+  "刷新间隔": "Refresh interval",
+  "{p0} 秒": "{p0} s",
+  "看板娘刷新设置保存失败，请重试": "Couldn’t save mascot refresh settings. Try again."
 }

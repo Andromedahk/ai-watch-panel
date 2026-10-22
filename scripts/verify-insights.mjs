@@ -35,7 +35,9 @@ async function setCheckbox(name, checked) {
 
 async function launch({ reset = true } = {}) {
   if (reset) await writeFile(path.join(profile, 'preferences.json'), JSON.stringify({ locked: false, animate: false,
-    language: 'zh-CN', theme: 'dark', skin: 'watch', animeMode: false, insights: allOn, enabledProviders: ids }));
+    language: 'zh-CN', theme: 'dark', skin: 'watch', animeMode: false, insights: allOn, enabledProviders: ids,
+    // Chatter assertions click the button; the timer has its own section below.
+    mascotInterval: 0 }));
   app = await electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: 'fixture' } });
   page = await app.firstWindow();
   page.on('pageerror', error => errors.push(error.message));
@@ -267,6 +269,135 @@ async function resetMascot() {
   await expect(mascot()).toHaveCount(0);
   await page.evaluate(() => window.panel.setAnimeMode(true));
   await expect(mascot()).toHaveCount(1);
+}
+const cycle = () => page.locator('.mascot-figure').evaluate(figure => Number(figure.dataset.cycle));
+const savedInterval = async () => JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).mascotInterval;
+async function timerProgress() {
+  return page.locator('.mascot-timer').evaluate(bar => {
+    const [animation] = bar.getAnimations(), style = getComputedStyle(bar);
+    return { name: animation?.animationName, state: animation?.playState, time: Number(animation?.currentTime || 0), duration: style.animationDuration, scale: style.scale };
+  });
+}
+async function mascotAutoRefreshAcceptance() {
+  stage = 'auto-refresh/setup';
+  await page.evaluate(() => window.panel.setLayout('single'));
+  await page.evaluate(value => window.panel.setEnabled(value), ids);
+  await page.evaluate(() => window.panel.setLanguage('zh-CN'));
+  await page.evaluate(() => window.panel.setSkin('watch'));
+  await page.setViewportSize({ width: 420, height: 1000 });
+  await resetMascot();
+  await testPreset('全部待机');
+  await expect(mascot()).toHaveAttribute('data-mood', 'rest');
+  assert.equal(await savedInterval(), 0);
+  await expect(page.locator('.mascot-timer')).toHaveCount(0);
+  for (const bad of [3, 301, 15.5, '15', null]) {
+    const rejected = await page.evaluate(async value => { try { await window.panel.setMascotInterval(value); return false; } catch { return true; } }, bad);
+    assert.ok(rejected, `invalid interval ${JSON.stringify(bad)} was accepted`);
+  }
+  assert.equal(await savedInterval(), 0);
+
+  // Real settings controls: the switch restores the default, the slider saves once it settles.
+  stage = 'auto-refresh/settings';
+  await settings();
+  await page.locator('.settings-nav').getByRole('button', { name: '外观', exact: true }).click();
+  const slider = page.getByRole('slider', { name: '刷新间隔', exact: true });
+  await expect(slider).toBeDisabled();
+  await setCheckbox('看板娘自动刷新', true);
+  await expect.poll(savedInterval).toBe(15);
+  await expect(slider).toBeEnabled(); await expect(slider).toHaveValue('15');
+  await slider.fill('5');
+  await expect(page.locator('.interval-row output')).toHaveText('5 秒');
+  await expect.poll(savedInterval).toBe(5);
+  await page.screenshot({ path: path.join(output, 'auto-refresh-settings.png'), animations: 'disabled', scale: 'css' });
+  // Settings pause the countdown: no refresh while the sheet is open.
+  const settingsCycle = await cycle();
+  await page.waitForTimeout(6500);
+  assert.equal(await cycle(), settingsCycle, 'auto refresh ran behind the settings sheet');
+  await closeSettings();
+
+  // The countdown bar animates even with the status-light animation preference off.
+  stage = 'auto-refresh/progress';
+  await expect(page.locator('main')).toHaveClass(/no-animation/);
+  await expect(page.locator('.mascot-timer')).toHaveCount(1);
+  const first = await timerProgress();
+  assert.equal(first.name, 'mascot-timer'); assert.equal(first.duration, '5s'); assert.equal(first.state, 'running');
+  await page.waitForTimeout(1200);
+  const later = await timerProgress();
+  assert.ok(later.time > first.time + 800 && parseFloat(later.scale.split(' ')[0]) < 1, `progress bar is not moving: ${JSON.stringify({ first, later })}`);
+  const bar = await mascot().evaluate(panel => {
+    const box = el => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
+    const style = getComputedStyle(panel);
+    return { panel: box(panel), bar: box(panel.querySelector('.mascot-timer')), overflow: style.overflowY, radius: parseFloat(style.borderBottomLeftRadius), hidden: panel.querySelector('.mascot-timer').getAttribute('aria-hidden') };
+  });
+  assert.ok(bar.bar.left >= bar.panel.left - 1 && bar.bar.right <= bar.panel.right + 1 && Math.abs(bar.bar.bottom - bar.panel.bottom) < 1.5, `progress bar outside panel: ${JSON.stringify(bar)}`);
+  assert.equal(bar.overflow, 'clip'); assert.ok(bar.radius > 0); assert.equal(bar.hidden, 'true');
+  checks.push({ label: 'refresh/auto-progress', ...bar, first, later });
+  await page.locator('.insights').evaluate(area => area.scrollTo({ top: area.scrollHeight, behavior: 'instant' }));
+  await page.screenshot({ path: path.join(output, 'auto-refresh-progress.png'), scale: 'css' });
+
+  // Idle room: the timer hands the bubble to another speaker without a click.
+  stage = 'auto-refresh/idle';
+  let before = await cycle(), text = (await mascotState()).text;
+  await expect.poll(cycle, { timeout: 8000 }).toBeGreaterThan(before);
+  await expect(mascot()).toHaveAttribute('data-mood', 'chat');
+  assert.notEqual((await mascotState()).text, text);
+
+  // A manual refresh replays the entrance and restarts the full countdown.
+  stage = 'auto-refresh/manual-entrance';
+  await page.evaluate(() => window.panel.configure({ side: 'right', locked: false, animate: true }));
+  await expect(page.locator('main')).not.toHaveClass(/no-animation/);
+  before = await cycle();
+  const oldEntrance = await page.locator('.mascot-entrance').elementHandle();
+  await refresh().click();
+  await expect.poll(cycle).toBe(before + 1);
+  const motion = await mascot().evaluate(panel => ({
+    figure: panel.querySelector('.mascot-entrance').getAnimations().map(a => a.animationName),
+    bubble: panel.querySelector('.mascot-bubble').getAnimations().map(a => a.animationName),
+    timer: Number(panel.querySelector('.mascot-timer').getAnimations()[0]?.currentTime || 0) }));
+  assert.ok(await oldEntrance.evaluate(el => !el.isConnected), 'portrait entrance was not replayed');
+  assert.ok(motion.figure.includes('mascot-enter'), `no portrait entrance: ${JSON.stringify(motion)}`);
+  assert.ok(motion.bubble.some(name => /^bubble-pop-[ab]$/.test(name)), `no bubble pop: ${JSON.stringify(motion)}`);
+  assert.ok(motion.timer < 1000, `countdown did not restart after a manual refresh: ${JSON.stringify(motion)}`);
+  checks.push({ label: 'refresh/auto-entrance', ...motion });
+  await page.evaluate(() => window.panel.configure({ side: 'right', locked: false, animate: false }));
+
+  // Working room: three quips, then the working status, rotating the featured agent.
+  stage = 'auto-refresh/working-cadence';
+  await testPreset('全部运行');
+  await expect(mascot()).toHaveAttribute('data-mood', 'busy');
+  await expect(page.locator('.mascot-bubble')).toContainText('位助手正在努力干活');
+  const moods = [], featured = [];
+  for (let i = 0; i < 8; i++) {
+    before = await cycle();
+    await expect.poll(cycle, { timeout: 8000 }).toBeGreaterThan(before);
+    const row = await mascotState(); moods.push(row.mood);
+    if (row.mood === 'busy') { assert.match(row.text, /正在努力干活/); assert.doesNotMatch(row.text, /位助手/); featured.push(row.speaker); }
+  }
+  assert.deepEqual(moods, ['chat', 'chat', 'chat', 'busy', 'chat', 'chat', 'chat', 'busy'], `working cadence: ${moods}`);
+  assert.notEqual(featured[0], featured[1], `status slots did not rotate: ${featured}`);
+  checks.push({ label: 'refresh/auto-cadence', moods, featured });
+
+  // Turning it off removes the bar and stops changes; turning it on restores the last interval.
+  stage = 'auto-refresh/disable';
+  await testPreset('全部待机');
+  await settings();
+  await page.locator('.settings-nav').getByRole('button', { name: '外观', exact: true }).click();
+  await setCheckbox('看板娘自动刷新', false);
+  await expect.poll(savedInterval).toBe(0);
+  await closeSettings();
+  await expect(page.locator('.mascot-timer')).toHaveCount(0);
+  before = await cycle(); text = (await mascotState()).text;
+  await page.waitForTimeout(6500);
+  assert.equal(await cycle(), before); assert.equal((await mascotState()).text, text);
+  await settings();
+  await page.locator('.settings-nav').getByRole('button', { name: '外观', exact: true }).click();
+  await setCheckbox('看板娘自动刷新', true);
+  await expect.poll(savedInterval).toBe(5);
+  await setCheckbox('看板娘自动刷新', false);
+  await expect.poll(savedInterval).toBe(0);
+  await closeSettings();
+  checks.push({ label: 'refresh/auto-disable', bar: false, unchangedMs: 6500, restored: 5 });
+  console.log('Mascot auto refresh passed: settings switch/slider persistence, invalid values rejected, paused behind settings, progress bar running with animations off, idle auto refresh, manual entrance + countdown restart, 3:1 working cadence with rotation, disable/restore.');
 }
 async function mascotRefreshAcceptance() {
   await page.evaluate(() => window.panel.setLayout('single'));
@@ -613,6 +744,7 @@ try {
   await expect(page.locator('main')).toHaveAttribute('data-layout', 'double');
 
   await mascotRefreshAcceptance();
+  await mascotAutoRefreshAcceptance();
   await insightSortAcceptance();
 
   assert.deepEqual(errors, [], 'renderer errors');
