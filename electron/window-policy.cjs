@@ -33,6 +33,11 @@ function migrateEnabled(value) {
   }
   return enabled;
 }
+// Lower-half panels shown under the cards when the window has spare height.
+const INSIGHTS = ['timeline', 'resets', 'trend', 'mascot'];
+const isInsights = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+  && Object.keys(value).length === INSIGHTS.length && INSIGHTS.every(key => typeof value[key] === 'boolean');
+const validInsights = value => Object.fromEntries(INSIGHTS.map(key => [key, value?.[key] !== false]));
 const isTheme = value => ['system', 'light', 'dark'].includes(value);
 const isKimiSource = value => ['code', 'work'].includes(value);
 const isClaudeSource = value => ['desktop', 'code'].includes(value);
@@ -85,6 +90,7 @@ function validPreferences(value) {
     widgetsEnabled: value?.widgetsEnabled === true,
     kimiWorkApp: validProviderApps({ kimi: value?.kimiWorkApp }).kimi || null,
     animeMode: value?.animeMode === true,
+    insights: validInsights(value?.insights && typeof value.insights === 'object' && !Array.isArray(value.insights) ? value.insights : {}),
     skin: isSkin(value?.skin) ? value.skin : 'watch',
     layout: isLayout(value?.layout) ? value.layout : 'single',
     windowLayout: value?.windowLayout === 'double' ? 'double' : 'single',
@@ -94,4 +100,4 @@ function validPreferences(value) {
   };
 }
 
-module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, PROVIDER_ORDER, SKINS, COLLAPSED_WIDTH, MIN_WIDTH, MAX_WIDTH, WIDTH_DIVISOR, columnWidth };
+module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, INSIGHTS, PROVIDER_ORDER, SKINS, COLLAPSED_WIDTH, MIN_WIDTH, MAX_WIDTH, WIDTH_DIVISOR, columnWidth };

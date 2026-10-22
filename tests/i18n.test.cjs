@@ -21,7 +21,7 @@ test('all 17 requested languages have complete offline catalogs and matching pla
 });
 test('visible static translation calls are covered in every catalog', () => {
   const keys = new Set();
-  for (const file of ['src/App.tsx','src/TestControls.tsx','src/i18n.ts','src/view/model.ts','src/view/parts.tsx','src/view/skins.tsx','electron/main.cjs','electron/panel-tray.cjs','electron/tray-summary.cjs']) {
+  for (const file of ['src/App.tsx','src/TestControls.tsx','src/i18n.ts','src/view/model.ts','src/view/parts.tsx','src/view/skins.tsx','src/view/insights.tsx','electron/main.cjs','electron/panel-tray.cjs','electron/tray-summary.cjs']) {
     const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     function visit(node) {
       if (ts.isCallExpression(node) && (node.expression.getText(source) === 't' || node.expression.getText(source).endsWith('.t')) && ts.isStringLiteral(node.arguments[0])) keys.add(node.arguments[0].text);

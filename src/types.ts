@@ -6,6 +6,8 @@ export type Skin = 'watch' | 'dial' | 'party';
 export type TaskDetail = { title: string | null; state: 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled' | 'unknown' | 'idle'; updatedAt: string | null; stale: boolean; source: 'cache' | 'local-api'; operation: string | null; steps: number | null; toolCalls: number | null; progress: number | null };
 export type KimiSource = 'code' | 'work';
 export type ClaudeSource = 'desktop' | 'code';
+export type InsightId = 'timeline' | 'resets' | 'trend' | 'mascot';
+export type Insights = Record<InsightId, boolean>;
 export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: boolean };
 export type PanelState = Preferences & {
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
@@ -20,7 +22,7 @@ export type PanelState = Preferences & {
   claudeSource: ClaudeSource;
   claudeNetworkAllowed: boolean;
   claudeHooksEnabled: boolean;
-  animeMode: boolean; skin: Skin; layout: Layout; windowLayout: 'single' | 'double';
+  animeMode: boolean; insights: Insights; skin: Skin; layout: Layout; windowLayout: 'single' | 'double';
   language: Language; resolvedLanguage?: Exclude<Language, 'system'>;
   theme: Theme; resolvedTheme: 'light' | 'dark';
   bounds?: { x: number; y: number; width: number; height: number };
@@ -75,6 +77,7 @@ declare global {
       requestClaudeActivityAccess(): Promise<LocalStatus>;
       clearCache(): Promise<{ freedBytes: number }>;
       setAnimeMode(enabled: boolean): Promise<PanelState>;
+      setInsights(insights: Insights): Promise<PanelState>;
       setSkin(skin: Skin): Promise<PanelState>;
       openProvider(provider: ProviderId): Promise<{ status: 'opened' | 'missing' | 'unsupported' | 'error' | 'test'; message: string }>;
       chooseProviderApp(provider: ProviderId): Promise<{ status: 'selected' | 'cancelled' | 'error'; message: string }>;

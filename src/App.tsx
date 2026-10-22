@@ -4,6 +4,8 @@ import packageInfo from '../package.json';
 import { providers as baseProviders, providerIds } from './data';
 import { useVisibleCards } from './useVisibleCards';
 import { replayEntrance } from './motion';
+import { demoJournal, loadJournal, record, saveJournal } from './journal';
+import { InsightsArea, useInsightSpace } from './view/insights';
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
@@ -11,7 +13,7 @@ import { I18nContext, useI18n, createI18n, readLanguage, languages, localizeProv
 import { buildView } from './view/model';
 import { GrantAccessContext, Portrait, RED_ALERT } from './view/parts';
 import { Overview, ProviderCard, RailItem, summarize } from './view/skins';
-import type { LocalStatus, PanelState, Preferences, Provider, ProviderId, Theme, KimiSource, ClaudeSource, Layout, Skin } from './types';
+import type { InsightId, Insights, LocalStatus, PanelState, Preferences, Provider, ProviderId, Theme, KimiSource, ClaudeSource, Layout, Skin } from './types';
 const providers = baseProviders;
 
 const previewState: PanelState = {
@@ -22,11 +24,16 @@ const previewState: PanelState = {
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
   kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, layout: 'single', windowLayout: 'single',
-  animeMode: readAnimeMode(), skin: readSkin(),
+  animeMode: readAnimeMode(), insights: readInsights(), skin: readSkin(),
   language: window.panel ? 'zh-CN' : readLanguage(),
   theme: window.panel ? 'system' : readTheme(),
   resolvedTheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
 };
+function readInsights(): Insights {
+  let value: Partial<Insights> | null = null;
+  try { value = JSON.parse(localStorage.getItem('ai-watch:insights') || 'null'); } catch { /* defaults */ }
+  return Object.fromEntries((['timeline', 'resets', 'trend', 'mascot'] as InsightId[]).map(id => [id, value?.[id] !== false])) as Insights;
+}
 function readAnimeMode() {
   try { return localStorage.getItem('ai-watch:anime-mode') === 'true'; } catch { return false; }
 }
@@ -134,6 +141,10 @@ export default function App() {
   const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode, layoutKey);
   const main = useRef<HTMLElement>(null);
   const [entrance, setEntrance] = useState(0);
+  const stage = useRef<HTMLDivElement>(null);
+  const [liveJournal, setLiveJournal] = useState(() => loadJournal());
+  const [testJournal, setTestJournal] = useState(() => demoJournal());
+  const [insightsSaving, setInsightsSaving] = useState(false);
   const resolvedTheme = state.theme === 'system' ? state.resolvedTheme : state.theme;
   const [draft, setDraft] = useState<Preferences>(previewState);
   const modal = useRef<HTMLDialogElement>(null);
@@ -198,6 +209,16 @@ export default function App() {
       else { localStorage.setItem('ai-watch:anime-mode', String(value)); setState(current => ({ ...current, animeMode: value })); }
     } catch { setNotice(t("二次元模式保存失败，请重试")); }
     finally { setAnimeSaving(false); }
+  }
+  async function changeInsight(id: InsightId, value: boolean) {
+    if (insightsSaving) return;
+    const next = { ...(state.insights || readInsights()), [id]: value };
+    setInsightsSaving(true);
+    try {
+      if (window.panel) setState(await window.panel.setInsights(next));
+      else { localStorage.setItem('ai-watch:insights', JSON.stringify(next)); setState(current => ({ ...current, insights: next })); }
+    } catch { setNotice(t('下半屏设置保存失败，请重试')); }
+    finally { setInsightsSaving(false); }
   }
   async function changeSkin(value: Skin) {
     if (skinSaving || value === state.skin) return;
@@ -335,6 +356,11 @@ export default function App() {
     const statusListener = bridge.onStatus(acceptStatus);
     return () => { stateListener(); statusListener(); };
   }, []);
+  // The journal keeps only ids, states, times and percentages; test mode has its own sample journal.
+  useEffect(() => { if (localStatus) setLiveJournal(current => record(current, localStatus)); }, [localStatus]);
+  useEffect(() => { const timer = setTimeout(() => saveJournal(liveJournal), 2000); return () => clearTimeout(timer); }, [liveJournal]);
+  useEffect(() => { if (testMode) setTestJournal(demoJournal()); }, [testMode]);
+  useEffect(() => { if (testMode) setTestJournal(current => record(current, testStatus)); }, [testMode, testStatus]);
   useLayoutEffect(() => {
     document.documentElement.lang = i18n.language; document.documentElement.dir = i18n.dir;
     document.title = `AI Watch · ${t('AI 工具监看面板')}`;
@@ -458,6 +484,8 @@ export default function App() {
   const summary = summarize(views);
   const skin = state.skin;
   const imageFor = (id: ProviderId) => (state.animeMode ? animeImages : images)[id];
+  const insights = state.insights || readInsights();
+  const insightSpace = useInsightSpace(stage, viewport, `${layoutKey}:${state.collapsed}:${views.map(view => view.id).join(',')}:${Object.values(insights).join(',')}`, sorting.sorting);
   const stamp = state.desktop || testMode ? refreshTime : '';
   const badge = testMode ? <button className="demo-tag test-badge" aria-label={t('测试模式设置')} onClick={openSettings}>{t('测试模式')}</button>
     : <span className="demo-tag">{localStatus?.isTestData ? t('测试') : state.desktop ? t('本地') : t('演示')}</span>;
@@ -497,6 +525,7 @@ export default function App() {
       </header>
       <Overview skin={skin} summary={summary} live={state.desktop || testMode} stamp={stamp} badge={badge} anime={state.animeMode}
         image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)} onReveal={view => revealProvider(view.id)} />
+      <div ref={stage} className="provider-stage">
       <div ref={viewport} className="provider-viewport" aria-label={t('工具模块列表')} aria-busy={orderSaving || modulesSaving} tabIndex={0}>
         {!visibleProviders.length && <div className="empty-providers"><p>{t('尚未启用模块')}</p><button onClick={openSettings}>{t('选择监看模块')}</button></div>}
         {views.map((view, index) => <ProviderCard key={`${testMode ? 'test' : 'live'}:${view.id}`} view={view} skin={skin} index={index} anime={state.animeMode} image={imageFor(view.id)}
@@ -512,6 +541,9 @@ export default function App() {
             const next = [...enabledOrder], target = Math.max(0, Math.min(enabledOrder.length - 1, index + delta));
             if (target !== index) { next.splice(index, 1); next.splice(target, 0, view.id); void saveVisibleOrder(next); }
           } }} />)}
+      </div>
+      {!sorting.sorting && <InsightsArea insights={insights} height={insightSpace.height} width={insightSpace.width} views={views}
+        journal={testMode ? testJournal : liveJournal} anime={state.animeMode} image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)} />}
       </div>
     </div>}
     {!state.collapsed && !settingsOpen && !sorting.sorting && hiddenActive.length > 0 && <div className="hidden-activity" aria-label={t('屏幕外模块活动')}>
@@ -543,6 +575,12 @@ export default function App() {
             <select aria-label={t('窗口模式')} value={state.layout} disabled={layoutSaving} onChange={event => void changeLayout(event.target.value as Layout)}>
               <option value="single">{t('单列模式')}</option><option value="double">{t('双排模式')}</option><option value="fullscreen">{t('全屏模式')}</option>
             </select><p className="appearance-hint">{t('双排宽度加倍；全屏显示任务详情。Escape 退出全屏。')}</p>
+          </fieldset>
+          <fieldset className="insight-settings"><legend>{t('下半屏')}</legend>
+            {([['timeline', t('动态时间线'), t('各助手开始、等待和完成的记录')], ['resets', t('额度重置日程'), t('按时间排列下一次额度恢复')],
+              ['trend', t('额度趋势'), t('近 24 小时最紧额度的变化')], ['mascot', t('看板娘'), t('仅二次元模式显示，随状态换表情')]] as [InsightId, string, string][]).map(([id, label, hint]) =>
+              <label key={id} className="switch-row"><span>{label}<small>{hint}</small></span><input aria-label={label} type="checkbox" checked={insights[id]} disabled={insightsSaving} onChange={event => void changeInsight(id, event.target.checked)} /></label>)}
+            <p className="appearance-hint">{t('卡片下方有空位时才显示，空间不足时按优先级隐藏。记录只保存在本机，不含任务内容。')}</p>
           </fieldset>
           <fieldset className="language-settings"><legend>{t('语言')}</legend>
             <select aria-label={t('语言')} value={state.language} disabled={languageSaving} onChange={event => void changeLanguage(event.target.value as Language)}>

@@ -5,8 +5,8 @@
 // play-state (off-screen cards, stored panel) keeps control, and with motion
 // off there are no animations to rewind.
 const ENTRANCE = new Set(['card-in', 'card-in-dial', 'card-in-party', 'curtain-down', 'curtain-fade', 'curtain-side', 'curtain-side-rtl', 'fill-in', 'ring-in',
-  'num-pop', 'fade-in']);
-const SCOPE = '.provider-card, .overview';
+  'num-pop', 'fade-in', 'insight-in']);
+const SCOPE = '.provider-card, .overview, .insights';
 
 export function replayEntrance(root: HTMLElement | null) {
   if (!root || typeof root.getAnimations !== 'function') return 0;

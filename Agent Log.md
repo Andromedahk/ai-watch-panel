@@ -20,6 +20,21 @@
 
 ---
 
+## 2026-10-23 · Claude（Anthropic / Claude App 云端会话，经桌面连接写入本 worktree）· 下半屏四块面板
+
+- 分支：`claude/ui-redesign`，起点 `d67bff6`。
+- 目的：按人类要求，在窗口下半部分的空位加入动态时间线、额度重置日程、额度趋势和看板娘，并可在设置中选择。
+- 操作：
+  - `electron/window-policy.cjs`：新增 `insights` 偏好（默认四项全开，非对象回退默认）与 `isInsights` 严格校验；`electron/main.cjs` 新增 `panel:insights` 处理并在 `panel:configure` 中保留该偏好；`electron/preload.cjs` 暴露 `setInsights`；`src/types.ts` 补类型。
+  - 新增 `src/journal.ts`：按状态变化记录事件（15 秒内来回切换合并或抵消，`unknown` 不计），最紧额度在变化或满 10 分钟时采样；只存编号、状态、等待原因、时间、百分比，保留 24 小时，存于渲染进程本机存储；重启不恢复上次状态，避免把关闭期间算成变化。测试模式用独立的示例记录。
+  - 新增 `src/view/insights.tsx`：按最后一张卡片的实际底边计算空位（不依赖填满的视口），按优先级“动态 → 重置日程 → 看板娘 → 趋势”挑选能放下的面板，宽于 600px 时并排；看板娘只在二次元模式出现，按“等待 → 运行 → 额度低 → 休息”选择焦点助手与台词，点击打开该应用。
+  - `src/App.tsx`：视口外包一层 `provider-stage`，接入记录与面板，外观设置新增“下半屏”四个开关；`src/motion.ts` 让面板随刷新 / 切换一起重新入场；`src/view/skins.css` 新增面板与看板娘样式和动效（均受动画开关与减少动态效果约束）。
+  - 17 种语言新增 39 条文案；`tests/i18n.test.cjs` 覆盖新文件；`tests/window-policy.test.cjs` 更新期望并新增偏好校验测试；新增 `scripts/verify-insights.mjs` 与 `test:insights`。
+- 验证（Linux 云端 xvfb）：`tsc`、`npm run build` 通过；`npm test` 408 项中 398 通过、10 项按平台跳过、0 失败（需清除宿主的 `CLAUDE_CODE_ENTRYPOINT`）。`test:insights` 通过；test-mode、sort、theme、modules、credits、plans、anime、layouts、i18n、desktop、tray、codex-quota、kimi-work、resources、skins 通过；`test:motion` 跳过 Linux 下隐藏窗口不出帧的收纳冻结项后通过。验收生成的文档截图已恢复原样。
+- 未完成 / 需要人类决定：在 macOS 上完整复跑全部界面命令并确认观感；看板娘使用现有二次元图片，内置图片自带背景，已用渐隐遮罩融入面板，如需更好效果可在“图片与应用”中换成透明背景的立绘。
+
+---
+
 ## 2026-10-22 · Claude（Anthropic / Claude App 云端会话，经桌面连接写入本 worktree）· Agent 模块入场动效重播
 
 - 分支：`claude/ui-redesign`，起点为 Codex 的最终验收提交。
