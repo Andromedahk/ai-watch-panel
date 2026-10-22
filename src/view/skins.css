@@ -77,7 +77,8 @@ button, input, select, textarea, label, summary, a { -webkit-app-region: no-drag
 bdi { unicode-bidi: isolate; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
 .hidden-input { display: none; }
-.panel { position: relative; height: 100%; overflow: hidden; background: var(--bg); }
+/* Only the provider/settings viewports scroll; focus must not move the panel shell. */
+.panel { position: relative; height: 100%; overflow: clip; background: var(--bg); }
 :root[data-skin="party"] .panel { background: radial-gradient(140% 40% at 50% 0, color-mix(in srgb, #3A4CA0 30%, var(--bg)), var(--bg) 70%); }
 .panel-regions { height: 100%; display: flex; flex-direction: column; }
 

@@ -5,6 +5,9 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
+
+const { EVENTS, hookCommand } = createRequire(import.meta.url)('../electron/claude-hooks.cjs');
 
 const execute = promisify(execFile);
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-resources-'));
@@ -210,7 +213,12 @@ try {
   await expect(hooksToggle).not.toBeChecked();
   await hooksToggle.click(); await expect(hooksToggle).toBeChecked();
   const registered = JSON.parse(await readFile(hookSettings, 'utf8'));
-  assert.equal(Object.values(registered.hooks).flat().filter(group => group.hooks.some(hook => hook.command.includes('ai-watch-claude-hook.sh'))).length, 12);
+  const registeredScript = path.join(profile, 'ai-watch-claude-hook.sh');
+  assert.equal(Object.keys(registered.hooks).length, EVENTS.length);
+  for (const event of EVENTS) {
+    const commands = registered.hooks[event].flatMap(group => group.hooks).map(hook => hook.command);
+    assert.deepEqual(commands, [hookCommand(registeredScript, event)]);
+  }
   assert.equal(JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).claudeHooksEnabled, true);
   assert.equal((await page.evaluate(() => window.panel.getState())).claudeHooksStatus.installed, true);
   for (const invalid of ['true', 1, null, {}]) {

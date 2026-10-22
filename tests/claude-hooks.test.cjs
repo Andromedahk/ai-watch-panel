@@ -13,14 +13,14 @@ const userHook = { type: 'command', command: 'echo user-owned' };
 test('hook registration merges with, and is removed without touching, the user\'s own hooks', () => {
   const settings = { model: 'opus', hooks: { Stop: [{ hooks: [userHook] }], PreToolUse: [{ matcher: 'Bash', hooks: [userHook] }] } };
   const added = withOurHooks(settings, '/data/ai-watch-claude-hook.sh');
-  assert.equal(countOurHooks(added), EVENTS.length);
+  assert.equal(countOurHooks(added, '/data/ai-watch-claude-hook.sh'), EVENTS.length);
   assert.deepEqual(added.hooks.Stop[0], { hooks: [userHook] });
   assert.deepEqual(added.hooks.PreToolUse[0], { matcher: 'Bash', hooks: [userHook] });
   assert.equal(added.model, 'opus');
   // Registering twice never duplicates entries.
-  assert.equal(countOurHooks(withOurHooks(added, '/data/ai-watch-claude-hook.sh')), EVENTS.length);
-  assert.deepEqual(withoutOurHooks(added), settings);
-  assert.deepEqual(withoutOurHooks(withOurHooks({}, '/x/ai-watch-claude-hook.sh')), {});
+  assert.equal(countOurHooks(withOurHooks(added, '/data/ai-watch-claude-hook.sh'), '/data/ai-watch-claude-hook.sh'), EVENTS.length);
+  assert.deepEqual(withoutOurHooks(added, '/data/ai-watch-claude-hook.sh'), settings);
+  assert.deepEqual(withoutOurHooks(withOurHooks({}, '/x/ai-watch-claude-hook.sh'), '/x/ai-watch-claude-hook.sh'), {});
 });
 
 test('lifecycle events map to running, approval, question and idle states', () => {
@@ -68,7 +68,7 @@ test('the shell hook records only event metadata, prints nothing and never fails
   await hooks.install();
   const settings = JSON.parse(await fs.readFile(hooks.settingsFile, 'utf8'));
   const run = (event, payload, env = {}) => execFileSync('/bin/sh', ['-c', settings.hooks[event].at(-1).hooks[0].command],
-    { input: JSON.stringify(payload, null, 1), env: { PATH: process.env.PATH, ...env } }).toString();
+    { input: JSON.stringify(payload, null, 1), env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', ...env } }).toString();
   assert.equal(run('UserPromptSubmit', { session_id: 'abc-1', prompt: 'PRIVATE_PROMPT "session_id": "evil"', cwd: '/PRIVATE_PATH' }, { CLAUDE_CODE_ENTRYPOINT: 'cli' }), '');
   run('PreToolUse', { session_id: 'abc-1', tool_name: 'Bash', tool_input: { command: 'PRIVATE_COMMAND', session_id: 'nested-id', tool_name: 'nested' } });
   run('Notification', { session_id: 'abc-1', notification_type: 'permission_prompt', message: 'PRIVATE_MESSAGE' });
@@ -76,15 +76,19 @@ test('the shell hook records only event metadata, prints nothing and never fails
   run('Stop', { session_id: 'old-3', last_assistant_message: 'PRIVATE_REPLY' });
   const log = await fs.readFile(hooks.eventsFile, 'utf8');
   assert.doesNotMatch(log, /PRIVATE|evil/);
+  const records = log.trim().split('\n').map(line => JSON.parse(line));
+  assert.ok(records.every(row => row.v === 1 && Array.isArray(row.ancestors)
+    && row.ancestors.length <= 24 && row.ancestors.every(pid => Number.isInteger(pid) && pid > 0)));
+  assert.ok(records.every(row => row.ancestors.includes(process.pid)), 'The native ps ancestor chain must include this real test process');
   assert.equal((await fs.stat(hooks.eventsFile)).mode & 0o777, 0o600);
   const states = await hooks.read(Date.now());
-  assert.deepEqual(states.map(({ session, phase, reason, surface }) => ({ session, phase, reason, surface })), [
+  assert.deepEqual(states.map(({ session, phase, reason, surface }) => ({ session, phase, reason, surface })).sort((a, b) => a.session.localeCompare(b.session)), [
     { session: 'abc-1', phase: 'waiting', reason: 'approval', surface: 'terminal' },
     { session: 'desk-2', phase: 'waiting', reason: 'approval', surface: 'desktop' },
     { session: 'old-3', phase: 'idle', reason: undefined, surface: 'terminal' },
   ]);
   run('PostToolUse', { session_id: 'abc-1', tool_name: 'Bash' }); run('SessionEnd', { session_id: 'old-3' });
-  assert.deepEqual((await hooks.read(Date.now())).map(s => `${s.session}:${s.phase}`), ['abc-1:running', 'desk-2:waiting']);
+  assert.deepEqual((await hooks.read(Date.now())).map(s => `${s.session}:${s.phase}`).sort(), ['abc-1:running', 'desk-2:waiting']);
   // Removing the script leaves registered commands harmless.
   await fs.unlink(hooks.scriptFile);
   assert.equal(run('Stop', { session_id: 'abc-1' }), '');
@@ -95,13 +99,18 @@ test('the shell hook records only event metadata, prints nothing and never fails
 test('Claude status uses hook states only while a Claude Code process is alive', async t => {
   const home = await temp(); t.after(() => fs.rm(home, { recursive: true, force: true }));
   const at = Date.now();
+  const sessions = path.join(home, '.claude', 'sessions'); await fs.mkdir(sessions, { recursive: true });
+  for (const [pid, sessionId, entrypoint] of [[40, 's1', 'cli'], [41, 's2', 'cli'], [42, 's3', 'claude-desktop']]) {
+    await fs.writeFile(path.join(sessions, `${pid}.json`), JSON.stringify({ pid, sessionId, entrypoint, status: 'idle' }));
+  }
   const fake = { enabled: true, read: async () => [
-    { session: 's1', phase: 'waiting', reason: 'approval', surface: 'terminal', at },
-    { session: 's2', phase: 'running', surface: 'terminal', at },
-    { session: 's3', phase: 'waiting', reason: 'input', surface: 'desktop', at }] };
+    { session: 's1', phase: 'waiting', reason: 'approval', surface: 'terminal', ancestors: [40], ownerPid: 40, ownerStart: 'Thu Oct 22 00:00:00 2026', at },
+    { session: 's2', phase: 'running', surface: 'terminal', ancestors: [41], ownerPid: 41, ownerStart: 'Thu Oct 22 00:00:00 2026', at },
+    { session: 's3', phase: 'waiting', reason: 'input', surface: 'desktop', ancestors: [42], ownerPid: 42, ownerStart: 'Thu Oct 22 00:00:00 2026', at }] };
   const reader = new ClaudeStatusReader({ home, env: {}, platform: 'linux', source: 'code', hooks: fake,
+    ownerStartsReader: async pids => new Map(pids.map(pid => [pid, 'Thu Oct 22 00:00:00 2026'])),
     usageReader: { poll: async () => ({ state: 'disabled' }), clearSource() {} } });
-  const alive = await reader.poll([{ pid: 40, command: '/usr/local/bin/claude' }], at);
+  const alive = await reader.poll([40, 41, 42].map(pid => ({ pid, command: '/fixture/claude' })), at);
   assert.equal(alive.activity, 'waiting');
   assert.equal(alive.waitingReason, 'approval');
   assert.equal(alive.activeTasks, 1);

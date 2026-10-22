@@ -20,6 +20,35 @@
 
 ---
 
+## 2026-10-22 · Codex（GPT-6 / Codex 桌面本地执行环境，含 unit_validation、widget_validation、skin_acceptance 并行子 Agent）· 最终验收、钩子修复与安装
+
+- 分支：`claude/ui-redesign`，起点 `69eec45`；仅修改本分支独立 worktree。
+- 目的：按人类要求完成新功能测试、修复验收发现的问题，并替换已安装普通应用、保留用户数据后重启，整理为可提交推送的完整变更。
+- 操作：
+  - `electron/claude-hook-logger.cjs`、`electron/claude-hooks.cjs`：用应用自带运行时解析 JSON，只读取顶层允许元数据；系统进程表仅用于识别最近 Claude 所属进程及其启动标记，不记录命令、参数、对话或路径，不信任输入载荷提供的 PID。脚本可在仅含系统工具的 PATH 下运行，输入无效时静默结束。
+  - 钩子状态按子 Agent、工具调用及 elicitation 请求保存 pending，官方不含调用编号的 `PermissionRequest` 只在前置工具调用唯一时配对，歧义时保留等待。其他工具或子 Agent 完成不清除未处理请求；普通通知不改变等待时效；无明确目标的 `agent_completed` 不清根等待，`agent_needs_input` 独立保留；子 Agent 事件不覆盖根进程身份及来源。补充 `SubagentStop`，共 13 类事件。
+  - `electron/claude-status.cjs`：只接受仍存活且启动时间相同的所属 Claude Code PID，并核对已有 session 登记；死亡子进程不退回存活父进程，无登记时也拒绝 PID 复用。同会话钩子覆盖旧登记，按会话去重；桌面 AX 信号避免重复计数。启动时间一次批量查询，最多 64 PID，失败保留原登记 / AX 证据。
+  - 设置安装 / 卸载精确识别当前脚本位置及完整命令，保留用户同名脚本或包装命令；拒绝损坏结构和符号链接设置，保留权限；写入前同步核对原内容和文件身份，最后核对到 rename 不再跨本进程异步等待。外部非合作进程在系统调用间仍可能插入写入，不宣称绝对 CAS。
+  - `src/view/skins.css`：面板外壳改用 `overflow:clip`，阻止焦点定位带动外壳滚动；列表和配置内部滚动保留。严格表头位置断言未放宽。
+  - 新增 `scripts/verify-motion.mjs` 与 `package.json` 的 `test:motion`：独立可见性观察、真实动画时间轴的前进 / 暂停 / 恢复、三皮肤及布局 / 模式重建、减少动态效果、动画开关、收纳恢复、0 / 1 / 3 / 0 提醒及主题首帧。动画等待有界 `ready` 和 `pending=false` 后采样，保留 160 毫秒冻结窗口及小于 1 毫秒差值；先确认原生窗口已显示，保留产品 8 秒全屏超时。默认产物写入 `.local/qa/motion`，支持专用输出目录。
+  - `scripts/verify-resources.mjs`：按事件列表逐条核对完整钩子命令，替代 12 条硬编码和文件名包含匹配。`scripts/verify-widgets.mjs`：重启后等待实际窗口显示，避免以偏好已返回代替原生显示就绪。
+  - `tests/claude-hooks.test.cjs` 适配新格式；新增 `tests/claude-hooks-regression.test.cjs` 18 项及 `tests/claude-hook-status.test.cjs` 14 项。README 同步用法、限制、验证命令和更新记录；受控文档截图恢复原样，生成截图、日志、构建及数据备份均保留在忽略目录。
+  - 普通 macOS 应用使用本地 Electron 发行版打包；严格核对签名与归档内当前源码 / 网页构建。旧应用签名备份和新版暂存校验完成后，正常退出旧应用并备份整个用户数据目录，原子替换应用，从原安装位置正常启动；核对加载后的界面及新钩子开关，未改变原配置或新增系统权限。临时回滚副本在与长期备份比对后移除。
+- 验证：
+  - 最终 `npm run build` 通过原生辅助程序、TypeScript 与 Vite，保留既有大 chunk 提示。`npm test` 最终 407 / 407 通过，0 失败、0 跳过；两组新增回归经独立只读复核合计 32 / 32 通过。
+  - 受控临时原生 Claude 命名进程 → 实际 shell → 内置运行时记录器 → 默认状态读取器的系统 PID / 启动时间配对通过；结束该进程后等待归零。只使用合成生命周期事件，不代表真实客户端会话触发验收。
+  - `test:ui`、`sort`、`theme`、`modules`、`credits`、`plans`、`anime`、`kimi-work`、`quotas`、`i18n`、`layouts`、`resources`、`desktop`、`tray`、`widgets`、`skins`、`motion` 共 17 个合成界面命令最终全部通过。三皮肤原 24 组布局通过；动效新增 87 次独立观察、42 项时间轴 / 偏好检查、6 次主题切换各 3 帧取样通过，无页面异常。
+  - 打包普通应用的整包和两种原生辅助程序通过全架构严格签名检查；包内当前业务源码及 dist 内容匹配，打包后的 8 模块、renderer sandbox / contextIsolation 开启、nodeIntegration 关闭、隔离钩子安装 / 执行 / 移除、系统 PATH、嵌套私密字段排除与无效输入静默全部通过。
+  - 安装归档 SHA-256 与验收包一致；替换期间偏好与 Local Storage 逐字节一致，正常重启及只读打开 / 关闭配置后偏好再次逐字节一致；完整数据及图片存储已备份。进程检查确认仅一个主进程来自最终安装位置，界面完成本地状态加载且原风格、模式、模块、来源和图片保留。
+- 失败与复测：
+  - 初轮模块脚本一次红灯点击超时，诊断复跑通过；随后在键盘排序后复现工具栏 y 从 0 变为 -1。独立诊断证实只有 `main.scrollTop=1`，窗口与文档并未滚动；修复外壳滚动后，原模块套件和最终整轮再次通过。
+  - 新动效脚本最初未枚举伪元素，后补 `getAnimations({subtree:true})`；暂停状态曾在 CSS pause task 仍 pending 时前进约一帧，改为等待 ready 后保留原严格比较，复测通过。另一次原生全屏超时，补足测试窗口已显示和激活请求后完整复测通过；新增的“必须独占系统焦点”诊断要求已移除，未删除原全屏断言或放宽超时。
+  - 最终整轮小组件重启检查曾在窗口显示前断言可见失败，偏好就绪不保证 `ready-to-show` 已完成；改为等待实际可见后单项复测通过。其余 16 项在该最终整轮通过。
+  - 原生进程 fixture 首次有目录命名冲突；早期 fixture 使用硬链接后 chmod 曾影响宿主运行时文件模式，已立即恢复 0755 并改用独立拷贝，确认运行时可执行、模式正确，最终原生回归通过，未写入宿主二进制内容。
+- 未完成 / 需要人类决定：真实 Claude Code 和桌面 Code 页是否触发用户级钩子及入口分类仍未完成客户端会话实测；本轮没有开启真实钩子或新增辅助功能授权，普通桌面聊天仍需有效系统授权。小组件系统图库、实际 App Group 容器与系统刷新仍保留此前 provisioning profile 前置条件；Windows / Linux 未新增平台验收。无新增实现选择需要人类决定。
+
+---
+
 ## 2026-10-22 · Claude（Anthropic，Claude App 云端会话，模型配置 claude-opus-5-5）· Claude Code 状态钩子与界面动效
 
 - 分支：`claude/ui-redesign`，起点 `9a7f453`。

@@ -101,7 +101,8 @@ try {
   assert.equal(JSON.parse(await readFile(snapshotPath, 'utf8')).theme, 'light');
   await app.close(); app = await launch(true); page = await app.firstWindow();
   await page.waitForFunction(async () => (await window.panel.getState()).widgetsEnabled);
-  assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), true);
+  // Renderer preferences can arrive before the native ready-to-show callback.
+  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible())).toBe(true);
   await page.evaluate(() => window.panel.setWidgetsEnabled(false));
   await assert.rejects(access(snapshotPath));
   assert.equal(JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')).widgetsEnabled, false);

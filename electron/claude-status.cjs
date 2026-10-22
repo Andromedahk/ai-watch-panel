@@ -3,6 +3,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { createHash, randomBytes } = require('node:crypto');
+const { promisify } = require('node:util');
+const execFile = promisify(require('node:child_process').execFile);
 const { boundedFile } = require('./session-files.cjs');
 const FRESH_MS = 10 * 60 * 1000;
 const WINDOWS = [['fh', '全部模型', '5 小时'], ['sd', '全部模型', '1 周'],
@@ -33,6 +35,25 @@ function normalizeClaudeUsage(payload, now) {
 function isCodeProcess(command) {
   return /(?:^|[/\\])claude(?:\.exe)?$/.test(command)
     || /[/\\]claude[/\\]versions[/\\]\d+\.\d+\.\d+(?:\.exe)?$/.test(command);
+}
+// PID numbers can be reused. Compare the logger's captured start time with one
+// bounded native query per poll; do not add process arguments or paths to state.
+async function readOwnerStarts(pids) {
+  const selected = [...new Set(pids.filter(pid => Number.isSafeInteger(pid) && pid > 1))].slice(0, 64);
+  if (!selected.length) return new Map();
+  try {
+    const { stdout } = await execFile('/bin/ps', ['-p', selected.join(','), '-o', 'pid=,lstart='], {
+      env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' }, timeout: 1000, maxBuffer: 32768, windowsHide: true,
+    });
+    const starts = new Map();
+    for (const line of stdout.split('\n')) {
+      const match = /^\s*(\d+)\s+(.+?)\s*$/.exec(line);
+      if (!match) continue;
+      const pid = Number(match[1]), start = match[2].trim().replace(/\s+/g, ' ');
+      if (selected.includes(pid) && /^[A-Za-z]{3} [A-Za-z]{3} \d{1,2} \d{2}:\d{2}:\d{2} \d{4}$/.test(start)) starts.set(pid, start);
+    }
+    return starts;
+  } catch { return new Map(); }
 }
 function normalizeClaudePlan(payload, now) {
   const oauth = payload?.claudeAiOauth;
@@ -100,6 +121,7 @@ class ClaudeStatusReader {
     this.usageReader = options.usageReader || new (require('./claude-usage.cjs').ClaudeUsageReader)({ paths: this.paths, platform: this.platform });
     this.desktopPlanCache = null; this.desktopPlanCacheFile = null; this.persistedDesktopPlan = null; this.loadSamples = [];
     this.hooks = options.hooks || null; // optional ClaudeHooks reader (Claude Code lifecycle events)
+    this.ownerStartsReader = options.ownerStartsReader || readOwnerStarts;
     if (options.desktopPlanCacheFile) this.setDesktopPlanCacheFile(options.desktopPlanCacheFile);
   }
   setDesktopPlanCacheFile(file) {
@@ -224,7 +246,7 @@ class ClaudeStatusReader {
     const sessions = path.join(config, 'sessions');
     try { names = (await fs.readdir(sessions)).filter(n => /^\d+\.json$/.test(n)); }
     catch (error) { failed = error.code !== 'ENOENT'; }
-    const states = new Map(), classified = new Set(), sessionSurfaces = new Map();
+    const states = new Map(), classified = new Set(), registrations = new Map();
     for (const name of names.filter(n => pids.has(Number(n.slice(0, -5)))).slice(0, 128)) {
       try {
         const file = path.join(sessions, name);
@@ -232,34 +254,73 @@ class ClaudeStatusReader {
         if (!Number.isInteger(row.pid) || row.pid !== Number(name.slice(0, -5))) continue;
         classified.add(row.pid);
         const surface = isDesktopEntry(row.entrypoint) ? 'desktop' : 'terminal';
-        if (typeof row.sessionId === 'string') sessionSurfaces.set(row.sessionId, surface);
+        const session = typeof row.sessionId === 'string' && row.sessionId ? row.sessionId : null;
+        registrations.set(row.pid, { session, surface });
         if ((source === 'desktop') !== (surface === 'desktop')) continue;
         const stat = await fs.stat(file);
         const fresh = stat.mtimeMs <= now + 120000 && now - stat.mtimeMs <= FRESH_MS;
         const phase = row.status === 'idle' ? 'idle' : fresh && row.status === 'busy' ? 'running'
           : fresh && row.status === 'waiting' ? 'waiting' : 'unknown';
-        states.set(row.pid, { phase, surface, at: stat.mtimeMs, ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName) } : {}) });
+        states.set(row.pid, { phase, surface, session, at: stat.mtimeMs, ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName) } : {}) });
       } catch { failed = true; }
     }
-    const values = [...states.values()];
-    // Hook events name the exact state of each Claude Code session (running, waiting for
-    // approval, asking a question). They only count while a Claude Code process is alive,
-    // so a crash without SessionEnd cannot leave a stale light on.
-    const hookSessions = this.hooks?.enabled && codeProcesses.length
-      ? ((await this.hooks.read(now)) || []).map(s => ({ ...s, surface: sessionSurfaces.get(s.session) || s.surface }))
-        .filter(s => (source === 'desktop') === (s.surface === 'desktop')) : [];
-    const hookWaiting = hookSessions.filter(s => s.phase === 'waiting');
-    const sessionActive = Math.max(values.filter(s => s.phase === 'running').length, hookSessions.filter(s => s.phase === 'running').length);
-    // The visible Stop button can belong to a registered desktop Code session;
-    // use the larger signal rather than double-counting the same task.
+    // The logger captures the nearest actual Claude Code owner when the event
+    // occurs. It must still be alive: never fall back to a surviving ancestor of
+    // an exited nested CLI, even when that parent has no session registration.
+    const hookByPid = new Map();
+    if (this.hooks?.enabled && pids.size) {
+      const candidates = [];
+      for (const hook of (await this.hooks.read(now)) || []) {
+        if (!hook || typeof hook.session !== 'string' || !hook.session
+          || !['running', 'waiting', 'idle'].includes(hook.phase) || !Number.isFinite(hook.at)
+          || !Array.isArray(hook.ancestors) || !Number.isSafeInteger(hook.ownerPid) || hook.ownerPid <= 1
+          || typeof hook.ownerStart !== 'string' || !hook.ownerStart) continue;
+        const pid = hook.ownerPid;
+        if (!pids.has(pid) || !hook.ancestors.includes(pid)) continue;
+        const registration = registrations.get(pid);
+        if (registration?.session && registration.session !== hook.session) continue;
+        const surface = registration?.surface || hook.surface;
+        if (!['desktop', 'terminal'].includes(surface)) continue;
+        candidates.push({ hook, pid, surface });
+      }
+      let ownerStarts = new Map();
+      const ownerPids = [...new Set(candidates.map(candidate => candidate.pid))].slice(0, 64);
+      if (ownerPids.length) {
+        try { ownerStarts = await this.ownerStartsReader(ownerPids); } catch { /* No reliable owner identity: keep file/AX evidence only. */ }
+      }
+      for (const { hook, pid, surface } of candidates) {
+        if (!(ownerStarts instanceof Map) || ownerStarts.get(pid) !== hook.ownerStart) continue;
+        classified.add(pid);
+        if ((source === 'desktop') !== (surface === 'desktop')) continue;
+        // Without a registration, a CLI may have moved to another session. Only
+        // its newest hook session is evidence of its current state.
+        if (!hookByPid.has(pid) || hookByPid.get(pid).at <= hook.at) hookByPid.set(pid, { ...hook, surface });
+      }
+    }
+    const hookSessions = [...hookByPid.values()];
+    for (const [pid, hook] of hookByPid) {
+      states.set(pid, { ...states.get(pid), phase: hook.phase, reason: hook.reason,
+        session: hook.session, surface: hook.surface, at: hook.at, hook: true });
+    }
+    // A session can have more than one registered PID. Prefer its hook state over
+    // an older registration, then keep the freshest evidence for one task count.
+    const bySession = new Map();
+    for (const [pid, state] of states) {
+      const key = state.session ? `session:${state.session}` : `pid:${pid}`;
+      const previous = bySession.get(key);
+      if (!previous || (state.hook && !previous.hook) || (Boolean(state.hook) === Boolean(previous.hook) && state.at >= previous.at)) bySession.set(key, state);
+    }
+    const values = [...bySession.values()];
+    const sessionActive = values.filter(s => s.phase === 'running').length;
+    // AX describes the visible desktop conversation, which may be the same Code
+    // session already counted above. It establishes at least one task, not another.
     const desktopRunning = source === 'desktop' && (desktopActivity.activity === 'running' || inferredBusy);
     const activeTasks = Math.max(sessionActive, desktopRunning ? 1 : 0);
     const desktopWaiting = source === 'desktop' && desktopActivity.activity === 'waiting' ? desktopActivity.waiting : null;
-    const fileWaiting = values.filter(s => s.phase === 'waiting').length;
-    const sessionWaiting = Math.max(fileWaiting, hookWaiting.length);
-    const waiting = sessionWaiting + (desktopWaiting ? 1 : 0);
-    const reasons = new Set([...hookWaiting.map(s => s.reason), desktopWaiting].filter(Boolean));
-    const waitingReason = !waiting ? undefined : reasons.size === 1 && fileWaiting <= hookWaiting.length ? [...reasons][0] : 'both';
+    const waitingSessions = values.filter(s => s.phase === 'waiting');
+    const waiting = Math.max(waitingSessions.length, desktopWaiting ? 1 : 0);
+    const reasons = new Set([...waitingSessions.map(s => s.reason), desktopWaiting].filter(Boolean));
+    const waitingReason = !waiting ? undefined : reasons.size === 1 && waitingSessions.every(s => s.reason) ? [...reasons][0] : 'both';
     const incomplete = failed || (source === 'code' && classified.size < pids.size) || values.some(s => s.phase === 'unknown');
     // A question or permission prompt outranks a running task, as for Codex.
     const activity = processes === null ? 'unknown' : waiting ? 'waiting' : activeTasks ? 'running'
@@ -300,4 +361,4 @@ class ClaudeStatusReader {
     return result;
   }
 }
-module.exports = { ClaudeStatusReader, normalizeClaudeUsage, normalizeClaudePlan, readClaudePlan, resolveClaudePaths, isCodeProcess, isDesktopEntry, readCodeIdentity };
+module.exports = { ClaudeStatusReader, normalizeClaudeUsage, normalizeClaudePlan, readClaudePlan, resolveClaudePaths, isCodeProcess, isDesktopEntry, readCodeIdentity, readOwnerStarts };
