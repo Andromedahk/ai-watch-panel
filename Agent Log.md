@@ -20,6 +20,20 @@
 
 ---
 
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 install_preflight_next 子 Agent）· 推送并安装 aacebdc
+
+- 分支：`claude/next-features`，功能提交 `aacebdc`；开始时目标 worktree 干净，来源为 `main` 之后的单个新提交。
+- 目的：按人类要求推送指定提交，重新安装并启动 App，不再跑验收。
+- 操作：
+  - 先将原提交推送到同名 origin 分支，不改写提交、不强制推送或合并主分支。install_preflight_next 子 Agent（Codex / GPT-6 / Codex 桌面本地执行环境）只读核对打包配置、本地 Electron、原安装位置及新增偏好的默认值处理，未运行测试或操控应用。
+  - 从 `aacebdc` 构建并使用依赖目录中匹配的 Electron 打包普通 macOS App；输出保留在忽略的 `release/` 版本目录，不构建原生小组件。
+  - 新应用先暂存并核对签名；正常退出原应用，备份旧应用及整个用户数据目录后替换原安装副本并启动。旧应用、用户数据及安装摘要保留在忽略的 `.local/install-backups/`；仅新增本操作记录与 README 安装记录，功能代码不改。
+- 验证：`npm run build` 与普通 macOS 打包完成，保留既有大 chunk 提示；整包 `codesign --verify --deep --strict --all-architectures` 通过。包内网页构建及关键 Electron 文件共 23 项与当前源码 / 构建一致，安装归档摘要与包相同；原位置仅一个新版主进程持续存活，重启前后偏好文件逐字节一致、原偏好键值完整保留。主目录未提交 relay 改动的差异及状态摘要与操作前一致。
+- 失败与重试：首次 HTTPS 推送发生 TLS 连接中断；仅对重试命令指定 HTTP/1.1 后推送成功，未改变全局网络配置。构建和安装未失败，应用仍为本地 ad hoc 签名版本。
+- 未完成 / 需要人类决定：无新增需决定事项。按人类要求未运行单元测试、界面复验或真实会话验收，不将构建 / 安装成功等同于功能验收；此前长期工作节奏观察、非中英文案审校、原生小组件和 Windows / Linux 等未验证边界仍按原记录保留。
+
+---
+
 ## 2026-10-23 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 看板娘自动刷新与 1200 条台词
 
 - 分支：`claude/next-features`（独立 worktree），本地提交，未推送。
