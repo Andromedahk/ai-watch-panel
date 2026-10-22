@@ -20,6 +20,21 @@
 
 ---
 
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 review_mascot_background 子 Agent）· 看板娘立绘背景修复
+
+- 分支：`claude/ui-redesign`，起点 `ee17b08`；开始时目标 worktree 干净并与 origin 同步。
+- 目的：修复人类截图中看板娘立绘后方突兀的矩形背景，只验收相关显示效果并延续已授权的 App 替换流程。
+- 操作：
+  - `src/view/skins.css`：提高看板娘专用透明背景规则的选择器优先级，使其覆盖通用二次元头像的渐变背景；普通和悬停状态共用同一规则。人物素材、尺寸、渐隐、RTL 遮罩和其他头像样式保持原值。README 补充外观说明和署名记录。
+  - review_mascot_background 子 Agent（Codex / GPT-6 / Codex 桌面本地执行环境）只读复核 CSS 层叠、三皮肤共用结构、悬停与 RTL 分支，确认修改范围仅限看板娘。
+  - 使用独立测试配置在 macOS Electron 中重现旧选择器的矩形底色，再恢复修复规则进行专项检查与截图；诊断脚本、结果、截图仅写入忽略的 `.local/qa/mascot-background/`。
+  - 打包普通 macOS App，暂存并验证签名；正常退出旧进程，备份旧应用及完整用户数据后替换并从原位置启动。安装记录和长期备份保存在忽略的 `.local/install-backups/`，不提交构建产物或用户配置。
+- 验证：`npm run build` 通过；三皮肤 × 明暗主题 × 中文 / 阿拉伯语 RTL × 普通 / 悬停共 24 种状态全部通过、0 页面错误，立绘背景透明且无阴影，渐隐方向正确，普通头像背景未变。主 Agent 目视前后截图，确认矩形消失。普通 macOS 打包和 `codesign --verify --deep --strict --all-architectures` 通过，包内完整网页构建及主进程 / preload 共 22 个文件与当前构建一致；安装归档摘要一致、仅一个原位置主进程持续存活，重启前后设置文件逐字节一致。
+- 失败或未验证项：本轮无构建、专项检查或安装失败；构建仍有既有大 chunk 提示，应用仍为本地 ad hoc 签名版本。未重复全量单元测试、完整 insights 或圆角套件；此前真实连续十分钟 Code 任务、原生小组件系统集成及 Windows / Linux 实机验证边界不变。
+- 未完成 / 需要人类决定：无新增需决定事项；不合并主分支，不修改其他工作区的 relay 改动。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 verify_install_bundle 子 Agent）· 替换并重启已安装 App
 
 - 分支：`claude/ui-redesign`，功能提交 `71a70eb`；开始时 worktree 干净并已与 origin 同步。

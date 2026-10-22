@@ -624,7 +624,7 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
 .insights.is-wide .mascot-figure { width: 146px; height: 160px; align-self: flex-end; }
 .mascot-figure { position: relative; flex: none; align-self: flex-end; width: 146px; height: 160px; margin: 0; padding: 0; border: 0; background: none; cursor: pointer; transform-origin: 50% 100%; }
 .mascot-figure .avatar { position: absolute; inset: 0; background: none; box-shadow: none; border-radius: 0; }
-.mascot-figure .avatar-face, .mascot-figure:hover .avatar-face { position: absolute; inset: 0; overflow: hidden; border: 0; border-radius: 0; background: none; box-shadow: none; mask-image: linear-gradient(to bottom, #000 80%, transparent), linear-gradient(to right, #000 72%, transparent); mask-composite: intersect; }
+.insight-mascot .mascot-figure .avatar-face { position: absolute; inset: 0; overflow: hidden; border: 0; border-radius: 0; background: none; box-shadow: none; mask-image: linear-gradient(to bottom, #000 80%, transparent), linear-gradient(to right, #000 72%, transparent); mask-composite: intersect; }
 :root[dir="rtl"] .mascot-figure .avatar-face { mask-image: linear-gradient(to bottom, #000 80%, transparent), linear-gradient(to left, #000 72%, transparent); }
 .mascot-figure .avatar::before, .mascot-figure .avatar::after { display: none; }
 .mascot-figure .avatar[data-crop="bust"] img { left: -4%; top: auto; bottom: -6%; width: 108%; }
