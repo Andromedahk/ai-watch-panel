@@ -1,6 +1,6 @@
 // Lower-half panels keep their full contents in a separate vertical scroller.
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
-import { Move, RefreshCw } from 'lucide-react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
+import { ChevronDown, Circle, RefreshCw } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { DAY, type Journal, type JournalEvent } from '../journal';
 import type { InsightId, Insights, ProviderId } from '../types';
@@ -9,6 +9,7 @@ import { Portrait } from './parts';
 import quipBook from './quips.json';
 import { autoSlot, featured } from './mascot-cadence';
 import { useInsightSort } from '../useInsightSort';
+import { selectResetRows } from './reset-schedule';
 
 const MARGIN = 12;
 /** Old preferences retain this default; user ordering keeps hidden panels in place. */
@@ -59,13 +60,17 @@ function eventLabel(event: JournalEvent, t: ReturnType<typeof useI18n>['t']) {
 }
 
 function Timeline({ views, journal, anime, image, sortHandle, sortProps }: PanelProps) {
-  const { t, date } = useI18n();
+  const { t, date, number } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
   const now = useNow(60000);
   const byId = new Map(views.map(view => [view.id, view]));
-  const events = journal.events.filter(event => byId.has(event.id) && now - event.at <= DAY).slice(-40).reverse();
+  const events = journal.events.filter(event => byId.has(event.id) && now - event.at <= DAY).reverse();
+  const visibleEvents = expanded ? events : events.slice(0, 50);
+  const hiddenCount = Math.max(0, events.length - 50);
   return <section {...sortProps} className="insight insight-timeline" data-insight="timeline" aria-label={t('动态时间线')}>
     <header>{sortHandle}<h3>{t('动态')}</h3><small>{t('近 24 小时')}</small></header>
-    {events.length ? <ol>{events.map(event => {
+    {events.length ? <ol id={listId}>{visibleEvents.map(event => {
       const view = byId.get(event.id)!;
       return <li key={`${event.id}:${event.at}`} data-kind={event.to}>
         <time dateTime={new Date(event.at).toISOString()}>{date(new Date(event.at).toISOString(), { hour: '2-digit', minute: '2-digit' })}</time>
@@ -73,6 +78,9 @@ function Timeline({ views, journal, anime, image, sortHandle, sortProps }: Panel
         <span className="insight-name"><bdi>{view.name}</bdi></span><span className="insight-what">{eventLabel(event, t)}</span>
       </li>;
     })}</ol> : <p className="insight-empty">{t('暂无状态变化')}</p>}
+    {hiddenCount > 0 && <button type="button" className="insight-expand" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(value => !value)}>
+      <ChevronDown aria-hidden="true" /><span>{expanded ? t('收起更早动态') : t('展开更早动态（{p0}）', { p0: number(hiddenCount) })}</span>
+    </button>}
   </section>;
 }
 
@@ -85,18 +93,24 @@ function countdown(at: number, now: number, i18n: ReturnType<typeof useI18n>) {
 
 function Resets({ views, anime, image, sortHandle, sortProps }: PanelProps) {
   const i18n = useI18n(), { t, percent } = i18n;
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
   const now = useNow(30000);
-  const rows = views.flatMap(view => (view.provider.local?.quotas || []).map((quota, index) => ({ view, quota, index, at: Date.parse(quota.reset) })))
+  const allRows = views.flatMap(view => (view.provider.local?.quotas || []).map((quota, index) => ({ view, quota, index, at: Date.parse(quota.reset) })))
     .filter(row => Number.isFinite(row.at) && row.at > now && !row.quota.stale)
-    .sort((a, b) => a.at - b.at).slice(0, 8);
+    .sort((a, b) => a.at - b.at);
+  const { rows, hiddenCount } = selectResetRows(allRows, expanded);
   return <section {...sortProps} className="insight insight-resets" data-insight="resets" aria-label={t('额度重置日程')}>
     <header>{sortHandle}<h3>{t('额度重置')}</h3><small>{t('按恢复时间')}</small></header>
-    {rows.length ? <ul>{rows.map(({ view, quota, index, at }) => <li key={`${view.id}:${index}`} data-low={quota.remaining !== null && quota.remaining < LOW}>
+    {rows.length ? <ul id={listId}>{rows.map(({ view, quota, index, at }) => <li key={`${view.id}:${index}`} data-low={quota.remaining !== null && quota.remaining < LOW}>
       <Face view={view} anime={anime} image={image(view)} />
       <span className="insight-name"><bdi>{view.name}</bdi><small><bdi>{[quota.model === view.name ? '' : quota.model, quota.period].filter(Boolean).join(' · ')}</bdi></small></span>
       <span className="insight-value">{quota.remaining === null ? '—' : percent(quota.remaining)}</span>
       <span className="insight-when" title={i18n.date(new Date(at).toISOString())}>{quota.resetKind === 'expiry' ? t('{p0} 到期', { p0: countdown(at, now, i18n) }) : countdown(at, now, i18n)}</span>
     </li>)}</ul> : <p className="insight-empty">{t('暂无即将重置的额度')}</p>}
+    {hiddenCount > 0 && <button type="button" className="insight-expand" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(value => !value)}>
+      <ChevronDown aria-hidden="true" /><span>{expanded ? t('收起 Antigravity 其他模型') : t('展开 Antigravity 其他模型（{p0}）', { p0: i18n.number(hiddenCount) })}</span>
+    </button>}
   </section>;
 }
 
@@ -247,7 +261,7 @@ export function InsightsArea({ insights, order, onOrder, sortingDisabled, onSort
           const delta = event.key === 'ArrowUp' ? -columns : event.key === 'ArrowDown' ? columns : (event.key === 'ArrowLeft' ? -1 : 1) * (document.documentElement.dir === 'rtl' ? -1 : 1);
           const target = Math.max(0, Math.min(ids.length - 1, index + delta));
           if (target !== index) { const next = [...ids]; next.splice(index, 1); next.splice(target, 0, id); saveVisibleOrder(next); }
-        }}><Move aria-hidden="true" /></button>;
+        }}><Circle aria-hidden="true" /></button>;
       const panelProps = { ...props, sortProps, sortHandle };
       return id === 'timeline' ? <Timeline key={id} {...panelProps} /> : id === 'resets' ? <Resets key={id} {...panelProps} />
         : id === 'trend' ? <Trend key={id} {...panelProps} /> : <Mascot key={id} {...panelProps} />;

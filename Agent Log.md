@@ -20,6 +20,25 @@
 
 ---
 
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 reset_rows_helper、reset_toggle_locales、review_move_handle 子 Agent）· 下半屏折叠与 WorkBuddy 双马尾立绘
+
+- 分支：`claude/next-features`，起点 `5b610cb`；开始时目标 worktree 干净并与 origin 同步。
+- 目的：将排序手柄简化为圆圈，压缩 Antigravity 重置列表与动态首屏，并按人类连续反馈制作更二次元、略扁平的 WorkBuddy 双马尾角色，沿用已授权的覆盖安装流程。
+- 操作：
+  - `src/view/insights.tsx`、`src/view/skins.css`：共用手柄改为 `Circle`，保持标题居中和原排序事件；动态默认最近 50 条，更多可展开 / 收起，保留近 24 小时、存储最多 300 条的既有边界。新增有展开状态和列表关联的按钮，支持键盘与 RTL。
+  - `src/view/reset-schedule.ts`、`tests/reset-schedule.test.cjs`（reset_rows_helper 子 Agent）：Antigravity 默认只保留 Gemini 4 Argon，没有该模型的有效未来重置时回退到其最早一项，手动展开所有其余模型；始终按恢复时间排序，其他助手保留最多 7 项，没有 Antigravity 时沿用 8 项。
+  - 17 个语言文件（reset_toggle_locales 子 Agent）：新增两组展开 / 收起文案共 4 键，保留数量占位符。review_move_handle 子 Agent 只读核对圆圈与共用尺寸、RTL 及独立看板娘手柄的兼容性。
+  - `images/anime/WorkBuddy-二次元.png`、`src/data.ts`、`docs/WORKBUDDY-ART.md`：用内置 imagegen 制作原创生成立绘，按人类反馈从初稿改为双马尾，再仅简化高光 / 阴影；最终原生 1254 × 1254 RGBA，透明通道直接保留、未放大。默认图片接入头像和看板娘，保留旧 SVG 与自选图优先级；素材说明记录来源分类、摘要和最终编辑提示词。README 更新功能用法、限制与署名记录。
+- 验证：
+  - `node --test tests/reset-schedule.test.cjs tests/i18n.test.cjs`：11 / 11 通过。17 个 JSON 解析、增量键与占位符检查通过；`npm run build`、`git diff --check` 通过，保留既有大 chunk 提示。
+  - reset_rows_helper 子 Agent 使用独立临时配置及合成数据，在 macOS Electron 真实点击：三皮肤 × 普通 / 二次元及额外三皮肤 RTL 窄窗，验证 Antigravity 1 → 5 → 1、动态 50 → 55 → 50、末条滚动可见、圆圈图标和无横向溢出；另检查 50 / 49 / 0 条不出现展开按钮。共 12 项通过、0 页面错误。
+  - 新立绘在三皮肤 × 明暗主题共 6 组合均加载正确，头像 / 半身裁切正常，看板娘普通及悬停背景透明、无溢出，0 页面错误；统计确认图像有透明外围及近不透明主体。主 Agent 独立读取结果并目视中文展开、RTL 窄窗及新立绘明暗截图。检查脚本与截图仅保留在忽略的 `.local/qa/`。
+- 安装：普通 macOS 打包完成，严格签名检查通过；包内 84 个网页构建及 Electron 非原生文件与当前构建 / 源码一致。备份旧应用和完整用户数据后替换并启动，安装归档摘要与包一致，仅一个原位置主进程持续存活，重启前后偏好文件逐字节一致。备份与安装摘要仅保留在忽略的 `.local/install-backups/`。
+- 失败与未验证项：定向脚本最初对 Claude Code 显示名、阿拉伯语数字格式及 alpha 必须恰好 255 的假设过严，依据实际约定修正脚本后通过，未因此修改产品或图像。首版角色风格被人类否定，最终立绘按后续方向修改，审美认可仍由人类判断。未重复全量单元、完整 insights 或圆角套件；非中英文案未经母语审校，Windows / Linux、原生小组件及此前真实长任务观察仍未验证。
+- 未完成 / 需要人类决定：无新增阻塞事项。主目录未提交 relay 改动的差异与状态摘要保持一致，不合并到 `main`，本次修改另加提交。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 review_move_handle 子 Agent）· 下半屏移动图标与标题对齐
 
 - 分支：`claude/next-features`，起点 `475b0a8`；开始时目标 worktree 干净并与 origin 同步。

@@ -4,7 +4,7 @@ export const animeImages: Record<ProviderId, string> = {
   claude: 'Claude-二次元.png', codex: 'ChatGPT-二次元.png',
   antigravity: 'Gemini-二次元.png', deepseek: 'DeepSeek-二次元.png',
   zcode: 'ZCODE-GLM-二次元.png', kimi: 'KIMI-二次元.png',
-  qwen: 'Qwen-二次元.png', workbuddy: 'workbuddy.svg',
+  qwen: 'Qwen-二次元.png', workbuddy: 'WorkBuddy-二次元.png',
 };
 
 // UI samples only. These labels and percentages are not provider plan specifications.

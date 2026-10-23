@@ -544,5 +544,9 @@
   "按间隔换一位助手说话；有助手在工作时，每 3 句后播报一次工作状态": "Hands the bubble to another assistant on a timer; while one is working, every 4th line is a status update",
   "刷新间隔": "Refresh interval",
   "{p0} 秒": "{p0} s",
-  "看板娘刷新设置保存失败，请重试": "Couldn’t save mascot refresh settings. Try again."
+  "看板娘刷新设置保存失败，请重试": "Couldn’t save mascot refresh settings. Try again.",
+  "展开 Antigravity 其他模型（{p0}）": "Show other Antigravity models ({p0})",
+  "收起 Antigravity 其他模型": "Hide other Antigravity models",
+  "展开更早动态（{p0}）": "Show earlier activity ({p0})",
+  "收起更早动态": "Hide earlier activity"
 }

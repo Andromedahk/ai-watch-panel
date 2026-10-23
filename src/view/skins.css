@@ -586,6 +586,11 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
 .insights [data-sort-target="true"]:not([data-dragging="true"]) { box-shadow: inset 0 0 0 2px var(--focus); }
 .insight h3 { margin: 0; font-size: 12px; font-weight: 750; letter-spacing: .02em; color: var(--text); }
 .insight header small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--faint); }
+.insight-expand { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 4px 6px; border: 0; border-radius: 6px; background: var(--raised); color: var(--muted); font-size: 10.5px; line-height: 1.5; text-align: start; }
+.insight-expand:hover { background: var(--button-hover); color: var(--text); }
+.insight-expand svg { flex: none; width: 14px; height: 14px; }
+.insight-expand[aria-expanded="true"] svg { transform: rotate(180deg); }
+.insight-expand span { min-width: 0; overflow-wrap: anywhere; }
 .insight ol, .insight ul { flex: none; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
 .insight li { min-width: 0; display: flex; align-items: center; gap: 7px; font-size: 11.5px; line-height: 18px; }
 .insight-empty { margin: auto 0; font-size: 11.5px; color: var(--faint); text-align: center; }

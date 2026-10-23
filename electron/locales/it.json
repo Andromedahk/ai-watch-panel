@@ -544,5 +544,9 @@
   "按间隔换一位助手说话；有助手在工作时，每 3 句后播报一次工作状态": "A intervalli passa la parola a un altro assistente; mentre qualcuno lavora, ogni 3 battute ne annuncia lo stato",
   "刷新间隔": "Intervallo di aggiornamento",
   "{p0} 秒": "{p0} s",
-  "看板娘刷新设置保存失败，请重试": "Impossibile salvare l’aggiornamento della mascotte. Riprova."
+  "看板娘刷新设置保存失败，请重试": "Impossibile salvare l’aggiornamento della mascotte. Riprova.",
+  "展开 Antigravity 其他模型（{p0}）": "Mostra gli altri modelli Antigravity ({p0})",
+  "收起 Antigravity 其他模型": "Nascondi gli altri modelli Antigravity",
+  "展开更早动态（{p0}）": "Mostra le attività precedenti ({p0})",
+  "收起更早动态": "Nascondi le attività precedenti"
 }

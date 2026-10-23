@@ -544,5 +544,9 @@
   "按间隔换一位助手说话；有助手在工作时，每 3 句后播报一次工作状态": "Theo chu kỳ đổi sang trợ lý khác nói; khi có trợ lý đang làm việc, cứ sau 3 câu sẽ báo trạng thái công việc",
   "刷新间隔": "Chu kỳ làm mới",
   "{p0} 秒": "{p0} giây",
-  "看板娘刷新设置保存失败，请重试": "Không lưu được cài đặt làm mới linh vật. Hãy thử lại."
+  "看板娘刷新设置保存失败，请重试": "Không lưu được cài đặt làm mới linh vật. Hãy thử lại.",
+  "展开 Antigravity 其他模型（{p0}）": "Hiện các mô hình Antigravity khác ({p0})",
+  "收起 Antigravity 其他模型": "Ẩn các mô hình Antigravity khác",
+  "展开更早动态（{p0}）": "Hiện hoạt động trước đó ({p0})",
+  "收起更早动态": "Ẩn hoạt động trước đó"
 }
