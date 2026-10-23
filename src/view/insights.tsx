@@ -1,6 +1,6 @@
 // Lower-half panels keep their full contents in a separate vertical scroller.
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
-import { GripVertical, RefreshCw } from 'lucide-react';
+import { Move, RefreshCw } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { DAY, type Journal, type JournalEvent } from '../journal';
 import type { InsightId, Insights, ProviderId } from '../types';
@@ -247,7 +247,7 @@ export function InsightsArea({ insights, order, onOrder, sortingDisabled, onSort
           const delta = event.key === 'ArrowUp' ? -columns : event.key === 'ArrowDown' ? columns : (event.key === 'ArrowLeft' ? -1 : 1) * (document.documentElement.dir === 'rtl' ? -1 : 1);
           const target = Math.max(0, Math.min(ids.length - 1, index + delta));
           if (target !== index) { const next = [...ids]; next.splice(index, 1); next.splice(target, 0, id); saveVisibleOrder(next); }
-        }}><GripVertical aria-hidden="true" /></button>;
+        }}><Move aria-hidden="true" /></button>;
       const panelProps = { ...props, sortProps, sortHandle };
       return id === 'timeline' ? <Timeline key={id} {...panelProps} /> : id === 'resets' ? <Resets key={id} {...panelProps} />
         : id === 'trend' ? <Trend key={id} {...panelProps} /> : <Mascot key={id} {...panelProps} />;

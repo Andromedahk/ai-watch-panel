@@ -20,6 +20,18 @@
 
 ---
 
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 review_move_handle 子 Agent）· 下半屏移动图标与标题对齐
+
+- 分支：`claude/next-features`，起点 `475b0a8`；开始时目标 worktree 干净并与 origin 同步。
+- 目的：按人类截图反馈，将下半屏六点排序手柄改为移动标志，并修复它与标题文字的纵向错位。
+- 操作：`src/view/insights.tsx` 将下半屏共用手柄的 `GripVertical` 换成 `Move`；`src/view/skins.css` 将标题行改为垂直居中、图标设为 16px。拖动和键盘事件、按钮点击区域不变。README 更新手柄说明与署名记录。review_move_handle 子 Agent（Codex / GPT-6 / Codex 桌面本地执行环境）只读复核三皮肤共用结构、RTL 和看板娘独立手柄定位。
+- 验证：`npm run build` 通过，保留既有大 chunk 提示；独立临时配置下查看三皮肤 × 明暗主题 × 普通 / 二次元及额外 RTL 共 13 种 macOS Electron 显示组合，均为四向移动图标，标题及副标题中心与图标中心最大差值不足 0.01px、0 页面错误。主 Agent 目视中文及 RTL 截图确认对齐；截图和诊断仅留在忽略的 `.local/qa/move-handles/`，不新增永久测试。
+- 安装：沿用此前已授权流程打包普通 macOS App，备份旧应用及完整用户数据后替换原位置并启动；严格签名检查通过，包内 20 个网页构建文件与当前 dist 一致，安装归档摘要一致，新版原位置主进程持续存活，重启前后设置文件逐字节一致。备份仅保留在忽略的 `.local/install-backups/`。
+- 失败或未验证项：本轮构建、外观预览和安装无失败；未重复全量单元测试或功能验收，Windows / Linux 未实机验证。此前未验证事项仍以原记录为准。
+- 未完成 / 需要人类决定：无新增需决定事项；主目录未提交 relay 改动保持原样，不合并到 `main`。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 install_preflight_next 子 Agent）· 推送并安装 aacebdc
 
 - 分支：`claude/next-features`，功能提交 `aacebdc`；开始时目标 worktree 干净，来源为 `main` 之后的单个新提交。

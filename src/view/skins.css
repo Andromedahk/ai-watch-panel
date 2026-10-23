@@ -573,10 +573,10 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
 .insight { --ink: color-mix(in oklch, var(--accent, var(--text)) var(--ink-mix), var(--ink-base)); position: relative; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 9px 12px 10px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .skin-dial .insight { border: 0; border-radius: var(--radius); box-shadow: 0 1px 0 var(--line), 0 6px 16px -12px #0006; }
 .skin-party .insight { border-radius: var(--radius); box-shadow: inset 0 0 0 1px var(--line); border: 0; }
-.insight > header { flex: none; display: flex; align-items: baseline; gap: 8px; }
+.insight > header { flex: none; display: flex; align-items: center; gap: 8px; }
 .insight-sort-handle { flex: none; align-self: center; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px;
   color: var(--muted); background: var(--raised); cursor: grab; touch-action: none; }
-.insight-sort-handle svg { width: 15px; height: 15px; pointer-events: none; }
+.insight-sort-handle svg { display: block; width: 16px; height: 16px; pointer-events: none; }
 .insight-sort-handle:hover { color: var(--text); background: var(--button-hover); }
 .insight-sort-handle:active { cursor: grabbing; }
 .insight-sort-handle:disabled, .insight-sort-handle[aria-disabled="true"] { opacity: .4; cursor: default; }
