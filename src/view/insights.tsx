@@ -3,7 +3,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import { ChevronDown, Circle, RefreshCw } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { DAY, type Journal, type JournalEvent } from '../journal';
-import type { InsightId, Insights, ProviderId } from '../types';
+import type { InsightId, Insights, Layout, ProviderId } from '../types';
 import { LOW, type ProviderView } from './model';
 import { Portrait } from './parts';
 import quipBook from './quips.json';
@@ -15,6 +15,39 @@ const MARGIN = 12;
 /** Old preferences retain this default; user ordering keeps hidden panels in place. */
 export const DEFAULT_INSIGHT_ORDER: InsightId[] = ['resets', 'trend', 'timeline', 'mascot'];
 const WIDE = 600;
+
+/** Keep DOM/order stable while each wide column stacks at its own natural height. */
+function useInsightColumns(root: RefObject<HTMLDivElement | null>, key: string, wide: boolean, layout: Layout, paused: boolean) {
+  const columns = useRef(1);
+  useLayoutEffect(() => {
+    const area = root.current;
+    if (!area) return;
+    const panels = [...area.querySelectorAll<HTMLElement>(':scope > [data-insight]')];
+    const measure = () => {
+      if (paused) return;
+      const gap = 10;
+      columns.current = wide ? Math.min(panels.length, layout === 'double' ? 2 : Math.max(1, Math.floor((area.clientWidth + gap) / (260 + gap)))) : 1;
+      area.style.setProperty('--insight-columns', String(columns.current));
+      // Move all cards into the new column count before measuring wrapped text.
+      panels.forEach((panel, index) => panel.style.setProperty('--insight-column', String(index % columns.current + 1)));
+      const spans = panels.map(panel => Math.ceil(panel.getBoundingClientRect().height + gap));
+      const bottoms = Array(columns.current).fill(0);
+      panels.forEach((panel, index) => {
+        const column = index % columns.current;
+        const span = spans[index];
+        panel.style.setProperty('--insight-row', String(bottoms[column] + 1));
+        panel.style.setProperty('--insight-span', String(span));
+        bottoms[column] += span;
+      });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(area);
+    panels.forEach(panel => observer.observe(panel));
+    return () => observer.disconnect();
+  }, [root, key, wide, layout, paused]);
+  return columns;
+}
 
 /** Use spare height when available; otherwise reserve a scrollable area while keeping the card list accessible. */
 export function useInsightSpace(stage: RefObject<HTMLDivElement | null>, viewport: RefObject<HTMLDivElement | null>, key: string, paused: boolean) {
@@ -235,8 +268,8 @@ function Mascot({ views, anime, image, onOpen, sortHandle, sortProps, interval, 
 type PanelProps = { views: ProviderView[]; journal: Journal; anime: boolean; image: (view: ProviderView) => string | undefined; onOpen: (view: ProviderView) => void;
   sortHandle?: ReactNode; sortProps?: HTMLAttributes<HTMLElement>; interval: number; paused: boolean };
 
-export function InsightsArea({ insights, order, onOrder, sortingDisabled, onSortingChange, height, width, ...props }: PanelProps & {
-  insights: Insights; order: InsightId[]; onOrder: (order: InsightId[]) => void; sortingDisabled: boolean; onSortingChange: (sorting: boolean) => void; height: number; width: number;
+export function InsightsArea({ insights, order, onOrder, sortingDisabled, onSortingChange, height, width, layout, ...props }: PanelProps & {
+  insights: Insights; order: InsightId[]; onOrder: (order: InsightId[]) => void; sortingDisabled: boolean; onSortingChange: (sorting: boolean) => void; height: number; width: number; layout: Layout;
 }) {
   const { t } = useI18n();
   const root = useRef<HTMLDivElement>(null);
@@ -246,6 +279,7 @@ export function InsightsArea({ insights, order, onOrder, sortingDisabled, onSort
     onOrder(order.map(id => ids.includes(id) ? next[index++] : id));
   };
   const sorting = useInsightSort(ids, saveVisibleOrder, sortingDisabled, onSortingChange);
+  const columns = useInsightColumns(root, ids.join(','), width >= WIDE, layout, sorting.sorting);
   const labels: Record<InsightId, string> = { timeline: t('动态时间线'), resets: t('额度重置日程'), trend: t('额度趋势'), mascot: t('看板娘') };
   if (!ids.length) return null;
   return <div ref={root} className={`insights ${width >= WIDE ? 'is-wide' : ''}`} style={{ height }} data-count={ids.length} data-sorting={sorting.sorting || undefined} role="region" aria-label={t('下半屏')} tabIndex={0}>
@@ -256,13 +290,11 @@ export function InsightsArea({ insights, order, onOrder, sortingDisabled, onSort
         aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight" onPointerDown={event => sorting.start(event, id)} onKeyDown={event => {
           if (!event.altKey || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) || sorting.sorting || sortingDisabled) return;
           event.preventDefault(); event.stopPropagation();
-          const panels = [...(root.current?.querySelectorAll<HTMLElement>(':scope > [data-insight]') || [])];
-          const columns = panels.filter(panel => Math.abs(panel.getBoundingClientRect().top - panels[0].getBoundingClientRect().top) < 2).length;
-          const delta = event.key === 'ArrowUp' ? -columns : event.key === 'ArrowDown' ? columns : (event.key === 'ArrowLeft' ? -1 : 1) * (document.documentElement.dir === 'rtl' ? -1 : 1);
+          const delta = event.key === 'ArrowUp' ? -columns.current : event.key === 'ArrowDown' ? columns.current : (event.key === 'ArrowLeft' ? -1 : 1) * (document.documentElement.dir === 'rtl' ? -1 : 1);
           const target = Math.max(0, Math.min(ids.length - 1, index + delta));
           if (target !== index) { const next = [...ids]; next.splice(index, 1); next.splice(target, 0, id); saveVisibleOrder(next); }
         }}><Circle aria-hidden="true" /></button>;
-      const panelProps = { ...props, sortProps, sortHandle };
+      const panelProps = { ...props, paused: props.paused || sorting.sorting, sortProps, sortHandle };
       return id === 'timeline' ? <Timeline key={id} {...panelProps} /> : id === 'resets' ? <Resets key={id} {...panelProps} />
         : id === 'trend' ? <Trend key={id} {...panelProps} /> : <Mascot key={id} {...panelProps} />;
     })}

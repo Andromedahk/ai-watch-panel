@@ -592,7 +592,7 @@ export default function App() {
             if (target !== index) { next.splice(index, 1); next.splice(target, 0, view.id); void saveVisibleOrder(next); }
           } }} />)}
       </div>
-      {!sorting.sorting && <InsightsArea insights={insights} height={insightSpace.height} width={insightSpace.width} views={views}
+      {!sorting.sorting && <InsightsArea insights={insights} height={insightSpace.height} width={insightSpace.width} layout={state.layout} views={views}
         order={state.insightOrder || readInsightOrder()} onOrder={order => void saveInsightOrder(order)} onSortingChange={setInsightSorting}
         sortingDisabled={settingsOpen || state.collapsed || insightOrderSaving || insightsSaving || layoutSaving || animeSaving}
         journal={testMode ? testJournal : liveJournal} anime={state.animeMode} image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)}
