@@ -20,6 +20,16 @@
 
 ---
 
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境）· 修正草稿 Release 查询
+
+- 分支：`codex/release-0.19.0` → `main`。
+- 目的：修复首次自动发布在上传完成后读取草稿资产时失败的问题，完成已授权的公开 Release。
+- 操作：`.github/workflows/release.yml` 改用 `gh release view --json isDraft,assets` 查询草稿，使用其真实字段 `isDraft`；保留所有六个资产名称、状态、大小、SHA-256 断言及 main 提交一致性检查。同步 README 更新记录。仅清理本任务刚创建、从未公开的 v0.19.0 草稿及标签，再从包含修复的最新 main 完整重建并发布，不修改既有公开版本。
+- 验证与失败：运行 `39934961217` 三个平台构建、签名 / DMG、正式包启动及 Windows 安装检查全部通过，五包与清单均已上传；发布因 REST 按标签查询草稿返回 404 而停止，未公开。使用已登录 CLI 的 `gh release view` 实际读取到该草稿及六个已上传资产、大小和 digest，确认修复路径可用。工作流 YAML 与空白检查通过。
+- 未完成 / 需要人类决定：无新增需批准事项；本提交生成时，新的完整构建及公开发布仍待执行。原有真实服务、跨平台完整验收和签名限制不变。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，主 Agent 与 packaged_smoke 子 Agent）· GitHub 内部发布与验收记录
 
 - 分支：`codex/release-0.19.0`；在发布 worktree 中协作，未自行提交或推送。

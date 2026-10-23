@@ -132,13 +132,13 @@ jobs:
           git tag "$tag" "$GITHUB_SHA"
           git push origin "$tag"
           gh release create "$tag" --verify-tag --draft --title "AI Watch $tag" --notes-file "$RUNNER_TEMP/release-notes.md" release-assets/*
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > "$RUNNER_TEMP/release.json"
+          gh release view "$tag" --json isDraft,assets > "$RUNNER_TEMP/release.json"
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
           import { createHash } from 'node:crypto';
           import { readFileSync, readdirSync } from 'node:fs';
           const release = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/release.json`, 'utf8'));
-          assert.equal(release.draft, true);
+          assert.equal(release.isDraft, true);
           const expected = readdirSync('release-assets').sort();
           assert.deepEqual(release.assets.map(asset => asset.name).sort(), expected);
           for (const name of expected) {
