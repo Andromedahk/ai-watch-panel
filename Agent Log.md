@@ -20,6 +20,20 @@
 
 ---
 
+## 2026-10-23 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 精简“关于”
+
+- 分支：`claude/next-features`（独立 worktree），起点 `e7c4795`，开始时干净；本地提交，未推送。
+- 目的：人类要求删除“关于”中的多余说明，只保留项目 GitHub 地址，并署名 Claude大小姐 和 GPT龙娘。
+- 操作：
+  - `src/App.tsx`：“关于”改为版本行、GitHub 链接、作者行三项；删除 Codex / Antigravity / DeepSeek 说明段落、逐个助手的状态明细及“桌面版 · 显示缩放 / 浏览器预览”行，并移除随之不再使用的 `settingsStatus` 与 `localizeStatus` 导入。
+  - `package.json` 新增 `homepage`（仓库地址）。`electron/main.cjs` 新增 `panel:open-repository`，只用 `package.json` 中的固定地址（校验为 GitHub 仓库格式）调用系统浏览器，不接受界面参数；`electron/preload.cjs`、`src/types.ts` 增加 `openRepository`。浏览器预览中退回普通外链。`src/view/skins.css` 增加链接样式。
+  - 17 个语言文件删除 6 条不再使用的键，新增“作者：{p0}”；名字作为占位符原样插入，不翻译。
+- 验证：`node --test tests/*.test.cjs` 451 项全部通过；`npx tsc --noEmit`、`git diff --check`、`npm run build`（既有大 chunk 提示）、`npm run test:i18n`、`npm run test:corners` 通过。独立临时配置与合成数据下核对中文 / 英文 / 阿拉伯语的“关于”文字、链接地址和截图；在主进程替换系统浏览器调用后点击链接，确认只请求一次固定仓库地址、窗口未跳转或新开。截图与脚本仅在忽略的 `.local/qa/about/`。
+- 失败或未验证项：`npm run test:insights` 在起点 `e7c4795` 已失败于 wide-rtl（双排瀑布流后最后一个组件不在底部，疑为用例假设过时），本次未修改也未重跑；未实际打开系统浏览器；未打包安装；新文案未经母语审校。
+- 未完成 / 需要人类决定：是否推送、安装，以及是否修正 insights 用例由人类决定。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 review_masonry、masonry_acceptance、refresh_readme 子 Agent）· 双排紧凑布局与 README 重做
 
 - 分支：`claude/next-features`，起点 `c0535e5`；开始时 worktree 干净并与 origin 同步。

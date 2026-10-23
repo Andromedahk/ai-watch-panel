@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('panel', {
   setTheme: (theme) => ipcRenderer.invoke('panel:theme', theme),
   dock: () => ipcRenderer.invoke('panel:dock'),
   chooseImage: (provider) => ipcRenderer.invoke('panel:image', provider),
+  openRepository: () => ipcRenderer.invoke('panel:open-repository'),
   quit: () => ipcRenderer.invoke('panel:quit'),
   onState: (callback) => {
     const listener = (_event, state) => callback(state);

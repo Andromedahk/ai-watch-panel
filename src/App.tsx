@@ -10,7 +10,7 @@ import { MASCOT_INTERVAL_DEFAULT, MASCOT_INTERVAL_MAX, MASCOT_INTERVAL_MIN, clam
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
 import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
-import { I18nContext, useI18n, createI18n, readLanguage, languages, localizeProvider, localizeStatus, type Language } from './i18n';
+import { I18nContext, useI18n, createI18n, readLanguage, languages, localizeProvider, type Language } from './i18n';
 import { buildView } from './view/model';
 import { GrantAccessContext, Portrait, RED_ALERT } from './view/parts';
 import { Overview, ProviderCard, RailItem, summarize } from './view/skins';
@@ -188,7 +188,6 @@ export default function App() {
         claudeSource: provider.id === 'claude' ? state.claudeSource : undefined } };
   });
   const translatedProviders = visibleProviders.map(provider => localizeProvider(provider, i18n));
-  const settingsStatus = displayStatus && { ...displayStatus, ...Object.fromEntries(providerIds.map(id => [id, localizeStatus(displayStatus[id], i18n)])) } as LocalStatus | null;
   const activeTasks = visibleProviders.reduce((total, provider) => total + (displayStatus?.[provider.id]?.activeTasks || 0), 0);
   const refreshTime = displayStatus?.sampledAt ? date(displayStatus.sampledAt, {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : t("读取中");
   const sorting = useCardSort(enabledOrder, order => { void saveVisibleOrder(order); }, settingsOpen || state.collapsed || orderSaving || modulesSaving || insightSorting);
@@ -731,9 +730,9 @@ export default function App() {
             <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={t('选择 {p0} 启动应用', { p0: provider.name })}>{t('选择应用')}</button>
           </div>)}</div>
         </section>
-        <section className="settings-group settings-note" data-section="about"><h3>{t('关于')}</h3><span className="note-title">{`${t('本地')} · v${packageInfo.version}`}</span><p>{t('Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。')}</p><p>{t('DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。')}</p>
-          {displayStatus && <>{providerIds.map((id) => <p key={id}><b>{providers.find(provider => provider.id === id)!.name}</b><br />{settingsStatus?.[id]?.detail}<br />{settingsStatus?.[id]?.activityDetail && <>{settingsStatus?.[id]?.activityDetail}<br /></>}{settingsStatus?.[id]?.observedAt ? t('记录时间：{p0}', { p0: date(settingsStatus?.[id]?.observedAt!) }) : t('尚无可用记录')}</p>)}</>}
-          <p>{state.desktop ? t('桌面版 · 显示缩放 {p0}×', { p0: state.scaleFactor }) : t('浏览器预览 · 窗口操作请使用桌面版')}</p></section>
+        <section className="settings-group settings-note" data-section="about"><h3>{t('关于')}</h3><span className="note-title">{`AI Watch · v${packageInfo.version}`}</span>
+          <p><a className="about-link" href={packageInfo.homepage} target="_blank" rel="noreferrer" onClick={event => { if (window.panel) { event.preventDefault(); void window.panel.openRepository(); } }}><bdi>{packageInfo.homepage}</bdi></a></p>
+          <p>{t('作者：{p0}', { p0: 'Claude大小姐 · GPT龙娘' })}</p></section>
       </div>
       <div className="settings-footer"><button className="save-button" onClick={saveSettings}><Check size={15} />{t('保存配置')}</button>{state.desktop && <button className="quit-button" onClick={() => window.panel?.quit()}>{t('退出面板')}</button>}</div>
       {notice && settingsOpen && <div className="toast" role="status">{notice}</div>}

@@ -88,6 +88,7 @@ declare global {
       setTheme(theme: Theme): Promise<PanelState>;
       dock(): Promise<PanelState>;
       chooseImage(provider: ProviderId): Promise<string | null>;
+      openRepository(): Promise<void>;
       quit(): Promise<void>;
       onState(callback: (state: PanelState) => void): () => void;
     };

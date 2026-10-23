@@ -180,7 +180,6 @@
   "重置 / 到期时间 {p0}": "Reinicia / Expira: {p0}",
   "记录于 {p0}": "Registo {p0}",
   " 额度记录于 {p0}": " · Registo {p0}",
-  "记录时间：{p0}": "Registo {p0}",
   " · 合并：{p0}；剩余额度取较低值": " · {p0} · Quota principal (Baixo)",
   " · 已过时，历史剩余 {p0}%": " · Histórico · Restante {p0}%",
   "历史剩余 {p0}%，当前额度待更新": "Histórico · Restante {p0}% · Dados anteriores; atualização pendente",
@@ -194,7 +193,6 @@
   "{p0} {p1}，点击查看": "{p0} · {p1} · Clique para ver",
   "选择 Kimi {p0} 来源": "Origem do Kimi: {p0}",
   "替换 {p0} 二次元图片": "Substituir imagem do {p0} · Modo anime",
-  "桌面版 · 显示缩放 {p0}×": "Desktop · {p0}×",
   "{p0} 测试任务状态": "{p0} · Teste · Estado da tarefa",
   "{p0} 测试数据显示": "{p0} · Dados de teste",
   "Codex 待回答": "Codex · Aguarda resposta",
@@ -236,7 +234,6 @@
   "Free · 无 Code 额度": "Free não inclui acesso ao Code",
   "示例套餐 Pro": "Plano de exemplo Pro",
   "剩余未知": "Desconhecido",
-  "尚无可用记录": "Desconhecido",
   "任务状态待确认": "Desconhecido",
   "状态未知": "Desconhecido",
   "任务未知": "Desconhecido",
@@ -312,7 +309,6 @@
   "选择启动应用请使用桌面版": "Use a aplicação de desktop",
   "浏览器预览：锁定效果请在桌面版查看": "Use a aplicação de desktop",
   "浏览器预览使用演示数据；本地接入请打开桌面版": "Use a aplicação de desktop",
-  "浏览器预览 · 窗口操作请使用桌面版": "Use a aplicação de desktop",
   "桌面版支持菜单栏与托盘收纳": "Use a aplicação de desktop",
   "界面预览": "Demonstração",
   "演示数据": "Demonstração",
@@ -370,8 +366,6 @@
   "手动选择的测试状态，不代表真实任务。": "São valores de teste, não dados reais. Alterações imediatas; reiniciar desativa o teste. A monitorização continua em fundo.",
   "运行数只统计本地接入且有运行证据的任务；未知状态和演示卡片不计入。": "Contam-se apenas tarefas locais verificadas. Estados desconhecidos e demo são excluídos. Quotas históricas são indicadas.",
   "当前本地记录未提供额度窗口": "Não há registo compatível; os valores ausentes continuam desconhecidos.",
-  "Codex 使用已有登录每分钟查询官方额度，失败时保留历史值或读取本地记录；Antigravity 同一模型的思考等级合并显示，每 5 秒检查任务，每 30 秒读取额度。刷新按钮会重新读取，联网请求最短间隔 15 秒，失败时自动退避。运行时 LOGO 显示对应颜色的光晕，Codex 待回答或待授权时优先显示红色。": "Lê quotas da conta existente; indica cache e respeita limites. Os níveis de raciocínio são apresentados juntos.",
-  "DeepSeek 使用本设备 Harness 已有登录态查询余额，每分钟更新。换设备后先在 Harness 登录，面板自动识别，无需复制 Key。账号切换或退出后会清除旧余额。": "Usa a sessão existente do dispositivo. Entre no cliente primeiro; não copie chaves. Mudar de conta limpa dados antigos.",
   "自动识别登录态": "Usa a sessão existente do dispositivo. Entre no cliente primeiro; não copie chaves. Mudar de conta limpa dados antigos.",
   "Claude 自动发现桌面与终端会话，读取桌面用量历史；Free 账号不包含 Code 权限，缺少额度时明确显示不可用。DeepSeek 结合会话记录与进程识别任务活动，黄色表示等待确认。浏览器预览全部使用示例。": "É necessária evidência local recente. Uma aplicação aberta ou tarefa antiga não basta; alguns clientes não informam atividade.",
   "点击额度翻页、余额币种切换，悬停查看详情。": "Verificação manual",
@@ -548,5 +542,6 @@
   "展开 Antigravity 其他模型（{p0}）": "Mostrar outros modelos do Antigravity ({p0})",
   "收起 Antigravity 其他模型": "Ocultar outros modelos do Antigravity",
   "展开更早动态（{p0}）": "Mostrar atividades anteriores ({p0})",
-  "收起更早动态": "Ocultar atividades anteriores"
+  "收起更早动态": "Ocultar atividades anteriores",
+  "作者：{p0}": "Criado por {p0}"
 }

@@ -6,6 +6,7 @@
   "type": "module",
   "main": "electron/main.cjs",
   "author": "AI Watch contributors",
+  "homepage": "https://github.com/Andromedahk/ai-watch-panel",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite --host 127.0.0.1",

@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, shell, systemPreferences } = require('electron');
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
+// About links only to this fixed project page; the renderer never supplies a URL.
+const { homepage: REPOSITORY } = require('../package.json');
 const { traySummary } = require('./tray-summary.cjs');
 const { WidgetPublisher, loadWidgetBridge } = require('./widget-publisher.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
@@ -526,6 +528,7 @@ else {
       if (image.isEmpty()) throw new Error('无法读取这张图片');
       return image.resize({ width: 256 }).toDataURL();
     });
+    handle('panel:open-repository', () => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(REPOSITORY) ? shell.openExternal(REPOSITORY) : undefined);
     handle('panel:quit', () => app.quit());
     void refreshLocalStatus().catch(() => {});
     statusTimer = setInterval(() => { void refreshLocalStatus().catch(() => {}); }, 5000);
