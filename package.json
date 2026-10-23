@@ -1,11 +1,12 @@
 {
   "name": "ai-watch-panel",
-  "version": "0.18.1",
+  "version": "0.19.0",
   "description": "A cross-platform vertical AI activity and quota panel",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
   "author": "AI Watch contributors",
+  "homepage": "https://github.com/Andromedahk/ai-watch-panel",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite --host 127.0.0.1",
@@ -15,8 +16,8 @@
     "test:desktop": "node scripts/verify-desktop.mjs",
     "test:tray": "node scripts/verify-tray.mjs",
     "pack:mac": "npm run build && electron-builder --mac --dir",
-    "dist:mac": "npm run build && electron-builder --mac zip",
-    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --arm64 --x64 --publish never",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "dist:linux": "npm run build && electron-builder --linux AppImage",
     "test:ui": "node scripts/verify-test-mode.mjs",
     "test:skins": "node scripts/verify-skins.mjs",
@@ -39,7 +40,8 @@
     "pack:mac:widgets": "node scripts/pack-widgets.mjs",
     "test:widgets": "node scripts/verify-widgets.mjs",
     "preview:widgets": "node scripts/preview-widgets.mjs",
-    "test:widgets:bundle": "node scripts/verify-widget-bundle.mjs"
+    "test:widgets:bundle": "node scripts/verify-widget-bundle.mjs",
+    "test:release": "node scripts/verify-release.mjs"
   },
   "dependencies": {
     "big.js": "^7.0.1",
@@ -68,7 +70,8 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "package.json",
+      "tests/fixtures/local-status.json"
     ],
     "asar": true,
     "asarUnpack": [
@@ -77,13 +80,22 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
+        "dmg",
         "zip"
       ],
       "identity": "-"
     },
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "files": [
+        "!electron/native/bin/**/*"
       ]
     },
     "linux": {
@@ -91,6 +103,10 @@
         "AppImage"
       ],
       "category": "Utility"
+    },
+    "artifactName": "AI-Watch-${version}-${os}-${arch}.${ext}",
+    "nsis": {
+      "runAfterFinish": false
     }
   }
 }

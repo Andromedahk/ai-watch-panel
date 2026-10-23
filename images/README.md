@@ -19,7 +19,9 @@
 
 ## 二次元图片
 
-`anime` 内为七张用户提供并批准作为默认素材同步的 PNG，以及代码绘制的 WorkBuddy SVG 占位图。保留原图，界面等比缩放、不裁切；普通 LOGO 与二次元图片独立保存。
+`anime` 内的默认素材为七张用户提供并批准同步的 PNG，以及一张使用 Codex 内置 imagegen 制作的 WorkBuddy 原创立绘 PNG。WorkBuddy 的来源分类为 `generated-edit`，不是官方角色或官方素材；设计、原生尺寸、文件摘要和最终编辑提示词见[素材说明](../docs/WORKBUDDY-ART.md)。旧 `workbuddy.svg` 保留作历史素材，已不作为默认头像。
+
+原文件保持不变，界面按用途等比缩放并裁成脸部头像或半身像。内置角色有各自的脸部对焦位置，自选图片使用默认对焦位置；透明立绘在看板娘中保留侧边及底部渐隐。普通 LOGO 与二次元图片分别保存，已有自选图优先于内置图。
 
 | 工具 | 二次元默认文件 |
 | --- | --- |
@@ -30,6 +32,6 @@
 | ZCode | `anime/ZCODE-GLM-二次元.png` |
 | Kimi Code | `anime/KIMI-二次元.png` |
 | Qwen（千问） | `anime/Qwen-二次元.png` |
-| WorkBuddy | `anime/workbuddy.svg`（占位图） |
+| WorkBuddy | `anime/WorkBuddy-二次元.png`（原创生成立绘） |
 
 文件映射在 `src/data.ts`。也可在配置的“二次元图片”部分单独替换；配置内自选图片仅本机保存，不写入仓库。

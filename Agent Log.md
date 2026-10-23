@@ -20,6 +20,132 @@
 
 ---
 
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 release_audit、packaged_smoke 子 Agent）· 合并 main 与 v0.19.0 发布准备
+
+- 分支：`codex/release-0.19.0` → `main`；起点 `bdb5fc8`，合并来源精确为 `10bd696`，保留两个父提交。源分支后来增加的安装记录不纳入本次合并。
+- 目的：按人类明确要求将指定功能分支合并到 main，并以最新 main 构建 macOS / Windows 安装包后发布 GitHub Release。
+- 操作：在独立干净 worktree 中无冲突整合七个来源提交，不修改主工作区未提交的 relay 文件；更新 `package.json` / `package-lock.json` 到 0.19.0，固定安装包架构和名称，加入单份合成 fixture，排除 Windows 包中的 macOS helpers。新增 `.github/workflows/release.yml`，在 macOS arm64、macOS x64、Windows x64 原生构建；Windows 检查 NSIS 静默安装后的应用，macOS 验证签名和 DMG。新增 `scripts/verify-release.mjs` 及 README 用法、签名限制和更新记录。
+- 验证：451 项单元测试、TypeScript / Vite 生产构建、insights 35 项布局 / 3 项立绘 / 15 项自动刷新 / 7 项排序通过；Apple Silicon DMG 与 ZIP 构建完成，严格 ad hoc 签名、DMG 校验通过；两个 helpers 的 arm64 / x86_64 均核对为 minos 13.0；工作流 YAML 结构通过检查。发布前其余本地和远端验证结果将按实际运行记录，不将准备完成当作公开发布。
+- 失败或未验证项：保留既有 Vite 大 chunk 提示与默认 Electron 图标提示。macOS 包未 Developer ID 签名或公证，Windows 未 Authenticode 签名。Windows 全量测试包含 Unix 路径、权限和 socket 假设，本次只在 macOS 执行全量测试，Windows 以原生构建 / 安装 / 合成启动检查为范围；真实提供商、完整 Windows 交互、旧 macOS 兼容、Linux 和原生小组件均不因此视为验收。
+- 未完成 / 需要人类决定：无新增需批准事项，合并、推送、构建与公开 Release 已由人类授权。本提交生成时远端构建尚待运行；仅在同一 main 提交的全部产物通过并核对 SHA-256 后公开发布，最终状态见该 Actions 运行和 Release。不会替换用户当前已安装应用。
+
+---
+
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，packaged_smoke 子 Agent）· 发布包启动烟测
+
+- 分支：`codex/release-0.19.0`；在主 Agent 准备的发布 worktree 中协作，未自行提交或推送。
+- 目的：为 macOS 和 Windows 正式打包产物提供可重复的最小启动检查。
+- 操作：新增 `scripts/verify-release.mjs`，通过命令行参数指定打包后的可执行文件，用 Playwright Electron 在独立临时配置与合成 fixture 下启动；检查正式包标识、版本、配置隔离、可见窗口、主面板和八个助手、测试数据标签、内置图片、渲染器错误与安全隔离配置。清除继承的开发 URL 和 Electron Node 模式，结束后关闭测试进程并删除临时配置。同步 README 更新记录与调用方式。
+- 验证：`node --check scripts/verify-release.mjs` 通过；脚本尚未对最终发布包运行，实际结果由主 Agent 的发布记录补充。
+- 失败或未验证项：不访问真实账户，不将合成数据启动通过视为真实提供商集成或跨平台完整验收；需要打包时包含既有 `tests/fixtures/local-status.json`，由主 Agent 同步打包配置。
+- 未完成 / 需要人类决定：无新增人类决策；等待主 Agent 构建后验证各平台产物。
+
+---
+
+## 2026-10-23 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 看板娘固定在双排底部与 insights 验收修正
+
+- 分支：`claude/next-features`（独立 worktree），起点 `fa75776`，开始时干净；本地提交，未推送。
+- 目的：人类要求修复上次审查提出的两项：双排瀑布流后看板娘落在右列中间（下方大片空白），以及 `test:insights` 在 wide-rtl 失败。
+- 操作：
+  - `src/view/insights.tsx`：宽布局中，若看板娘是顺序中的最后一个组件，则不参与分列，放在所有列下方的整行（`grid-column: 1 / -1`，行号取各列最低处），并标记 `data-pinned`；列数只按其余组件计算。看板娘在其他位置时行为不变。键盘 Alt + ↑ 对底部看板娘只上移一格；拖动排序按实际位置命中，无需修改，拖动期间暂停自动换句保持不变。
+  - `scripts/verify-insights.mjs`：`tailVisible` 改为按实际位置找最底部组件，并逐个滚动确认每个组件末行可见；新增 `pinnedMascot`（宽 RTL、宽 LTR、原生全屏）检查整行宽度、位于所有列下方和进度条可见（夹具默认关闭自动刷新，检查时临时开启 15 秒后恢复为关闭）；排序用例新增底部看板娘在 RTL 下的 Alt + ↑ / ← / → 移动及恢复。
+- 验证：`node --test tests/*.test.cjs` 451 项全部通过；`npx tsc --noEmit`、`git diff --check`、`npm run build`（既有大 chunk 提示）通过；`npm run test:insights` 全部通过（35 项布局、3 项立绘、15 项自动刷新、7 项排序）；`npm run test:corners`、`npm run test:i18n` 通过。中文双排及阿拉伯语宽布局截图目视确认看板娘位于底部整行、方向正确，截图仅在忽略的 `.local/qa/`。
+- 失败或未验证项：首轮新增检查因夹具关闭自动刷新而找不到进度条，另一次因 RTL 下左右方向预期写反而失败，均为测试脚本问题，修正后通过，未改产品逻辑。未打包安装；Windows / Linux 未实机验证。
+- 未完成 / 需要人类决定：是否推送、安装由人类决定。
+
+---
+
+## 2026-10-23 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 精简“关于”
+
+- 分支：`claude/next-features`（独立 worktree），起点 `e7c4795`，开始时干净；本地提交，未推送。
+- 目的：人类要求删除“关于”中的多余说明，只保留项目 GitHub 地址，并署名 Claude大小姐 和 GPT龙娘。
+- 操作：
+  - `src/App.tsx`：“关于”改为版本行、GitHub 链接、作者行三项；删除 Codex / Antigravity / DeepSeek 说明段落、逐个助手的状态明细及“桌面版 · 显示缩放 / 浏览器预览”行，并移除随之不再使用的 `settingsStatus` 与 `localizeStatus` 导入。
+  - `package.json` 新增 `homepage`（仓库地址）。`electron/main.cjs` 新增 `panel:open-repository`，只用 `package.json` 中的固定地址（校验为 GitHub 仓库格式）调用系统浏览器，不接受界面参数；`electron/preload.cjs`、`src/types.ts` 增加 `openRepository`。浏览器预览中退回普通外链。`src/view/skins.css` 增加链接样式。
+  - 17 个语言文件删除 6 条不再使用的键，新增“作者：{p0}”；名字作为占位符原样插入，不翻译。
+- 验证：`node --test tests/*.test.cjs` 451 项全部通过；`npx tsc --noEmit`、`git diff --check`、`npm run build`（既有大 chunk 提示）、`npm run test:i18n`、`npm run test:corners` 通过。独立临时配置与合成数据下核对中文 / 英文 / 阿拉伯语的“关于”文字、链接地址和截图；在主进程替换系统浏览器调用后点击链接，确认只请求一次固定仓库地址、窗口未跳转或新开。截图与脚本仅在忽略的 `.local/qa/about/`。
+- 失败或未验证项：`npm run test:insights` 在起点 `e7c4795` 已失败于 wide-rtl（双排瀑布流后最后一个组件不在底部，疑为用例假设过时），本次未修改也未重跑；未实际打开系统浏览器；未打包安装；新文案未经母语审校。
+- 未完成 / 需要人类决定：是否推送、安装，以及是否修正 insights 用例由人类决定。
+
+---
+
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 review_masonry、masonry_acceptance、refresh_readme 子 Agent）· 双排紧凑布局与 README 重做
+
+- 分支：`claude/next-features`，起点 `c0535e5`；开始时 worktree 干净并与 origin 同步。
+- 目的：修复双排下半屏因同排组件高度不同而留下空隙、宽度增加后意外变三列的问题；放大双排看板娘，重写当前功能说明与截图。
+- 操作：
+  - `src/App.tsx`、`src/view/insights.tsx`、`src/view/skins.css`：明确传递窗口模式；双排最多两列，只有一个组件时满宽，全屏按可用宽度计算列数。保留组件的直接子节点与顺序，每列按自然高度独立累计位置，组件间留约 10px。ResizeObserver 随展开、台词和窗口变化重排，先统一列号、再读高度、最后写行位置；不使用拖动所需的 transform。
+  - 键盘上下排序使用实际列数；手势期间暂停排布测量与看板娘自动换句，结束后重算。组件不因换列重挂载，保留展开状态。双排看板娘最小高度改为 260px，立绘高度 220px、宽度随组件调整，单列保持原样。
+  - review_masonry 子 Agent 只读复核测量时序、直接子节点 / key、RTL、键盘与拖动兼容；masonry_acceptance 子 Agent 在独立临时配置下检查实际 Electron 界面并生成合成数据截图。
+  - refresh_readme 子 Agent 重写 `README.md` 当前功能、操作、来源限制与开发说明，去除旧布局和旧截图引用，历史更新记录折叠保留；同步 `images/README.md` 的 WorkBuddy 透明 PNG、生成来源及裁切说明。五张新的原生界面截图保存至 `docs/screenshots/current-*.png`，全部使用明确标记的合成测试数据，不含真实账户或任务。
+- 验证：`npm run build` 与空白检查通过，保留既有大 chunk 提示。最终构建上的三皮肤 × 普通 / 二次元 × 740 / 840px 双排共 12 组矩阵通过；另一次独立运行中 74 项几何 / 交互检查通过、0 页面错误，涵盖展开收起、末条滚动、拖动提交 / Escape 取消、键盘排序、展开状态保留、RTL、单列、全屏三 / 四列切回双排、600px 最长英文气泡及换句重排。主 Agent 独立复核诊断与截图。
+- 失败与边界：一次拖动脚本在滚动未稳定时读取坐标，未命中预期目标；补充滚动稳定等待后相关专项通过，未修改产品排序逻辑。连续原生全屏切换曾出现 `Fullscreen transition timed out`，该次完整脚本没有通过；此前最终代码的独立专项通过结果保留，超时不能当作布局通过或掩盖。另一次脚本将 1100px 固定视为三列，忽略滚动条是否出现会改变该断点的可用宽度；改用远离断点的 1000px 后，等待原生状态和系统过渡稳定，2 → 3 → 2 → 4 → 2 列补测及截图几何共 7 项通过、0 页面错误。这是补测通过，不声称原生过渡超时已被产品修复。
+- 安装：普通 macOS 打包和严格签名检查通过，包内 84 个网页构建及非原生 Electron 文件与当前构建 / 源码一致；旧应用和完整用户数据已备份，原位置覆盖安装并启动，安装归档摘要一致，仅一个原位置主进程持续存活，偏好文件逐字节保留。备份、诊断与安装记录仅保留在忽略的 `.local/` 中。主目录 relay 的差异及状态摘要与操作前一致。
+- 未完成 / 需要人类决定：未重复全量单元测试、完整 insights 或圆角套件；Windows / Linux、真实长期任务及原生小组件仍沿用此前未验证边界。主目录 relay 改动不参与提交，不合并到 `main`。
+
+---
+
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 reset_rows_helper、reset_toggle_locales、review_move_handle 子 Agent）· 下半屏折叠与 WorkBuddy 双马尾立绘
+
+- 分支：`claude/next-features`，起点 `5b610cb`；开始时目标 worktree 干净并与 origin 同步。
+- 目的：将排序手柄简化为圆圈，压缩 Antigravity 重置列表与动态首屏，并按人类连续反馈制作更二次元、略扁平的 WorkBuddy 双马尾角色，沿用已授权的覆盖安装流程。
+- 操作：
+  - `src/view/insights.tsx`、`src/view/skins.css`：共用手柄改为 `Circle`，保持标题居中和原排序事件；动态默认最近 50 条，更多可展开 / 收起，保留近 24 小时、存储最多 300 条的既有边界。新增有展开状态和列表关联的按钮，支持键盘与 RTL。
+  - `src/view/reset-schedule.ts`、`tests/reset-schedule.test.cjs`（reset_rows_helper 子 Agent）：Antigravity 默认只保留 Gemini 4 Argon，没有该模型的有效未来重置时回退到其最早一项，手动展开所有其余模型；始终按恢复时间排序，其他助手保留最多 7 项，没有 Antigravity 时沿用 8 项。
+  - 17 个语言文件（reset_toggle_locales 子 Agent）：新增两组展开 / 收起文案共 4 键，保留数量占位符。review_move_handle 子 Agent 只读核对圆圈与共用尺寸、RTL 及独立看板娘手柄的兼容性。
+  - `images/anime/WorkBuddy-二次元.png`、`src/data.ts`、`docs/WORKBUDDY-ART.md`：用内置 imagegen 制作原创生成立绘，按人类反馈从初稿改为双马尾，再仅简化高光 / 阴影；最终原生 1254 × 1254 RGBA，透明通道直接保留、未放大。默认图片接入头像和看板娘，保留旧 SVG 与自选图优先级；素材说明记录来源分类、摘要和最终编辑提示词。README 更新功能用法、限制与署名记录。
+- 验证：
+  - `node --test tests/reset-schedule.test.cjs tests/i18n.test.cjs`：11 / 11 通过。17 个 JSON 解析、增量键与占位符检查通过；`npm run build`、`git diff --check` 通过，保留既有大 chunk 提示。
+  - reset_rows_helper 子 Agent 使用独立临时配置及合成数据，在 macOS Electron 真实点击：三皮肤 × 普通 / 二次元及额外三皮肤 RTL 窄窗，验证 Antigravity 1 → 5 → 1、动态 50 → 55 → 50、末条滚动可见、圆圈图标和无横向溢出；另检查 50 / 49 / 0 条不出现展开按钮。共 12 项通过、0 页面错误。
+  - 新立绘在三皮肤 × 明暗主题共 6 组合均加载正确，头像 / 半身裁切正常，看板娘普通及悬停背景透明、无溢出，0 页面错误；统计确认图像有透明外围及近不透明主体。主 Agent 独立读取结果并目视中文展开、RTL 窄窗及新立绘明暗截图。检查脚本与截图仅保留在忽略的 `.local/qa/`。
+- 安装：普通 macOS 打包完成，严格签名检查通过；包内 84 个网页构建及 Electron 非原生文件与当前构建 / 源码一致。备份旧应用和完整用户数据后替换并启动，安装归档摘要与包一致，仅一个原位置主进程持续存活，重启前后偏好文件逐字节一致。备份与安装摘要仅保留在忽略的 `.local/install-backups/`。
+- 失败与未验证项：定向脚本最初对 Claude Code 显示名、阿拉伯语数字格式及 alpha 必须恰好 255 的假设过严，依据实际约定修正脚本后通过，未因此修改产品或图像。首版角色风格被人类否定，最终立绘按后续方向修改，审美认可仍由人类判断。未重复全量单元、完整 insights 或圆角套件；非中英文案未经母语审校，Windows / Linux、原生小组件及此前真实长任务观察仍未验证。
+- 未完成 / 需要人类决定：无新增阻塞事项。主目录未提交 relay 改动的差异与状态摘要保持一致，不合并到 `main`，本次修改另加提交。
+
+---
+
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 review_move_handle 子 Agent）· 下半屏移动图标与标题对齐
+
+- 分支：`claude/next-features`，起点 `475b0a8`；开始时目标 worktree 干净并与 origin 同步。
+- 目的：按人类截图反馈，将下半屏六点排序手柄改为移动标志，并修复它与标题文字的纵向错位。
+- 操作：`src/view/insights.tsx` 将下半屏共用手柄的 `GripVertical` 换成 `Move`；`src/view/skins.css` 将标题行改为垂直居中、图标设为 16px。拖动和键盘事件、按钮点击区域不变。README 更新手柄说明与署名记录。review_move_handle 子 Agent（Codex / GPT-6 / Codex 桌面本地执行环境）只读复核三皮肤共用结构、RTL 和看板娘独立手柄定位。
+- 验证：`npm run build` 通过，保留既有大 chunk 提示；独立临时配置下查看三皮肤 × 明暗主题 × 普通 / 二次元及额外 RTL 共 13 种 macOS Electron 显示组合，均为四向移动图标，标题及副标题中心与图标中心最大差值不足 0.01px、0 页面错误。主 Agent 目视中文及 RTL 截图确认对齐；截图和诊断仅留在忽略的 `.local/qa/move-handles/`，不新增永久测试。
+- 安装：沿用此前已授权流程打包普通 macOS App，备份旧应用及完整用户数据后替换原位置并启动；严格签名检查通过，包内 20 个网页构建文件与当前 dist 一致，安装归档摘要一致，新版原位置主进程持续存活，重启前后设置文件逐字节一致。备份仅保留在忽略的 `.local/install-backups/`。
+- 失败或未验证项：本轮构建、外观预览和安装无失败；未重复全量单元测试或功能验收，Windows / Linux 未实机验证。此前未验证事项仍以原记录为准。
+- 未完成 / 需要人类决定：无新增需决定事项；主目录未提交 relay 改动保持原样，不合并到 `main`。
+
+---
+
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 install_preflight_next 子 Agent）· 推送并安装 aacebdc
+
+- 分支：`claude/next-features`，功能提交 `aacebdc`；开始时目标 worktree 干净，来源为 `main` 之后的单个新提交。
+- 目的：按人类要求推送指定提交，重新安装并启动 App，不再跑验收。
+- 操作：
+  - 先将原提交推送到同名 origin 分支，不改写提交、不强制推送或合并主分支。install_preflight_next 子 Agent（Codex / GPT-6 / Codex 桌面本地执行环境）只读核对打包配置、本地 Electron、原安装位置及新增偏好的默认值处理，未运行测试或操控应用。
+  - 从 `aacebdc` 构建并使用依赖目录中匹配的 Electron 打包普通 macOS App；输出保留在忽略的 `release/` 版本目录，不构建原生小组件。
+  - 新应用先暂存并核对签名；正常退出原应用，备份旧应用及整个用户数据目录后替换原安装副本并启动。旧应用、用户数据及安装摘要保留在忽略的 `.local/install-backups/`；仅新增本操作记录与 README 安装记录，功能代码不改。
+- 验证：`npm run build` 与普通 macOS 打包完成，保留既有大 chunk 提示；整包 `codesign --verify --deep --strict --all-architectures` 通过。包内网页构建及关键 Electron 文件共 23 项与当前源码 / 构建一致，安装归档摘要与包相同；原位置仅一个新版主进程持续存活，重启前后偏好文件逐字节一致、原偏好键值完整保留。主目录未提交 relay 改动的差异及状态摘要与操作前一致。
+- 失败与重试：首次 HTTPS 推送发生 TLS 连接中断；仅对重试命令指定 HTTP/1.1 后推送成功，未改变全局网络配置。构建和安装未失败，应用仍为本地 ad hoc 签名版本。
+- 未完成 / 需要人类决定：无新增需决定事项。按人类要求未运行单元测试、界面复验或真实会话验收，不将构建 / 安装成功等同于功能验收；此前长期工作节奏观察、非中英文案审校、原生小组件和 Windows / Linux 等未验证边界仍按原记录保留。
+
+---
+
+## 2026-10-23 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 看板娘自动刷新与 1200 条台词
+
+- 分支：`claude/next-features`（独立 worktree），本地提交，未推送。
+- 目的：人类要求看板娘自动刷新（默认 15 秒，可设 5–300 秒或关闭）、显示刷新进度条和刷新动画、有助手工作时按 3 句闲聊 : 1 次工作状态的节奏播报，并把台词从 240 条扩充到 1200 条、加入二次元梗。
+- 操作：
+  - `electron/window-policy.cjs`、`electron/main.cjs`、`electron/preload.cjs`、`src/types.ts`：新增偏好 `mascotInterval`（0 表示关闭，否则为 5–300 的整数秒，默认 15），校验、持久化及设置接口。
+  - `src/view/mascot-cadence.ts`（新增）：间隔边界、取值钳制、3:1 节奏及运行中助手轮换。`src/App.tsx`：外观 → 下半屏的开关与滑块。`src/view/insights.tsx`、`src/view/skins.css`：自动刷新计时、进度条、入场动画，设置打开时暂停，手动换句重置倒计时。
+  - 17 个语言文件新增 5 条设置文案。
+  - `src/view/quips.json`：8 位助手各 150 条中英双语台词，共 1200 条。台词分 4 段经协调会话转交，在忽略目录 `.local/qa/mascot/` 中逐段落盘并校验后按固定格式合并，SHA-256 与源文件一致。
+  - 测试：新增 `tests/mascot-refresh.test.cjs`；`tests/mascot-quips.test.cjs` 要求总数 ≥ 1200、每位助手 ≥ 140；`tests/window-policy.test.cjs` 覆盖新偏好；`scripts/verify-insights.mjs` 新增自动刷新验收。
+- 验证：`node --test tests/*.test.cjs` 446 项全部通过；`npx tsc --noEmit`、`git diff --check`、`npm run build`（仅既有大 chunk 提示）通过；`npm run test:insights` 通过（16 种布局、3 项立绘、15 项自动刷新、7 项排序检查）；`npm run test:corners`、`npm run test:i18n` 通过。台词 1200 条，中文与英文各自无重复。二次元模式换句截图保存在忽略的 `.local/qa/`。
+- 失败或未验证项：本轮无测试失败。只在 Playwright 测试页中验收，未打包、未替换已安装 App；未在真实长时间工作中观察 3:1 节奏；Windows / Linux 未实机验证；新增非中英文案未经母语者审校。
+- 未完成 / 需要人类决定：是否合并、推送及重新安装由人类决定。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 verify_main_merge 子 Agent）· 当前版本合并到 main
 
 - 分支：`main`，起点 `97c6080`；来源 `claude/ui-redesign` 的 `908896e`。开始时源 worktree 干净且与远端一致，更新远端引用后确认 `main` 为来源祖先、落后 19 个提交。

@@ -1,12 +1,14 @@
 const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, shell, systemPreferences } = require('electron');
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
+// About links only to this fixed project page; the renderer never supplies a URL.
+const { homepage: REPOSITORY } = require('../package.json');
 const { traySummary } = require('./tray-summary.cjs');
 const { WidgetPublisher, loadWidgetBridge } = require('./widget-publisher.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, isInsightOrder, PROVIDER_ORDER, COLLAPSED_WIDTH } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, isInsightOrder, isMascotInterval, PROVIDER_ORDER, COLLAPSED_WIDTH } = require('./window-policy.cjs');
 const { requestKimiWorkSubscription } = require('./kimi-work-api.cjs');
 const { requestZcodeJson } = require('./zcode-account-api.cjs');
 const { WindowLayout } = require('./window-layout.cjs');
@@ -347,7 +349,7 @@ else {
     });
     handle('panel:configure', (value) => {
       const next = validPreferences({ ...value, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
-        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, claudeHooksEnabled: preferences.claudeHooksEnabled, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, insights: preferences.insights, insightOrder: preferences.insightOrder, skin: preferences.skin, providerApps: preferences.providerApps });
+        kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, claudeHooksEnabled: preferences.claudeHooksEnabled, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, insights: preferences.insights, insightOrder: preferences.insightOrder, mascotInterval: preferences.mascotInterval, skin: preferences.skin, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
       if (changedSide) dock();
@@ -372,6 +374,13 @@ else {
       const previous = preferences.insightOrder;
       preferences.insightOrder = [...value];
       try { savePreferences(); } catch (error) { preferences.insightOrder = previous; throw error; }
+      emitState(); return currentState();
+    });
+    handle('panel:mascot-interval', (value) => {
+      if (!isMascotInterval(value)) throw new Error('Invalid mascot interval');
+      const previous = preferences.mascotInterval;
+      preferences.mascotInterval = value;
+      try { savePreferences(); } catch (error) { preferences.mascotInterval = previous; throw error; }
       emitState(); return currentState();
     });
     handle('panel:skin', (value) => {
@@ -519,6 +528,7 @@ else {
       if (image.isEmpty()) throw new Error('无法读取这张图片');
       return image.resize({ width: 256 }).toDataURL();
     });
+    handle('panel:open-repository', () => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(REPOSITORY) ? shell.openExternal(REPOSITORY) : undefined);
     handle('panel:quit', () => app.quit());
     void refreshLocalStatus().catch(() => {});
     statusTimer = setInterval(() => { void refreshLocalStatus().catch(() => {}); }, 5000);

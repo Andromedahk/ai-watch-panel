@@ -1,0 +1,81 @@
+name: Release installers
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-installers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: mac
+            arch: arm64
+            runner: macos-15
+            executable: release/mac-arm64/AI Watch.app/Contents/MacOS/AI Watch
+          - platform: mac
+            arch: x64
+            runner: macos-15-intel
+            executable: release/mac/AI Watch.app/Contents/MacOS/AI Watch
+          - platform: win
+            arch: x64
+            runner: windows-latest
+            executable: release/win-unpacked/AI Watch.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.2'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Unit tests on macOS
+        if: matrix.platform == 'mac'
+        run: npm test
+      - run: npm run build
+      - name: Package macOS DMG and ZIP
+        if: matrix.platform == 'mac'
+        run: npx --no-install electron-builder --mac dmg zip --${{ matrix.arch }} --publish never
+      - name: Package Windows NSIS installer
+        if: matrix.platform == 'win'
+        run: npx --no-install electron-builder --win nsis --x64 --publish never
+      - name: Verify macOS bundle and DMG
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          codesign --verify --deep --strict --all-architectures "$(dirname "$(dirname "$(dirname "${{ matrix.executable }}")")")"
+          hdiutil verify release/*.dmg
+      - name: Smoke test packaged application
+        run: npm run test:release -- "${{ matrix.executable }}"
+      - name: Install Windows package
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release/AI-Watch-*-win-x64.exe | Select-Object -First 1
+          $installDir = Join-Path $env:RUNNER_TEMP 'ai-watch-install'
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$installDir" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "NSIS failed: $($process.ExitCode)" }
+          npm run test:release -- "$installDir/AI Watch.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload verified installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.platform }}-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+          path: |
+            release/AI-Watch-*.dmg
+            release/AI-Watch-*.zip
+            release/AI-Watch-*.exe
