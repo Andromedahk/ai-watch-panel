@@ -131,16 +131,57 @@ async function fixedState() {
 }
 
 async function tailVisible(label) {
+  // Masonry columns end at different heights, so the bottom-most panel is
+  // found by geometry instead of assuming the last panel in DOM order.
   const tail = await page.locator('.insights').evaluate(area => {
-    const box = area.getBoundingClientRect(), panel = area.lastElementChild;
+    const box = area.getBoundingClientRect();
+    const panel = [...area.children].reduce((low, item) => item.getBoundingClientRect().bottom > low.getBoundingClientRect().bottom ? item : low);
     const end = panel.querySelector('li:last-child') || panel.querySelector('.mascot-bubble') || panel.lastElementChild;
     const r = end.getBoundingClientRect(), p = panel.getBoundingClientRect();
     return { id: panel.dataset.insight, contentVisible: r.top >= box.top - 1 && r.bottom <= box.bottom + 1,
       panelFits: p.height <= area.clientHeight, panelVisible: p.top >= box.top - 1 && p.bottom <= box.bottom + 1,
       atBottom: Math.abs(area.scrollTop - (area.scrollHeight - area.clientHeight)) < 2 };
   });
-  assert.ok(tail.atBottom && tail.contentVisible, `${label}: last component's final content is not fully reachable: ${JSON.stringify(tail)}`);
-  if (tail.panelFits) assert.ok(tail.panelVisible, `${label}: final component not fully visible`);
+  assert.ok(tail.atBottom && tail.contentVisible, `${label}: bottom-most component's final content is not fully reachable: ${JSON.stringify(tail)}`);
+  if (tail.panelFits) assert.ok(tail.panelVisible, `${label}: bottom-most component not fully visible`);
+  // Every panel's last row must be reachable through the one scroller.
+  const unreachable = await page.locator('.insights').evaluate(area => {
+    const box = area.getBoundingClientRect(), start = area.scrollTop, missed = [];
+    for (const panel of area.children) {
+      const end = panel.querySelector('li:last-child') || panel.querySelector('.mascot-bubble') || panel.lastElementChild;
+      const before = end.getBoundingClientRect();
+      area.scrollTop += before.bottom - box.bottom;
+      const r = end.getBoundingClientRect();
+      if (!(r.top >= box.top - 1 && r.bottom <= box.bottom + 1)) missed.push(panel.dataset.insight);
+    }
+    area.scrollTop = start;
+    return missed;
+  });
+  assert.deepEqual(unreachable, [], `${label}: panel tails cannot be scrolled into view`);
+  checks.push({ label: `${label}/tail`, ...tail, everyTailReachable: true });
+}
+
+async function pinnedMascot(label) {
+  // When the mascot is last in the order it closes wide layouts as a full-width row.
+  // The fixture keeps auto refresh off; enable it briefly to see the progress bar.
+  await page.evaluate(() => window.panel.setMascotInterval(15));
+  await expect(page.locator('.insight-mascot .mascot-timer')).toHaveCount(1);
+  const row = await page.locator('.insights').evaluate(area => {
+    const mascot = area.querySelector(':scope > .insight-mascot'), timer = mascot.querySelector('.mascot-timer');
+    const m = mascot.getBoundingClientRect(), style = getComputedStyle(area);
+    const inner = area.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const others = [...area.children].filter(item => item !== mascot).map(item => item.getBoundingClientRect().bottom);
+    const t = timer?.getBoundingClientRect();
+    return { pinned: mascot.hasAttribute('data-pinned'), last: area.lastElementChild === mascot, width: m.width, inner,
+      belowAll: others.every(bottom => m.top >= bottom - 1), timer: Boolean(t && t.height > 0 && t.bottom <= m.bottom + 1 && t.top >= m.top - 1) };
+  });
+  assert.ok(row.last && row.pinned, `${label}: last mascot is not pinned: ${JSON.stringify(row)}`);
+  assert.ok(Math.abs(row.width - row.inner) <= 2, `${label}: pinned mascot is not full width: ${JSON.stringify(row)}`);
+  assert.ok(row.belowAll, `${label}: pinned mascot is not below every column: ${JSON.stringify(row)}`);
+  assert.ok(row.timer, `${label}: auto-refresh progress bar missing: ${JSON.stringify(row)}`);
+  await page.evaluate(() => window.panel.setMascotInterval(0));
+  await expect(page.locator('.insight-mascot .mascot-timer')).toHaveCount(0);
+  checks.push({ label: `${label}/pinned-mascot`, ...row });
 }
 
 async function wheelScroll(label) {
@@ -631,6 +672,19 @@ async function insightSortAcceptance() {
   await settledLayout();
   const columns = await page.locator('.insights').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
   assert.equal(columns, 2, 'wide fixture must have exactly two columns');
+  // The pinned bottom mascot moves up one step into the columns, then back down.
+  await expect(page.locator('.insight-mascot')).toHaveAttribute('data-pinned', '');
+  await sortKey('mascot', 'Alt+ArrowUp');
+  await expect.poll(shown).toEqual(['resets', 'trend', 'mascot', 'timeline']);
+  await expect(page.locator('.insight-mascot')).not.toHaveAttribute('data-pinned', '');
+  // RTL: Left moves later in the order, Right earlier.
+  await sortKey('mascot', 'Alt+ArrowLeft');
+  await expect.poll(shown).toEqual(['resets', 'trend', 'timeline', 'mascot']);
+  await sortKey('mascot', 'Alt+ArrowRight');
+  await expect.poll(shown).toEqual(['resets', 'trend', 'mascot', 'timeline']);
+  await page.evaluate(value => window.panel.setInsightOrder(value), defaultOrder);
+  await expect.poll(shown).toEqual(defaultOrder);
+  await expect(page.locator('.insight-mascot')).toHaveAttribute('data-pinned', '');
   await sortKey('trend', 'Alt+ArrowRight');
   await expect.poll(shown).toEqual(['trend', 'resets', 'timeline', 'mascot']);
   await sortKey('resets', 'Alt+ArrowDown');
@@ -716,6 +770,7 @@ try {
   await expect(page.locator('.insights')).toHaveClass(/is-wide/);
   await geometry('wide-rtl', { wide: true, reserved: true });
   await wheelScroll('wide-rtl');
+  await pinnedMascot('wide-rtl');
   await mascotPortrait('wide-rtl');
   // Check the requested portrait alignment in the normal Chinese direction as
   // well, while retaining the RTL scroll regression above.
@@ -724,6 +779,8 @@ try {
   await page.locator('.insights').focus();
   await page.keyboard.press('End');
   await expect.poll(async () => Math.abs(await scrollTop() - await maxScroll())).toBeLessThan(2);
+  await tailVisible('wide-ltr');
+  await pinnedMascot('wide-ltr');
   await mascotPortrait('wide-ltr');
   await page.screenshot({ path: path.join(output, 'wide-ltr-bottom.png'), animations: 'disabled', scale: 'css' });
 
@@ -738,6 +795,7 @@ try {
   await page.keyboard.press('End');
   await expect.poll(async () => Math.abs(await scrollTop() - await maxScroll())).toBeLessThan(2);
   await tailVisible('native-fullscreen');
+  await pinnedMascot('native-fullscreen');
   await mascotPortrait('native-fullscreen');
   await page.screenshot({ path: path.join(output, 'fullscreen-ltr-bottom.png'), animations: 'disabled', scale: 'css' });
   await page.keyboard.press('Escape');

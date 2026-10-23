@@ -20,6 +20,19 @@
 
 ---
 
+## 2026-10-23 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 看板娘固定在双排底部与 insights 验收修正
+
+- 分支：`claude/next-features`（独立 worktree），起点 `fa75776`，开始时干净；本地提交，未推送。
+- 目的：人类要求修复上次审查提出的两项：双排瀑布流后看板娘落在右列中间（下方大片空白），以及 `test:insights` 在 wide-rtl 失败。
+- 操作：
+  - `src/view/insights.tsx`：宽布局中，若看板娘是顺序中的最后一个组件，则不参与分列，放在所有列下方的整行（`grid-column: 1 / -1`，行号取各列最低处），并标记 `data-pinned`；列数只按其余组件计算。看板娘在其他位置时行为不变。键盘 Alt + ↑ 对底部看板娘只上移一格；拖动排序按实际位置命中，无需修改，拖动期间暂停自动换句保持不变。
+  - `scripts/verify-insights.mjs`：`tailVisible` 改为按实际位置找最底部组件，并逐个滚动确认每个组件末行可见；新增 `pinnedMascot`（宽 RTL、宽 LTR、原生全屏）检查整行宽度、位于所有列下方和进度条可见（夹具默认关闭自动刷新，检查时临时开启 15 秒后恢复为关闭）；排序用例新增底部看板娘在 RTL 下的 Alt + ↑ / ← / → 移动及恢复。
+- 验证：`node --test tests/*.test.cjs` 451 项全部通过；`npx tsc --noEmit`、`git diff --check`、`npm run build`（既有大 chunk 提示）通过；`npm run test:insights` 全部通过（35 项布局、3 项立绘、15 项自动刷新、7 项排序）；`npm run test:corners`、`npm run test:i18n` 通过。中文双排及阿拉伯语宽布局截图目视确认看板娘位于底部整行、方向正确，截图仅在忽略的 `.local/qa/`。
+- 失败或未验证项：首轮新增检查因夹具关闭自动刷新而找不到进度条，另一次因 RTL 下左右方向预期写反而失败，均为测试脚本问题，修正后通过，未改产品逻辑。未打包安装；Windows / Linux 未实机验证。
+- 未完成 / 需要人类决定：是否推送、安装由人类决定。
+
+---
+
 ## 2026-10-23 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 精简“关于”
 
 - 分支：`claude/next-features`（独立 worktree），起点 `e7c4795`，开始时干净；本地提交，未推送。

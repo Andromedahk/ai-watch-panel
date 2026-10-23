@@ -26,19 +26,30 @@ function useInsightColumns(root: RefObject<HTMLDivElement | null>, key: string, 
     const measure = () => {
       if (paused) return;
       const gap = 10;
-      columns.current = wide ? Math.min(panels.length, layout === 'double' ? 2 : Math.max(1, Math.floor((area.clientWidth + gap) / (260 + gap)))) : 1;
+      // A mascot left last in the order closes the page as a full-width row
+      // below the columns; anywhere else it flows like the other panels.
+      const pinned = wide && panels.length > 1 && panels[panels.length - 1].dataset.insight === 'mascot' ? panels[panels.length - 1] : undefined;
+      const flow = pinned ? panels.slice(0, -1) : panels;
+      columns.current = wide ? Math.min(flow.length, layout === 'double' ? 2 : Math.max(1, Math.floor((area.clientWidth + gap) / (260 + gap)))) : 1;
       area.style.setProperty('--insight-columns', String(columns.current));
       // Move all cards into the new column count before measuring wrapped text.
-      panels.forEach((panel, index) => panel.style.setProperty('--insight-column', String(index % columns.current + 1)));
+      flow.forEach((panel, index) => panel.style.setProperty('--insight-column', String(index % columns.current + 1)));
+      pinned?.style.setProperty('--insight-column', '1 / -1');
+      pinned?.toggleAttribute('data-pinned', true);
+      if (!pinned) panels.forEach(panel => panel.removeAttribute('data-pinned'));
       const spans = panels.map(panel => Math.ceil(panel.getBoundingClientRect().height + gap));
       const bottoms = Array(columns.current).fill(0);
-      panels.forEach((panel, index) => {
+      flow.forEach((panel, index) => {
         const column = index % columns.current;
         const span = spans[index];
         panel.style.setProperty('--insight-row', String(bottoms[column] + 1));
         panel.style.setProperty('--insight-span', String(span));
         bottoms[column] += span;
       });
+      if (pinned) {
+        pinned.style.setProperty('--insight-row', String(Math.max(...bottoms) + 1));
+        pinned.style.setProperty('--insight-span', String(spans[spans.length - 1]));
+      }
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -290,7 +301,9 @@ export function InsightsArea({ insights, order, onOrder, sortingDisabled, onSort
         aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight" onPointerDown={event => sorting.start(event, id)} onKeyDown={event => {
           if (!event.altKey || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) || sorting.sorting || sortingDisabled) return;
           event.preventDefault(); event.stopPropagation();
-          const delta = event.key === 'ArrowUp' ? -columns.current : event.key === 'ArrowDown' ? columns.current : (event.key === 'ArrowLeft' ? -1 : 1) * (document.documentElement.dir === 'rtl' ? -1 : 1);
+          // The pinned bottom row sits under every column: Up returns it to the flow one step.
+          const pinned = root.current?.querySelector<HTMLElement>(':scope > [data-pinned]')?.dataset.insight === id;
+          const delta = event.key === 'ArrowUp' ? (pinned ? -1 : -columns.current) : event.key === 'ArrowDown' ? columns.current : (event.key === 'ArrowLeft' ? -1 : 1) * (document.documentElement.dir === 'rtl' ? -1 : 1);
           const target = Math.max(0, Math.min(ids.length - 1, index + delta));
           if (target !== index) { const next = [...ids]; next.splice(index, 1); next.splice(target, 0, id); saveVisibleOrder(next); }
         }}><Circle aria-hidden="true" /></button>;
