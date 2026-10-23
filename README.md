@@ -109,9 +109,11 @@ Antigravity 主卡片将同一基础模型的 High / Medium / Low / Thinking 合
 
 Release 同时提供 `SHA256SUMS.txt`，用于核对下载文件。macOS 普通包为 ad hoc 签名，**没有 Developer ID 签名和 Apple 公证**，首次打开可能受到 Gatekeeper 限制；Windows 包**没有 Authenticode 签名**，可能出现 SmartScreen 提示。请核对项目来源及校验值后按系统提示处理，不建议全局关闭系统保护。原生桌面小组件不在普通安装包内。
 
-Windows 已准备独立原生构建、安装和打包应用启动检查；各助手的真实服务、辅助功能和完整窗口交互仍待 Windows 实机验收。Linux 本次不发布。macOS 原生辅助程序以 macOS 13 为部署目标，旧版本系统的完整兼容性尚未另行验收。
+Windows 原生 CI 已完成构建、NSIS 安装和合成数据下的打包应用启动检查；各助手的真实服务、辅助功能和完整窗口交互仍待 Windows 实机验收。Linux 本次不发布。macOS 原生辅助程序以 macOS 13 为部署目标，旧版本系统的完整兼容性尚未另行验收。
 
-维护者在 Actions 中对最新 `main` 手动运行 **Release installers**，三个原生构建任务生成并检查安装包，通过后下载同一运行的产物、生成 SHA-256 清单，将标签固定到该运行的 `head_sha`，再发布 Release。发布前必须再次确认 `main` 未发生变更；工作流本身仅上传 Actions 产物，不自动创建公开 Release。正式包仅额外包含一份明确标记的合成状态夹具，供 `npm run test:release -- <应用可执行文件>` 在独立临时配置中检查，不会读写真实账户。
+维护者在 Actions 中对最新 `main` 手动运行 **Release installers**。`publish` 默认为 `false`，只构建、检查并保存 Actions 产物；需要公开发布时将 `publish` 设为 `true`。发布任务等待三个原生构建任务全部成功，在 GitHub 内部下载同一次运行的安装包、生成 `SHA256SUMS.txt`，并确认远端 `main` 仍指向本次运行的 `github.sha`。随后创建草稿 Release，将标签固定到该提交，上传并核对五个安装文件及校验清单，最后公开。若 `main` 已更新，须针对最新 `main` 重新构建。
+
+Release 正文来自 [v0.19.0 发布说明](docs/releases/v0.19.0.md)，来源提交和 CI 链接由工作流运行时附加。正式包仅额外包含一份明确标记的合成状态夹具，供 `npm run test:release -- <应用可执行文件>` 在独立临时配置中检查，不会读写真实账户。
 
 ## 本地开发与安装
 
@@ -165,6 +167,12 @@ npm run test:i18n
 发布该扩展需要匹配应用标识、签名身份、App Group 与 provisioning profile；仅通过签名校验并不足够。构建、签名、预览与系统验收步骤见[原生小组件开发说明](docs/MACOS-WIDGETS.md)。
 
 ## 更新记录
+
+### 0.19.0 · 2026-10-23 · GitHub 内部发布与可追溯说明 · 署名：Codex（GPT-6 / Codex 桌面本地执行环境，主 Agent 与 packaged_smoke 子 Agent）
+
+- 本地产物下载速度受限，发布流程改为可选 `publish`：默认只保存 Actions 产物；显式开启后，三个构建任务全部成功才在 GitHub 内部完成校验清单、草稿上传和公开发布，并再次检查 `main` 来源提交。
+- 新增 `docs/releases/v0.19.0.md` 作为发布正文，保留安装方式、验收范围与签名限制；实际来源 SHA 和 CI 链接由当次工作流附加，避免引用旧构建。
+- 此前 Actions 运行 `39933685051` 的 macOS arm64、macOS x64、Windows x64 构建及包检查全部通过；本地正式包启动烟测、圆角与 i18n 检查通过。本次流程更新仍须从最新 `main` 重新运行三个构建任务，记录写入时尚未完成自动公开发布。
 
 ### 0.19.0 · 2026-10-23 · 合并功能分支与双平台安装包 · 署名：Codex（GPT-6 / Codex 桌面本地执行环境）
 

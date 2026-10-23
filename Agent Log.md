@@ -20,6 +20,17 @@
 
 ---
 
+## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，主 Agent 与 packaged_smoke 子 Agent）· GitHub 内部发布与验收记录
+
+- 分支：`codex/release-0.19.0`；在发布 worktree 中协作，未自行提交或推送。
+- 目的：本地下载 GitHub 大型产物仅达到每秒数十 KB，改用 GitHub 内部完成已授权的 Release 上传与公开发布，保留准确的构建来源和验证边界。
+- 操作：将此前本地发布说明整理为 `docs/releases/v0.19.0.md`，去除写死的旧构建提交与 CI 链接，由工作流附加当次来源；更新 README 安装发布说明与更新记录，记录 `publish` 默认关闭、三个构建任务全成功、同一 main 提交、草稿资产核对后公开的流程。主 Agent 更新 `.github/workflows/release.yml`：增加默认关闭的 `publish` 输入与依赖全部构建的发布任务，验证五个安装文件和 SHA-256 清单，并将 GitHub 返回的六个资产摘要与本地逐一比较；上传前与公开前均检查 main 未变化。产品代码不变。
+- 验证：依据主 Agent 已完成的执行结果，Actions 运行 `39933685051` 的 macOS arm64、macOS x64、Windows x64 三个原生任务全部通过，涵盖 macOS 签名 / DMG 与 Windows NSIS 安装后启动；本地正式打包应用烟测、圆角与 i18n 检查通过。本轮文档空白检查通过。
+- 失败或未验证项：本地大型产物传输受限，未将下载尝试记为完整产物校验；本次流程更新将产生新的 main 提交，必须重新完成该提交的三个构建任务才可公开。真实提供商集成、完整 Windows 交互、旧 macOS 兼容、Linux 及原生小组件的未验收边界保持不变。
+- 未完成 / 需要人类决定：无新增人类决策；等待主 Agent 推送最新 main，运行构建和远端自动发布。记录写入时尚未公开新的 Release。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境，含 release_audit、packaged_smoke 子 Agent）· 合并 main 与 v0.19.0 发布准备
 
 - 分支：`codex/release-0.19.0` → `main`；起点 `bdb5fc8`，合并来源精确为 `10bd696`，保留两个父提交。源分支后来增加的安装记录不纳入本次合并。
