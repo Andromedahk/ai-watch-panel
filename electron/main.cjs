@@ -21,7 +21,11 @@ const { readDesktopActivity } = require('./claude-desktop.cjs');
 const { ProviderLauncher } = require('./provider-launcher.cjs');
 const { cleanupOrphanedHelpers } = require('./orphan-helpers.cjs');
 const { clearStartupDiskCaches, clearSessionCaches } = require('./app-cache.cjs');
-const statusReader = new LocalStatusReader({ claudeReader: new ClaudeStatusReader({
+const statusReader = new LocalStatusReader({ onCodexActivity: snapshot => {
+  if (fixtureMode) return;
+  statusSnapshot = { ...statusSnapshot, sampledAt: snapshot.sampledAt, codex: snapshot.codex };
+  publishStatus();
+}, claudeReader: new ClaudeStatusReader({
   desktopActivityReader: createClaudeActivityBridge({
     permissionReader: prompt => systemPreferences.isTrustedAccessibilityClient(prompt),
     readActivity: readDesktopActivity, platform: process.platform,
@@ -74,10 +78,13 @@ async function refreshLocalStatus(force = false) {
         { model: '共享积分', period: '赠送额度', remaining: 50, reset: '2099-01-01T00:00:00Z', resetKind: 'expiry' }],
     });
   }
+  publishStatus();
+  return statusSnapshot;
+}
+function publishStatus() {
   if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
   panelTray?.updateMenu();
   publishWidgets();
-  return statusSnapshot;
 }
 
 let window;

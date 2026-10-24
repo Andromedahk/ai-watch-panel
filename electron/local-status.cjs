@@ -93,10 +93,11 @@ class LocalStatusReader {
     zcodeReader = new ZcodeStatusReader({ home }), kimiReader = new KimiStatusReader({ home }),
     kimiWorkReader = new KimiWorkStatusReader({ home }), kimiSource = 'code', claudeSource = 'desktop', claudeNetworkAllowed = false,
     qwenReader = new QwenStatusReader({ home }), workbuddyReader = new WorkBuddyStatusReader({ home }),
-    codexQuotaReader = new CodexQuotaReader({ home, codexHome }), runCommand = execute, requestLocal = postLocal } = {}) {
+    codexQuotaReader = new CodexQuotaReader({ home, codexHome }), onCodexActivity = () => {}, runCommand = execute, requestLocal = postLocal } = {}) {
     this.home = home;
     this.codexHome = codexHome;
-    this.codexAttention = new CodexAttentionReader({ codexHome });
+    this.onCodexActivity = onCodexActivity; this.codexActivityContext = null;
+    this.codexAttention = new CodexAttentionReader({ codexHome, onChange: () => this.updateCodexAttention() });
     this.codexQuotaReader = codexQuotaReader;
     this.antigravityHome = path.join(home, '.gemini', 'antigravity');
     this.codexRateCache = null;
@@ -121,6 +122,31 @@ class LocalStatusReader {
     for (const reader of [this.deepseekActivityReader, this.claudeReader, this.zcodeReader, this.kimiReader, this.qwenReader, this.workbuddyReader]) reader.taskDetailsEnabled = this.taskDetailsEnabled;
     this.current = { ...this.current, sampledAt: new Date().toISOString() };
     for (const id of ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi', 'qwen', 'workbuddy']) { this.current[id] = { ...this.current[id] }; delete this.current[id].taskDetails; }
+  }
+  codexActivity(attention, now = Date.now()) {
+    if (!this.codexActivityContext) return null;
+    const { rows, latest, detected, readable } = this.codexActivityContext;
+    const activity = { ...normalizeCodexActivity(rows?.filter(row => !attention.waitingThreads.has(row.thread_id)), latest, detected, now), waitingTasks: 0, waitingReason: undefined };
+    if (attention.waitingThreads.size) {
+      const parts = [];
+      if (attention.inputThreads.size) parts.push(`${attention.inputThreads.size} 项待回答`);
+      if (attention.approvalThreads.size) parts.push(`${attention.approvalThreads.size} 项待授权`);
+      if (activity.activeTasks) parts.push(`${activity.activeTasks} 项运行`);
+      Object.assign(activity, { activity: 'waiting', task: parts.join(' · '), waitingTasks: attention.waitingThreads.size,
+        waitingReason: attention.inputThreads.size && attention.approvalThreads.size ? 'both' : attention.inputThreads.size ? 'input' : 'approval' });
+    }
+    if (!readable) Object.assign(activity, { activity: 'unknown', task: '进程状态暂不可读', waitingTasks: 0, waitingReason: undefined });
+    const available = attention.connected && attention.observedThreads > 0;
+    return { ...activity, attentionAvailable: available,
+      activityDetail: available ? '通过 Codex 本地客户端状态通道监看待回答与待授权请求；红灯优先，处理后自动恢复。' : '任务活动来自本地记录；等待提醒通道暂不可用，不能确认是否有待回答或待授权请求。',
+      ...(this.taskDetailsEnabled ? { taskDetails: codexDetails(this.codexHome, rows || [], attention, detected && readable, now) } : {}) };
+  }
+  updateCodexAttention() {
+    const activity = this.codexActivity(this.codexAttention.summary());
+    if (!activity || !this.current?.codex) return;
+    const sampledAt = new Date().toISOString();
+    this.current = { ...this.current, sampledAt, codex: { ...this.current.codex, ...activity, sampledAt } };
+    this.onCodexActivity(this.current);
   }
   setKimiSource(source) {
     if (!isKimiSource(source)) throw new Error('Invalid Kimi source');
@@ -178,6 +204,11 @@ class LocalStatusReader {
       }
       if (id === 'claude') next[id] = claudeGeneration === this.claudeGeneration
         ? { ...next[id], claudeSource } : { ...this.current.claude, sampledAt };
+    }
+    // Other quota readers may take seconds. Use the latest IPC state at publish
+    // time instead of overwriting an attention event with an earlier sample.
+    if (results[0].status === 'fulfilled' && typeof this.codexAttention.summary === 'function') {
+      Object.assign(next.codex, this.codexActivity(this.codexAttention.summary()));
     }
     this.current = next;
     return next;
@@ -238,20 +269,12 @@ class LocalStatusReader {
     let attentionThreads = rows?.map(row => row.thread_id).filter(Boolean) || [];
     try {
       const recent = withDatabase(path.join(this.codexHome, 'state_5.sqlite'), db => db.prepare('SELECT id FROM threads WHERE archived=0 ORDER BY updated_at DESC LIMIT 24').all().map(row => row.id));
-      attentionThreads = [...new Set([...attentionThreads, ...recent])];
+      attentionThreads = [...new Set([...recent, ...attentionThreads])];
     } catch { /* Older schemas can still monitor current desktop turns. */ }
+    this.codexActivityContext = { rows, latest, detected, readable: list !== null };
     const attention = await this.codexAttention.poll(attentionThreads, detected && list !== null, now);
-    const activity = normalizeCodexActivity(rows?.filter(row => !attention.waitingThreads.has(row.thread_id)), latest, detected, now);
-    if (attention.waitingThreads.size) {
-      const parts = [];
-      if (attention.inputThreads.size) parts.push(`${attention.inputThreads.size} 项待回答`);
-      if (attention.approvalThreads.size) parts.push(`${attention.approvalThreads.size} 项待授权`);
-      if (activity.activeTasks) parts.push(`${activity.activeTasks} 项运行`);
-      Object.assign(activity, { activity: 'waiting', task: parts.join(' · '), waitingTasks: attention.waitingThreads.size,
-        waitingReason: attention.inputThreads.size && attention.approvalThreads.size ? 'both' : attention.inputThreads.size ? 'input' : 'approval' });
-    }
-    if (list === null) Object.assign(activity, { activity: 'unknown', task: '进程状态暂不可读' });
     const official = await officialPromise;
+    const currentAttention = typeof this.codexAttention.summary === 'function' ? this.codexAttention.summary() : attention;
     const quotaStatus = official.useLocal ? {
       source: cached ? 'cache' : 'unavailable', connection: list === null ? 'error' : detected ? 'ready' : 'offline',
       quotas, plan: cached ? { ...cached.plan, stale: cached.plan.stale || now - cached.at > 1800000 }
@@ -260,10 +283,7 @@ class LocalStatusReader {
     } : { source: official.source, connection: official.connection, quotas: official.quotas, plan: official.plan,
       observedAt: official.observedAt, detail: official.detail };
     return { id: 'codex', ...quotaStatus,
-      ...(this.taskDetailsEnabled ? { taskDetails: codexDetails(this.codexHome, rows || [], attention, detected && list !== null, now) } : {}),
-      ...activity,
-      attentionAvailable: attention.connected && attention.observedThreads > 0,
-      activityDetail: attention.connected && attention.observedThreads > 0 ? '通过 Codex 本地客户端状态通道监看待回答与待授权请求；红灯优先，处理后自动恢复。' : '任务活动来自本地记录；等待提醒通道暂不可用，不能确认是否有待回答或待授权请求。',
+      ...this.codexActivity(currentAttention),
     };
   }
   async antigravity(list, force) {
