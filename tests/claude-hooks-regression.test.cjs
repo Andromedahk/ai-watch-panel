@@ -274,3 +274,28 @@ test('an ambiguous no-id permission waits until all possible same-tool calls com
   apply(hooks, 'PostToolUse', { tool: 'Bash', toolUse: 'bash-1', at: baseTime + 2000 });
   assert.equal(hooks.live(baseTime + 2000)[0].phase, 'running');
 });
+
+test('a Desktop Code question stays input although it arrives as a permission request and prompt', () => {
+  // Recorded Desktop Code order: PreToolUse, PermissionRequest (no call id), then
+  // a permission_prompt notification, all for the same AskUserQuestion call.
+  const hooks = reader();
+  apply(hooks, 'UserPromptSubmit');
+  apply(hooks, 'PreToolUse', { tool: 'AskUserQuestion', toolUse: 'ask-1', at: baseTime + 1000 });
+  apply(hooks, 'PermissionRequest', { tool: 'AskUserQuestion', at: baseTime + 1000 });
+  apply(hooks, 'Notification', { kind: 'permission_prompt', at: baseTime + 6000 });
+  assert.deepEqual([hooks.live(baseTime + 7000)[0].phase, hooks.live(baseTime + 7000)[0].reason], ['waiting', 'input']);
+  apply(hooks, 'PostToolUse', { tool: 'AskUserQuestion', toolUse: 'ask-1', at: baseTime + 20000 });
+  assert.equal(hooks.live(baseTime + 21000)[0].phase, 'running');
+  assert.equal(hooks.live(baseTime + 21000)[0].reason, undefined);
+});
+
+test('the same Desktop Code sequence for a shell command stays an approval', () => {
+  const hooks = reader();
+  apply(hooks, 'UserPromptSubmit');
+  apply(hooks, 'PreToolUse', { tool: 'Bash', toolUse: 'bash-1', at: baseTime + 1000 });
+  apply(hooks, 'PermissionRequest', { tool: 'Bash', at: baseTime + 1000 });
+  apply(hooks, 'Notification', { kind: 'permission_prompt', at: baseTime + 6000 });
+  assert.equal(hooks.live(baseTime + 7000)[0].reason, 'approval');
+  apply(hooks, 'PostToolUse', { tool: 'Bash', toolUse: 'bash-1', at: baseTime + 14000 });
+  assert.equal(hooks.live(baseTime + 15000)[0].phase, 'running');
+});

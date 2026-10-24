@@ -197,6 +197,72 @@ test('verified owners keep long busy, waiting and idle task details current on b
   }
 });
 
+test('Code registrations name why they wait: permission prompts are approvals, questions are input', async t => {
+  // The host-driven Desktop Code CLI writes status "waiting" plus waitingFor
+  // when a stdio permission request, AskUserQuestion or dialog is pending.
+  const cases = [
+    ['permission prompt', 'approval', 'Claude 在等你授权工具'],
+    ['sandbox request', 'approval', 'Claude 在等你授权工具'],
+    ['input needed', 'input', 'Claude 在等你回答问题'],
+    ['dialog open', 'input', 'Claude 在等你回答问题'],
+    ['some future label', 'both', '1 项任务等你回答或确认'],
+    [undefined, 'both', '1 项任务等你回答或确认'],
+  ];
+  for (const source of ['desktop', 'code']) {
+    for (const [waitingFor, reason, task] of cases) {
+      await t.test(`${source} ${waitingFor}`, async t => {
+        const { put, poll } = await ownerFixture(t, { source });
+        await put({ status: 'waiting', ...(waitingFor ? { waitingFor } : {}) });
+        const result = await poll();
+        assert.equal(result.activity, 'waiting');
+        assert.equal(result.waitingTasks, 1);
+        assert.equal(result.waitingReason, reason);
+        assert.equal(result.task, task);
+      });
+    }
+  }
+});
+
+test('a waiting label is ignored once the registration reports running or idle again', async t => {
+  const { put, poll } = await ownerFixture(t, { source: 'desktop' });
+  await put({ status: 'waiting', waitingFor: 'permission prompt' });
+  assert.equal((await poll()).waitingReason, 'approval');
+  // A stale label left beside a later status must not keep the red light on.
+  await put({ status: 'busy', waitingFor: 'permission prompt' });
+  const running = await poll();
+  assert.equal(running.activity, 'running'); assert.equal(running.waitingTasks, 0); assert.equal(running.waitingReason, undefined);
+  await put({ status: 'idle', waitingFor: 'input needed' });
+  const idle = await poll();
+  assert.equal(idle.waitingTasks, 0); assert.equal(idle.waitingReason, undefined);
+});
+
+test('a verified registration label outranks a hook reason for the same Desktop Code wait', async t => {
+  const { reader, put, start, at, poll } = await ownerFixture(t, { source: 'desktop' });
+  const hook = reason => ({ session: 'S', phase: 'waiting', reason, at, ancestors: [40], ownerPid: 40, ownerStart: start, surface: 'desktop' });
+  let hooks = [hook('approval')];
+  reader.hooks = { enabled: true, read: async () => hooks };
+  await put({ status: 'waiting', waitingFor: 'input needed' });
+  let result = await poll();
+  assert.equal(result.activity, 'waiting'); assert.equal(result.waitingReason, 'input'); assert.equal(result.task, 'Claude 在等你回答问题');
+  // Without a CLI label the hook still decides; once the hook clears, so does the wait.
+  await put({ status: 'waiting' });
+  assert.equal((await poll()).waitingReason, 'approval');
+  hooks = [{ ...hook(undefined), phase: 'running' }];
+  await put({ status: 'busy' });
+  result = await poll();
+  assert.equal(result.activity, 'running'); assert.equal(result.waitingTasks, 0);
+});
+
+test('two waiting Desktop Code sessions with different reasons report both', async t => {
+  const { reader, put, at } = await ownerFixture(t, { source: 'desktop' });
+  await put({ status: 'waiting', waitingFor: 'permission prompt' });
+  const dir = path.join(reader.paths.config, 'sessions');
+  await fs.writeFile(path.join(dir, '41.json'), JSON.stringify({ pid: 41, sessionId: 'T', status: 'waiting', waitingFor: 'input needed',
+    procStart: 'Thu Oct 22 17:25:40 2026', entrypoint: 'claude-desktop' }));
+  const result = await reader.poll([{ pid: 1, command: '/app/Claude', cpu: 0 }, { pid: 40, command: '/app/claude', cpu: 0 }, { pid: 41, command: '/app/claude', cpu: 0 }], at);
+  assert.equal(result.waitingTasks, 2); assert.equal(result.waitingReason, 'both'); assert.equal(result.task, '2 项任务等你回答或确认');
+});
+
 test('missing owner identity and ps failure retain the exact mtime fallback including future limits', async t => {
   const cases = [
     ['missing identity', { procStart: null }],

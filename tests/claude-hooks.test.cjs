@@ -26,6 +26,7 @@ test('hook registration merges with, and is removed without touching, the user\'
 test('lifecycle events map to running, approval, question and idle states', () => {
   assert.deepEqual(phaseOf('UserPromptSubmit'), { phase: 'running' });
   assert.deepEqual(phaseOf('PermissionRequest'), { phase: 'waiting', reason: 'approval' });
+  assert.deepEqual(phaseOf('PermissionRequest', undefined, 'AskUserQuestion'), { phase: 'waiting', reason: 'input' });
   assert.deepEqual(phaseOf('Notification', 'permission_prompt'), { phase: 'waiting', reason: 'approval' });
   assert.deepEqual(phaseOf('Notification', 'elicitation_dialog'), { phase: 'waiting', reason: 'input' });
   assert.deepEqual(phaseOf('PreToolUse', '', 'AskUserQuestion'), { phase: 'waiting', reason: 'input' });

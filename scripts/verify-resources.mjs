@@ -118,6 +118,19 @@ try {
     await expect(claude.locator('.task-line .grant-access')).toHaveCount(access === 'denied' ? 1 : 0);
     if (access !== 'denied') await expect(claude.locator('.task-line')).not.toContainText('未授权');
   }
+  // A Desktop Code wait read from the session file is the real state; the
+  // missing Accessibility grant stays a secondary button, not the task text.
+  for (const [reason, task, label] of [['input', 'Claude 在等你回答问题', '待回答'], ['approval', 'Claude 在等你授权工具', '待授权']]) {
+    const status = { ...snapshot, claude: { ...snapshot.claude, activity: 'waiting', activeTasks: 0, waitingTasks: 1, waitingReason: reason, task,
+      activityAccessState: 'denied', activityAccessRequired: true, activityProbeError: undefined } };
+    await app.evaluate(({ BrowserWindow }, value) => {
+      BrowserWindow.getAllWindows()[0].webContents.send('panel:status-changed', value);
+    }, status);
+    await expect(claude.locator('.task-line')).toContainText(task);
+    await expect(claude.locator('.task-line')).not.toContainText('辅助功能未授权');
+    await expect(claude.locator('.task-line .grant-access')).toHaveCount(1);
+    await expect(claude).toContainText(label);
+  }
   await page.evaluate(() => window.panel.refreshStatus());
   await expect(avatar).toHaveAttribute('data-glow', 'running');
   await sampleCpu('single-visible');

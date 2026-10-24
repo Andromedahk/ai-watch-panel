@@ -9,6 +9,8 @@ const { randomBytes } = require('node:crypto');
 const SCRIPT_NAME = 'ai-watch-claude-hook.sh';
 const LOGGER_NAME = 'ai-watch-claude-hook-logger.cjs';
 const EVENTS_NAME = 'claude-hook-events.log';
+// Tools whose "permission" is the user's answer, not a tool authorization.
+const QUESTION_TOOLS = new Set(['AskUserQuestion']);
 const EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest',
   'Notification', 'Elicitation', 'ElicitationResult', 'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'];
 const DESKTOP_ENTRYPOINTS = new Set(['claude-desktop', 'claude-desktop-3p', 'local-agent']);
@@ -223,7 +225,8 @@ class ClaudeHooks {
     } else if (event === 'PermissionRequest') {
       const candidates = ownTools().map(([, call]) => call).filter(call => call.tool === tool);
       const linked = toolUse || (candidates.length === 1 ? candidates[0].toolUse : undefined);
-      addPending('approval', 'tool', { tool, toolUse: linked,
+      // Desktop Code asks its question through the permission channel too.
+      addPending(QUESTION_TOOLS.has(tool) ? 'input' : 'approval', 'tool', { tool, toolUse: linked,
         ...(linked ? {} : { candidates: candidates.map(call => call.toolUse).filter(Boolean) }) });
     } else if (event === 'PostToolUse' || event === 'PostToolUseFailure') {
       setPhase('running');
@@ -249,9 +252,10 @@ class ClaudeHooks {
       // resolve a root tool call merely because that is the only known call.
       addPending('input', 'notification', { notification: kind }, agent || '\u0001unassigned-background');
     } else if (event === 'Notification') {
-      const reason = kind === 'permission_prompt' ? 'approval' : 'input';
+      const calls = ownTools().map(([, call]) => call);
+      const question = calls.length > 0 && calls.every(call => QUESTION_TOOLS.has(call.tool));
+      const reason = kind === 'permission_prompt' && !question ? 'approval' : 'input';
       if (!ownPending().some(([, pending]) => pending.reason === reason)) {
-        const calls = ownTools().map(([, call]) => call);
         if (calls.length === 1) addPending(reason, 'tool', { tool: calls[0].tool, toolUse: calls[0].toolUse });
         else addPending(reason, 'notification');
       }
@@ -300,7 +304,7 @@ class ClaudeHooks {
 }
 // Pure compatibility helper; the reader maintains pending requests separately.
 function phaseOf(event, kind, tool, previous) {
-  if (event === 'PermissionRequest') return { phase: 'waiting', reason: 'approval' };
+  if (event === 'PermissionRequest') return { phase: 'waiting', reason: QUESTION_TOOLS.has(tool) ? 'input' : 'approval' };
   if (event === 'Elicitation' || event === 'PreToolUse' && tool === 'AskUserQuestion') return { phase: 'waiting', reason: 'input' };
   if (event === 'Notification') {
     if (kind === 'permission_prompt') return { phase: 'waiting', reason: 'approval' };

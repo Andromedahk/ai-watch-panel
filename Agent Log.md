@@ -20,6 +20,25 @@
 
 ---
 
+## 2026-10-24 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· Claude 桌面 Code 提问与授权区分
+
+- 分支：`claude/desktop-code-prompts`，起点 `origin/main` 的 `3f6629d`（含 Codex 等待提醒修复）；独立 worktree，因 main 新增流式解析依赖而单独 `npm ci`。本地提交，未推送。主目录未提交的 relay 改动未触碰。
+- 目的：人类反馈 Claude Desktop Code 页的提问和授权请求状态不正确。
+- 调查（只读）：
+  - 读取桌面内置 Claude Code 2.1.308 的代码字符串：桌面以 stream-json 和 `--permission-prompt-tool stdio` 运行 CLI；会话进入 `requires_action`（stdio 授权请求、AskUserQuestion、request_user_dialog、MCP 询问）时，在 `~/.claude/sessions/<pid>.json` 写入 `status: "waiting"` 与 `waitingFor`，提问为 `input needed`、其他为 `permission prompt`。
+  - 另起无界面 CLI 复现失败：桌面通过宿主连接提供登录，单独进程显示未登录；未借用本会话凭据。改为运行 30 分钟只读记录器（仅状态与时间），由人类在桌面 Code 中分别触发工具授权和提问：登记文件依次出现 `waiting / permission prompt` 与 `waiting / input needed`，回答后恢复 `busy` / `idle`。同期钩子元数据显示 AskUserQuestion 依次触发 PreToolUse、无调用编号的 PermissionRequest 与 permission_prompt 通知。
+  - 原因：①面板读取登记的 `waiting` 但忽略 `waitingFor`；②已开启的状态钩子优先于登记，PermissionRequest 与通知把提问覆盖为待授权；③界面在非运行状态下用“辅助功能未授权，桌面状态未知”替换任务文字，等待中也是如此。
+- 操作：
+  - `electron/claude-status.cjs`：登记的 `waitingFor` 映射为原因（permission prompt / sandbox request → 待授权；input needed / dialog open / goal proposal → 待回答；未知标签保持“待处理”）；钩子与已核实存活的登记同为等待时，以登记标签为准。
+  - `electron/claude-hooks.cjs`：AskUserQuestion 的 PermissionRequest 与随后的 permission_prompt 通知记为待回答；其他工具保持待授权。
+  - `src/view/model.ts`：等待或运行状态下不再用辅助功能提示替换任务文字，“授权辅助功能”按钮仍保留。
+  - 测试：`tests/claude-status.test.cjs` 新增两种来源 × 六种标签、状态恢复、多会话混合原因、登记优先于钩子；`tests/claude-hooks*.test.cjs` 按实测顺序重放提问与授权；`scripts/verify-resources.mjs` 新增辅助功能未授权时待回答 / 待授权的界面检查。夹具均为合成数据。
+- 验证：`node --test tests/*.test.cjs` 510 项全部通过；`npx tsc --noEmit`、`git diff --check`、`npm run build`（既有大 chunk 提示）通过；`test:insights`、`test:corners`、`test:i18n`、`test:resources` 通过。
+- 失败或未验证项：无界面 CLI 复现因未登录失败，改用人类实测记录；修复后未在真实桌面 Code 中再次实测，也未打包安装，已安装 App 仍为旧逻辑。ExitPlanMode 等其他对话框沿用 CLI 自身分类（多为待授权）。Windows / Linux 未验证。记录器与模拟进程已停止，模拟文件仅在临时目录。
+- 未完成 / 需要人类决定：是否推送、合并及安装由人类决定。
+
+---
+
 ## 2026-10-24 · Codex（GPT-6.1-sol / Codex 桌面本地执行环境，含 release_audit 只读复核）· 合并 main 并删除修复分支
 
 - 分支：`main`，起点 `366e44d`；来源 `codex/fix-codex-attention` 的 `8b84e30`。

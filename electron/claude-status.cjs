@@ -32,6 +32,13 @@ function normalizeClaudeUsage(payload, now) {
   });
   return { quotas, observedAt: new Date(latest.t).toISOString() };
 }
+// The CLI names why a registered session waits (terminal dialogs and the
+// host-driven Desktop Code session both write it). Unknown labels stay generic.
+const APPROVAL_WAITS = new Set(['permission prompt', 'sandbox request']);
+const INPUT_WAITS = new Set(['input needed', 'dialog open', 'goal proposal']);
+function registrationWaitReason(label) {
+  return APPROVAL_WAITS.has(label) ? 'approval' : INPUT_WAITS.has(label) ? 'input' : undefined;
+}
 function isCodeProcess(command) {
   return /(?:^|[/\\])claude(?:\.exe)?$/.test(command)
     || /[/\\]claude[/\\]versions[/\\]\d+\.\d+\.\d+(?:\.exe)?$/.test(command);
@@ -282,7 +289,8 @@ class ClaudeStatusReader {
       const phase = row.status === 'idle' ? 'idle' : fresh && row.status === 'busy' ? 'running'
         : fresh && row.status === 'waiting' ? 'waiting' : 'unknown';
       const updated = live && Number.isFinite(row.statusUpdatedAt) && row.statusUpdatedAt <= now + 120000 ? row.statusUpdatedAt : 0;
-      states.set(row.pid, { phase, surface, session, registrationVerified: live, at: Math.max(stat.mtimeMs, updated), ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName || row.name) } : {}) });
+      const reason = phase === 'waiting' ? registrationWaitReason(row.waitingFor) : undefined;
+      states.set(row.pid, { phase, ...(reason ? { reason } : {}), surface, session, registrationVerified: live, at: Math.max(stat.mtimeMs, updated), ...(this.taskDetailsEnabled ? { title: require('./task-details.cjs').safeText(row.title || row.taskName || row.name) } : {}) });
     }
     // The logger captures the nearest actual Claude Code owner when the event
     // occurs. It must still be alive: never fall back to a surviving ancestor of
@@ -319,7 +327,11 @@ class ClaudeStatusReader {
     }
     const hookSessions = [...hookByPid.values()];
     for (const [pid, hook] of hookByPid) {
-      states.set(pid, { ...states.get(pid), registrationVerified: false, phase: hook.phase, reason: hook.reason,
+      // A verified registration names its wait itself (permission prompt vs
+      // input needed); keep that label over a hook-derived reason.
+      const registered = states.get(pid);
+      const reason = hook.phase === 'waiting' && registered?.registrationVerified && registered.phase === 'waiting' && registered.reason ? registered.reason : hook.reason;
+      states.set(pid, { ...registered, registrationVerified: false, phase: hook.phase, reason,
         session: hook.session, surface: hook.surface, at: hook.at, hook: true });
     }
     // A session can have more than one registered PID. Prefer its hook state over
