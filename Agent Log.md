@@ -20,6 +20,17 @@
 
 ---
 
+## 2026-10-24 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 推送并安装 ce6ac44
+
+- 分支：`claude/desktop-code-prompts`，安装来源 `ce6ac44`；开始时 worktree 干净。
+- 目的：人类要求提交并推送修复，替换旧版本并重启新 App。
+- 操作：正常推送新分支到 origin（未合并 main、未强制推送）。`npm run build` 后用 electron-builder 打包普通 macOS App（`--mac --dir`），输出在忽略的 `release/` 版本目录。正常退出旧应用（2 秒内退出、无残留进程），完整复制用户数据并将旧应用移入备份目录（未删除），放入新应用并启动。备份与安装摘要在忽略的 `.local/install-backups/`。
+- 验证：`codesign --verify --deep --strict --all-architectures` 通过；包内网页构建与 `dist`、Electron 文件与源码一致，版本 0.19.1。安装后应用摘要与打包结果一致；新版原位置主进程启动后持续运行；启动前后设置文件 SHA-256 一致（含 Claude 来源、联网查询与状态钩子开关）。
+- 失败或未验证项：未截取运行截图；修复后的真实桌面 Code 提问 / 授权尚未由人类复测；本轮未重复单元测试与界面验收（`ce6ac44` 提交前已全部通过）。应用仍为本地 ad hoc 签名。
+- 未完成 / 需要人类决定：是否合并到 main 由人类决定。
+
+---
+
 ## 2026-10-24 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· Claude 桌面 Code 提问与授权区分
 
 - 分支：`claude/desktop-code-prompts`，起点 `origin/main` 的 `3f6629d`（含 Codex 等待提醒修复）；独立 worktree，因 main 新增流式解析依赖而单独 `npm ci`。本地提交，未推送。主目录未提交的 relay 改动未触碰。

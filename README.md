@@ -173,6 +173,10 @@ npm run test:i18n
 
 ## 更新记录
 
+### 未发布 · 2026-10-24 · 安装 ce6ac44 · 署名：Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）
+
+- 按人类要求推送 `claude/desktop-code-prompts`，从 `ce6ac44` 构建普通 macOS App（0.19.1），正常退出旧应用、备份旧应用和完整用户数据后替换原安装副本并启动。严格签名检查通过，包内网页构建与 Electron 文件与源码一致；安装后应用摘要与打包结果一致，新版持续运行，启动前后设置文件逐字节一致。备份保留在忽略目录 `.local/install-backups/`。未合并到 main；修复后的真实桌面 Code 提问 / 授权尚待人类复测。
+
 ### 未发布 · 2026-10-24 · Claude 桌面 Code 提问与授权区分 · 署名：Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）
 
 - 桌面 Code 会话等你回答问题时显示“待回答 · Claude 在等你回答问题”，等你授权工具时显示“待授权 · Claude 在等你授权工具”，与 Codex 的区分一致；处理后回到运行中或待机。此前两种情况都显示为“待授权”，且卡片和顶部提醒被“辅助功能未授权，桌面状态未知”占据。
