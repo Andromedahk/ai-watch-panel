@@ -20,6 +20,44 @@
 
 ---
 
+## 2026-10-24 · Codex（GPT-6.1-sol / Codex 桌面本地执行环境）· 修复并安装 Codex 等待提醒
+
+- 分支：`codex/fix-codex-attention`，起点 `366e44d`；复用本聊天的干净发布 worktree，主目录未提交的 relay 文件不参与。
+- 目的：修复用户截图中 Codex 已提问 / 请求授权，而面板仍显示“运行中、3 项任务有近期活动”的漏报。
+- 操作：
+  - 只读核对当前已安装客户端实现，确认仍使用 v11 状态协议；实际收到的 29,815,232 字节快照超出旧 16 MiB 上限，使连接断开、等待状态清空，活动退回 SQLite 的运行统计。
+  - `electron/json-projection-frame-decoder.cjs` 与 `electron/codex-attention-state.cjs`：接收长度与保留投影预算分离，流式跳过正文和工具输入输出；支持 legacy / canonical 异步问题、已回答标记、已知动态输入及现有授权类型。回答身份仅以哈希匹配，数组索引保留，snapshot / patch 均过滤非状态字段。
+  - `electron/codex-attention.cjs`：首快照和修订丢失时重试、保留最高修订、忽略旧 owner 补丁，连接代际防止过期回调；已知等待优先保留。`electron/local-status.cjs` / `electron/main.cjs`：等待变化直接推送缓存状态、菜单栏与小组件摘要，额度与其他提供商等待结束后再次取最新等待状态，避免旧样本覆盖。
+  - `package.json` / `package-lock.json`：版本 0.19.1，加入流式解析依赖及 `test:codex-attention`。新增 decoder / 状态回归 / Electron 端到端验收，README 记录用法、来源范围及资源限制。
+- 验证：492 项单元测试全部通过；TypeScript / Vite 构建通过。真实只读连接恢复，两个已加载会话无解码错误，开发核验时缓存元数据约 155 KB；没有执行或回复真实任务请求。最终合成 SQLite → 大 IPC → LocalStatusReader → Electron 验收为 13 项后端、46 项 UI 组合、0 页面错误，18 张截图均明确标记测试数据，主 Agent 抽查红色待授权截图。
+- 打包与安装：macOS arm64 正式包启动烟测通过，版本 0.19.1、八张卡片与图片加载、sandbox / contextIsolation / nodeIntegration 均正确。严格 ad hoc 签名校验通过，包内 67 个 Electron 源文件与当前代码一致。备份原应用和完整用户数据后原位升级并启动；安装归档摘要与构建一致，原位置仅一个主进程运行。备份位于忽略的 `.local/install-backups/`。
+- 失败与修复：初轮回归发现 payload patch 过滤、长回答标记、修订缺口和 owner 切换等边界，补正后 54 项相关专项及最终全量测试均通过。首次安装核验因偏好字节不同而停止；核对确认唯一差异为原先已请求的 `cacheCleanupPending` 由 true 自动改为 false，符合现有启动清缓存逻辑；全部用户设置键值保持一致，未把此内部标记变更说成逐字节一致。保留 SQLite 实验提示、既有 Vite 大 chunk 与默认图标提示。
+- 未完成 / 需要人类决定：真实未回答 / 未授权请求的操作仍由用户完成，本轮只对实际状态通道作只读验证；Windows Unix socket 等待通道、Linux、远程 / 未加载会话和未来协议未因此通过验收。0.19.1 为本机修复版，未修改现有公开 Release；无新增需批准的本地修复事项。
+
+---
+
+## 2026-10-24 · Codex 子 Agent release_audit、projection_tests（模型继承会话配置 / Codex 桌面本地执行环境）· 流式解码与状态回归
+
+- 分支：`codex/fix-codex-attention`。
+- 目的：在不保留大快照正文的前提下读取等待元数据，独立验证旧状态、回答匹配和重连边界。
+- 操作：新增 `electron/json-projection-frame-decoder.cjs`、`tests/json-projection-frame-decoder.test.cjs` 与 `tests/codex-attention-regression.test.cjs`；projection_tests 参与测试 / 只读审计，由 release_audit 汇总；文档由主 Agent 统一记录。
+- 验证：19 项投影测试、22 项状态回归、原有 4 项 attention 与 9 项 decoder 合跑 54 / 54 通过。64 MiB 合成正文在 32 MiB Node 堆限制下流式处理通过；UTF-8 分片、错误 JSON、预算、完整帧原子提交及 reset 代际检查通过。
+- 失败或未验证项：首轮随机夹具把 JSON 转换后的 -0 误作为原值，已修正夹具并保留原始 -0 帧测试；审计暴露的产品边界由主 Agent 修正并回归通过。未连接真实 IPC、未操作真实请求、未自行提交。
+- 未完成 / 需要人类决定：无新增人类决定。
+
+---
+
+## 2026-10-24 · Codex 子 Agent packaged_smoke（模型继承会话配置 / Codex 桌面本地执行环境）· Codex 等待端到端验收
+
+- 分支：`codex/fix-codex-attention`。
+- 目的：验证真实读取器接收大快照后，三个界面风格均能显示等待并在处理后恢复。
+- 操作：新增 `scripts/verify-codex-attention.mjs`，使用临时 SQLite、Unix socket、超过 20 MiB 的分片状态、官方额度 stub 和独立 Electron 测试配置；输出仅保存到忽略的 `.local/qa/codex-attention/`，文档由主 Agent 统一记录。
+- 验证：13 项后端场景、46 项 UI 组合、0 页面错误；三皮肤 × 普通 / 二次元，普通请求及 canonical / legacy 异步回答、并行运行计数、owner 断连均通过，抽查三张测试截图。最终代码由主 Agent 再跑同一验收通过。
+- 失败或未验证项：无此项验收失败；不查询真实账户，不执行或回答真实模型请求，不能把合成等待通过写成真实授权已验收。
+- 未完成 / 需要人类决定：无新增人类决定。
+
+---
+
 ## 2026-10-23 · Codex（GPT-6 / Codex 桌面本地执行环境）· 修正草稿 Release 查询
 
 - 分支：`codex/release-0.19.0` → `main`。
