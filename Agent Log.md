@@ -29,9 +29,10 @@
   - Electron、设置页和 Python 桥支持 Mac 原生程序路径及 macOS 15 / 64 位架构检查。`--check` 在 Mac 加载库但不初始化/枚举 USB；`--probe` 仅读取设备信息并关闭，不部署或播放。原布局、动效、台词和只读交互保持共用。
   - 增加 Mac 固定上游源码的 FFmpeg/x264/libusb 构建器、Python 3.13 桥打包、实际 Mach-O 架构及签名检查，原生双架构 CI 与无 USB 编码验证；同步 Windows hidden import、Widgets 打包入口以及编码测试的跨平台安全拦截。源码与许可证随包，输出和运行时不进 Git。
   - 更新 README、串流说明、桥接说明和第三方组件说明，区分已公开 v0.20.0 与本次未发布的 Mac 功能。
-- 本地验证：类型检查、Vite 生产构建、35 项定向 Node 测试通过；49 项 Python 测试中 48 通过、1 项 Mac flock 实测因 Windows 跳过。脚本语法和工作流 YAML 检查通过。Vite 保留既有大 chunk 提示。
+- 本地验证：类型检查、Vite 生产构建、35 项定向 Node 测试通过；49 项 Python 测试中 48 通过、1 项 Mac flock 实测因 Windows 跳过。脚本语法和工作流 YAML 检查通过。Windows 桥重建及 `--check` 通过，合成 BGRA 真实编码产生 104 帧 / 176,895 字节；Electron 2240×1080 离屏到桥链路产生 159 帧 / 5,677,323 字节，退出 0、无 stderr、无 USB 访问。完整小屏预览（收起/展开、后台帧与台词、只读控件、全屏提醒轮换、重启、停止恢复）通过。Vite 保留既有大 chunk 提示。
 - 失败与修正：初次调用未创建的本地 Python 环境失败，随后使用可用解释器。新增资源验证最初使用 Python 3.11 才提供的 `hashlib.file_digest`，导致 Python 3.10 下 8 个测试错误；改为分块 SHA-256 后全部通过。本地 Windows 桥首次重建缺少 PyInstaller，正在准备隔离构建环境。全量 Node 在 Windows 上结果为 507 通过、38 失败、17 跳过；从未修改的 `2a9f856` 导出基线后得到 497 通过、38 失败、17 跳过，失败测试名完全一致，新增失败 0。失败集中在既有 Unix 路径、权限和 socket 假设，不把它们记为通过。
-- 未完成 / 验证边界：准备通过功能分支运行 `publish: false` 的原生 CI，Mac 编译、签名和包内运行尚未记为通过；实际 USB 接口可占用性、两种 Mac 的出画、帧率、热负载和恢复仍须连接实体屏幕验收。未合入 main、未发布或替换用户正在运行的应用。
+- 后续修正：Windows Python 3.10 的旧 pip TLS 下载失败，使用较新 Python 的 pip 下载固定 cp310/win_amd64 wheels 后离线安装到项目 venv，未降低 TLS 校验。Mac CI 的 Python 测试须从 `screen-bridge` 目录运行，已修正 root 下无法导入 `app` 的问题。Windows 原预览脚本在收起/展开时遇高度 901→902；在未修改基线完全重现并确认高 DPI 舍入，只允许 Windows 高度 ±1 DIP，其他字段和平台仍严格检查，完整流程随后通过。
+- 未完成 / 验证边界：功能提交 `7f548a9` 已推送并启动 [首轮原生 CI](https://github.com/Andromedahk/ai-watch-panel/actions/runs/40356801404)，`publish: false`；工作目录修正后会针对新提交重新验证。Mac 编译、签名和包内运行尚未记为通过；实际 USB 接口可占用性、两种 Mac 的出画、帧率、热负载和恢复仍须连接实体屏幕验收。未合入 main、未发布或替换用户正在运行的应用。
 
 ---
 

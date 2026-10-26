@@ -210,7 +210,7 @@ npm run test:lan-sync # 两个独立测试配置在本机配对、同步、重�
 - 从拉取后的最新 `main`（`2a9f856`）创建 `codex/macos-usb-streaming`，为 Apple Silicon 和 Intel 增加原生 USB 传输，串流继续作为 AI Watch 内置功能。保留原小屏布局、动效、看板娘、曲线和全屏等待提醒。
 - Windows 与 Mac 共用设备协议，分别使用原 Windows USB 传输和随包 libusb；Mac 最低版本为 15，不强制卸载驱动或改变设备配置。新增无 USB 的库预检及手工设备信息预检。
 - 增加固定源码构建的 Mac FFmpeg / x264 / libusb、Python 桥、架构与签名检查；两种 Mac 架构分别原生构建和验证。使用者无需外部 XANALI 目录或另装运行时。
-- 本地类型检查、网页构建、35 项定向 Node 测试通过；49 项 Python 测试中 48 通过，1 项 macOS 文件锁实测因 Windows 主机跳过。原生 Mac 构建、签名及实机 USB 验收尚待完成；详细失败与复测记录见 [Agent Log](Agent%20Log.md)。
+- 本地类型检查、网页构建、35 项定向 Node 测试及完整小屏预览通过；49 项 Python 测试中 48 通过，1 项 macOS 文件锁实测因 Windows 主机跳过。Windows 桥重建、真实 H.264 编码和 Electron 离屏链通过；全量 Node 与未修改基线相比新增失败 0。修正 CI 的 Python 测试工作目录，以及原有 Windows 高 DPI 窗口高度的 1 DIP 测试舍入误差。原生 Mac 构建、签名及实机 USB 验收尚待完成；详细失败与复测记录见 [Agent Log](Agent%20Log.md)。
 
 ### 0.20.0 · 2026-10-26 · 正式发布并完成 macOS 升级 · 署名：Codex（GPT-6 / Codex 桌面本地执行环境）
 

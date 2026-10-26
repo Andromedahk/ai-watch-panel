@@ -89,7 +89,15 @@ try {
   assert.equal(await screen.evaluate(() => document.querySelector('main').classList.contains('animations-paused')), false);
   await desktop.getByRole('button', { name: '展开面板', exact: true }).click();
   await expect(desktop.locator('.settings-dialog')).toBeVisible();
-  assert.deepEqual((await desktop.evaluate(() => window.panel.getState())).bounds, controllerBounds);
+  const restoredControllerBounds = (await desktop.evaluate(() => window.panel.getState())).bounds;
+  // Windows can add one DIP to the saved native height when setBounds restores
+  // a frameless window on a high-DPI display. Position and width remain exact.
+  if (process.platform === 'win32') {
+    assert.ok(Math.abs(restoredControllerBounds.height - controllerBounds.height) <= 1, 'restored controller height must remain within one DIP');
+    assert.deepEqual({ ...restoredControllerBounds, height: controllerBounds.height }, controllerBounds);
+  } else {
+    assert.deepEqual(restoredControllerBounds, controllerBounds);
+  }
   for (const invalid of [{ device: 'unsupported' }, { width: 2239 }, { fps: 0 }, { bitrateMbps: 51 }, { enabled: true }, { showMascot: 'yes' }]) {
     assert.equal(await desktop.evaluate(async value => { try { await window.panel.setStreamConfig(value); return false; } catch { return true; } }, invalid), true);
   }

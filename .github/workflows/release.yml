@@ -92,7 +92,7 @@ jobs:
         if: matrix.platform == 'mac'
         shell: bash
         run: |
-          .local/screen-bridge-venv/bin/python -m unittest discover -s screen-bridge/tests -p 'test_*.py'
+          (cd screen-bridge && ../.local/screen-bridge-venv/bin/python -m unittest discover -s tests -p 'test_*.py')
           (cd screen-bridge/tools/streamd && go test ./... && go vet ./...)
           node scripts/verify-screen-encoder.mjs
       - name: Download this run's source-built encoder
