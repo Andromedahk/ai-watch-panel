@@ -20,6 +20,18 @@
 
 ---
 
+## 2026-10-26 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 多端同步实机验证并合入 main
+
+- 分支：`claude/lan-sync`，起点 `2c53df7`；合入 `main`（起点 `991ff66`，为本分支祖先，快进）。
+- 目的：人类报告局域网实测通过，要求合并进 main 并推送。
+- 人类实测（由人类完成并口头报告，非本 Agent 观察）：Mac 主客户端 + Windows 子客户端，局域网同步正常。
+- 操作：仅追加本记录与 README 条目，推送 `claude/lan-sync`，再以快进方式推送到 `main`；无强制推送、无合并提交，未触碰主目录未提交的 relay 改动。
+- 验证：未重复测试套件（无代码变化；`029c4a2` 与 `2c53df7` 提交前已通过）。
+- 失败或未验证项：Linux、Windows 作为主客户端、两台以上子客户端未测；Windows 包仍未签名。
+- 未完成 / 需要人类决定：是否发布新的 Release 由人类决定。
+
+---
+
 ## 2026-10-26 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· Windows 安装包与打包文件范围修正
 
 - 分支：`claude/lan-sync`，起点 `fc23c8c`；本地提交，未推送。

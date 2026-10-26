@@ -182,6 +182,10 @@ npm run test:lan-sync # 两个独立测试配置在本机配对、同步、重�
 
 ## 更新记录
 
+### 未发布 · 2026-10-26 · 多端同步实机验证并合入 main · 署名：Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）
+
+- 人类在局域网内实测：Mac 作为主客户端、Windows（本次交叉构建的 `AI-Watch-0.19.1-win-x64.exe`）作为子客户端，同步正常。随后按人类要求将 `claude/lan-sync`（多端同步、Windows 打包文件范围修正及安装记录）快进合入 main，未重复运行测试。
+
 ### 未发布 · 2026-10-26 · Windows 安装包与打包文件范围修正 · 署名：Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）
 
 - 按人类要求在 Mac 上交叉构建 Windows x64 NSIS 安装包（`AI-Watch-0.19.1-win-x64.exe`，来源 `claude/lan-sync` 的 `fc23c8c`，未签名，SmartScreen 可能提示），输出在忽略的 `release/` 目录。
