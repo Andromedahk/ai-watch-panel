@@ -203,6 +203,14 @@ npm run test:lan-sync # 两个独立测试配置在本机配对、同步、重�
 
 ## 更新记录
 
+### 0.20.0 · 2026-10-26 · 正式发布并完成 macOS 升级 · 署名：Codex（GPT-6 / Codex 桌面本地执行环境）
+
+- `codex/liquid-cooling-screen` 已合入并推送 `main`，发布标签 `v0.20.0` 固定到合并提交 `3d50e4a`。[Release](https://github.com/Andromedahk/ai-watch-panel/releases/tag/v0.20.0) 已公开并设为最新版，包含 macOS ARM64 / Intel DMG 与 ZIP、Windows x64 NSIS 安装包和 SHA-256 清单，共六个资产。
+- [发布运行 40348971228](https://github.com/Andromedahk/ai-watch-panel/actions/runs/40348971228) 全部成功：固定源码编码器、三个原生平台构建与包启动、macOS 签名/DMG、Windows NSIS 安装后启动、桥及完整源码摘要检查通过。Windows Electron 离屏真实编码产生 164 帧 H.264 / 5,799,581 字节，进程退出 0、无标准错误；未连接 USB。
+- 本地最终 558 项 Node 测试、26 项 Python 测试、24 组皮肤、54 项曲面屏及桌面布局/历史/17语言/资源/Codex提醒/LAN同步检查通过。正式 ARM64 ZIP 的摘要、签名、93 个应用文件与隔离启动检查通过。
+- 已完全退出旧应用，备份旧应用及完整用户数据，使用正式 Release 的 ARM64 ZIP 替换并启动。安装后的应用资源摘要与发布副本一致，偏好文件升级前后逐字节一致；备份和安装证据仅保存在忽略的 `.local/install-backups/`，未提交用户数据。
+- 小屏 USB 串流仍仅用于 Windows，实体设备画质、持续帧率和厂商界面恢复仍待硬件验收；macOS 保留原桌面能力。
+
 ### 0.20.0 · 2026-10-26 · 合并小屏串流并准备双平台发布 · 署名：Codex（GPT-6 / Codex 桌面本地执行环境）
 
 - 将 `codex/liquid-cooling-screen` 合入 `main`，版本更新为 0.20.0，保留原有本地操作记录。Windows 新增可选展域串流、左右曲面分区、额度历史、原版看板娘与多任务等待提醒轮播；macOS 保留原桌面功能。

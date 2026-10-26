@@ -20,6 +20,22 @@
 
 ---
 
+## 2026-10-26 · Codex（GPT-6 / Codex 桌面本地执行环境；协作 release_review、inspect_local_docs、python_test_portability）· v0.20.0 发布与本机替换安装完成
+
+- 分支：`main`；产品合并/发布提交 `3d50e4aea960077d34c8cee2f259fb95968b9e29`（双亲为 `4b66a00`、`59f20fe`），本记录为后续文档提交，不改变发布代码。
+- 目的：完成用户授权的合并、提交推送、Windows / macOS 新版发布与本机升级。
+- 发布：运行 [40348971228](https://github.com/Andromedahk/ai-watch-panel/actions/runs/40348971228) 全部成功；标签 `v0.20.0` 指向上述产品提交。Release 已公开、非预发布并设为 Latest；五个安装文件及 SHA256SUMS.txt 共六资产的公开摘要与校验清单再次核对一致。
+- 验证：
+  - 最终本地 Node 558/558、Python 26/26；生产构建、24 组原桌面皮肤、54 项曲面屏、screen、screen-sync，以及 layouts、insights、corners、17语言/136卡片、resources、codex-attention、lan-sync 全过。macOS 预打包和正式下载包均通过隔离配置/合成状态启动，8 个模块和图片加载、沙箱/隔离正常、0 渲染错误。
+  - 编码器的官方源码归档、mingw 编译、Windows PE 系统依赖和完整源材料检查通过。原生 Windows Python 26 项、Go test/vet、桥资源和真实无 USB 编码通过；Electron 2240×1080 离屏链产生 164 帧 H.264 / 5,799,581 字节，退出 0、无标准错误。NSIS 安装后版本 0.20.0、8 卡片/图片、沙箱及组件/源材料摘要均过，再编码 104 帧 / 172,448 字节。
+  - macOS ARM64 与 Intel 分别原生构建、严格签名完整性、DMG 和正式包启动通过。正式 ARM64 ZIP 为 149,253,751 字节，SHA-256 `24ff86b2ce4638c6fec8f340453a4a74ffefaa00a296834bf1efa28401071c15`；包内 93 个 dist/electron 文件与本地最终源码/构建逐字节一致，未带入工作区、偏好、配对、账号缓存或备份。
+- 安装：正常退出旧应用后备份旧 `.app` 与完整 userData，使用正式 ARM64 ZIP 原位置替换并启动，进程持续运行；安装副本严格验签通过。安装后 app.asar SHA-256 与下载副本同为 `40b84d44b68f2191a252d1fade19672b628f65c4b4684f9e42fa97bd095d2d7c`；升级前后 preferences.json SHA-256 完全相同。完整备份及安装摘要保存在忽略的 `.local/install-backups/`，没有提交个人数据。
+- 失败与修正：Actions 大产物下载通道较慢，取消该次下载后改用正式 Release ZIP 的 8 路范围下载，逐段核对 206/Content-Range，拼接后校验完整官方摘要；没有用本地预打包副本代替正式发布副本安装。
+- 限制：所有编码/屏幕自动化检查均未连接 USB；实体展域屏幕的画质、持续帧率/热负载与厂商 UI 恢复仍待硬件验收。Windows 真实服务和 Linux 仍须对应平台验证。
+- 未完成 / 需要人类决定：本轮用户要求均已完成；硬件验收不作为本轮完成声明的一部分。
+
+---
+
 ## 2026-10-26 · Codex（GPT-6 / Codex 桌面本地执行环境；协作 release_review、inspect_local_docs、python_test_portability）· 合并小屏串流并准备 v0.20.0
 
 - 分支：`main`，基线 `4b66a00`，合并 `codex/liquid-cooling-screen` 的 `59f20fe`；版本更新为 `0.20.0`。
