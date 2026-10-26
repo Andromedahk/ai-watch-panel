@@ -1,5 +1,6 @@
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { DEVICES, validateStreamConfig } = require('./screen-stream-policy.cjs');
 
@@ -7,41 +8,50 @@ function isFile(file) {
   try { return fs.statSync(file).isFile(); } catch { return false; }
 }
 
-// Optional bridge resources are absent from ordinary CI packages. Report this before
-// changing the desktop mode or touching USB; the rest of AI Watch remains available.
+// Detect incomplete custom builds before changing desktop mode or touching USB;
+// the rest of AI Watch remains available when streaming resources are missing.
 function streamAvailability({ packaged = false, resourcesPath = process.resourcesPath, root = path.resolve(__dirname, '..'),
-  env = process.env, platform = process.platform, preview = false, fileExists = isFile } = {}) {
+  env = process.env, platform = process.platform, arch = process.arch, osRelease = os.release(), preview = false, fileExists = isFile } = {}) {
   if (preview) return { available: true, unavailableReason: null };
-  if (platform !== 'win32') return { available: false, unavailableReason: '当前展域串流组件仅支持 Windows' };
+  if (!['win32', 'darwin'].includes(platform)) return { available: false, unavailableReason: '展域 USB 串流需要 Windows 或 macOS 15 及以上' };
+  if (platform === 'darwin' && (!Number.isInteger(Number(osRelease.split('.')[0])) || Number(osRelease.split('.')[0]) < 24)) {
+    return { available: false, unavailableReason: 'Mac USB 串流需要 macOS 15 及以上' };
+  }
+  if (platform === 'darwin' && !['arm64', 'x64'].includes(arch)) return { available: false, unavailableReason: 'Mac 串流组件支持 Apple Silicon 和 Intel 64 位处理器' };
+  const bridgeName = platform === 'win32' ? 'XANALI-Panel-Bridge.exe' : 'XANALI-Panel-Bridge';
+  const encoderName = platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
   const bundle = packaged ? path.join(resourcesPath || '', 'screen-bridge')
     : path.join(root, '.local', 'screen-bridge', 'XANALI-Panel-Bridge');
-  const hasBridge = fileExists(path.join(bundle, 'XANALI-Panel-Bridge.exe'));
+  const hasBridge = fileExists(path.join(bundle, bridgeName));
+  let resources;
   if (packaged || (!env.XANALI_PYTHON && hasBridge)) {
     if (!hasBridge) return { available: false, unavailableReason: '此安装包未包含串流组件，请使用包含串流组件的 AI Watch 安装包' };
-    const resources = path.join(bundle, '_internal', 'resources');
-    if (!fileExists(path.join(resources, 'ffmpeg', 'ffmpeg.exe')) || !fileExists(path.join(resources, 'streamd-arm64'))) {
-      return { available: false, unavailableReason: '串流组件不完整：缺少编码器或设备端服务，请重新构建完整应用' };
-    }
+    resources = path.join(bundle, '_internal', 'resources');
   } else {
     const source = path.join(root, 'screen-bridge');
-    if (!fileExists(path.join(source, 'app', 'panel_stream_bridge.py')) || !fileExists(path.join(source, 'resources', 'ffmpeg', 'ffmpeg.exe'))
-      || !fileExists(path.join(source, 'resources', 'streamd-arm64'))) {
+    resources = path.join(source, 'resources');
+    if (!fileExists(path.join(source, 'app', 'panel_stream_bridge.py'))) {
       return { available: false, unavailableReason: '开发串流资源未准备完成，请先构建串流组件或准备 Python 桥、编码器和设备端服务' };
     }
+  }
+  if (!fileExists(path.join(resources, 'ffmpeg', encoderName)) || !fileExists(path.join(resources, 'streamd-arm64'))
+      || platform === 'darwin' && !fileExists(path.join(resources, 'libusb', 'libusb-1.0.0.dylib'))) {
+    return { available: false, unavailableReason: '串流组件不完整：缺少编码器、USB 运行库或设备端服务，请重新构建完整应用' };
   }
   return { available: true, unavailableReason: null };
 }
 
-function bridgeCommand({ packaged = false, resourcesPath = process.resourcesPath, root = path.resolve(__dirname, '..'), env = process.env } = {}) {
+function bridgeCommand({ packaged = false, resourcesPath = process.resourcesPath, root = path.resolve(__dirname, '..'), env = process.env, platform = process.platform, fileExists = isFile } = {}) {
+  const bridgeName = platform === 'win32' ? 'XANALI-Panel-Bridge.exe' : 'XANALI-Panel-Bridge';
   if (packaged) {
-    const executable = path.join(resourcesPath, 'screen-bridge', 'XANALI-Panel-Bridge.exe');
-    if (!isFile(executable)) throw new Error('串流组件缺失，请重新构建完整应用');
+    const executable = path.join(resourcesPath, 'screen-bridge', bridgeName);
+    if (!fileExists(executable)) throw new Error('串流组件缺失，请重新构建完整应用');
     return { executable, args: [], cwd: path.dirname(executable) };
   }
-  const builtBridge = path.join(root, '.local', 'screen-bridge', 'XANALI-Panel-Bridge', 'XANALI-Panel-Bridge.exe');
-  if (!env.XANALI_PYTHON && isFile(builtBridge)) return { executable: builtBridge, args: [], cwd: path.dirname(builtBridge) };
+  const builtBridge = path.join(root, '.local', 'screen-bridge', 'XANALI-Panel-Bridge', bridgeName);
+  if (!env.XANALI_PYTHON && fileExists(builtBridge)) return { executable: builtBridge, args: [], cwd: path.dirname(builtBridge) };
   const bridgeRoot = path.join(root, 'screen-bridge');
-  return { executable: env.XANALI_PYTHON || 'python', args: ['-u', path.join(bridgeRoot, 'app', 'panel_stream_bridge.py')], cwd: bridgeRoot };
+  return { executable: env.XANALI_PYTHON || (platform === 'darwin' ? 'python3' : 'python'), args: ['-u', path.join(bridgeRoot, 'app', 'panel_stream_bridge.py')], cwd: bridgeRoot };
 }
 
 // A single queued write and one latest bitmap bound memory when USB is slower than paint.

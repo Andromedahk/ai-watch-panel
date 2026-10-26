@@ -47,13 +47,50 @@ test('packaged availability requires the bridge, FFmpeg and device daemon before
 });
 
 test('unsupported platforms are unavailable while isolated preview requires no bridge resources', () => {
-  for (const platform of ['darwin', 'linux']) {
-    const state = streamAvailability({ platform, fileExists: () => assert.fail('unsupported platforms must not probe a bridge') });
+  for (const options of [{ platform: 'linux' }, { platform: 'darwin', osRelease: '23.6.0' }, { platform: 'darwin', osRelease: 'unknown' }]) {
+    const state = streamAvailability({ ...options, fileExists: () => assert.fail('unsupported platforms must not probe a bridge') });
     assert.equal(state.available, false);
-    assert.match(state.unavailableReason, /Windows/);
+    assert.match(state.unavailableReason, /Windows|macOS 15/);
   }
   assert.deepEqual(streamAvailability({ platform: 'darwin', packaged: true, preview: true,
     fileExists: () => assert.fail('fixture preview must not require production components') }), { available: true, unavailableReason: null });
+});
+
+test('macOS 15+ on both native architectures requires its native bridge, encoder and libusb', () => {
+  const resourcesPath = path.resolve('mac-fixture-resources'), bundle = path.join(resourcesPath, 'screen-bridge');
+  const files = new Set([path.join(bundle, 'XANALI-Panel-Bridge.exe'),
+    path.join(bundle, '_internal/resources/ffmpeg/ffmpeg.exe'), path.join(bundle, '_internal/resources/streamd-arm64')]);
+  for (const arch of ['arm64', 'x64']) {
+    const options = { packaged: true, platform: 'darwin', osRelease: '24.0.0', arch, resourcesPath, fileExists: file => files.has(file) };
+    assert.equal(streamAvailability(options).available, false, 'Windows executables never satisfy a native Mac build');
+    files.add(path.join(bundle, 'XANALI-Panel-Bridge'));
+    files.add(path.join(bundle, '_internal/resources/ffmpeg/ffmpeg'));
+    assert.equal(streamAvailability(options).available, false, 'libusb is mandatory before enabling Mac USB streaming');
+    files.add(path.join(bundle, '_internal/resources/libusb/libusb-1.0.0.dylib'));
+    assert.equal(streamAvailability(options).available, true);
+    assert.equal(streamAvailability({ ...options, osRelease: '25.1.0' }).available, true);
+    assert.equal(streamAvailability({ ...options, arch: 'ia32' }).available, false);
+    assert.deepEqual(bridgeCommand(options), { executable: path.join(bundle, 'XANALI-Panel-Bridge'), args: [], cwd: bundle });
+    files.delete(path.join(bundle, 'XANALI-Panel-Bridge'));
+    files.delete(path.join(bundle, '_internal/resources/libusb/libusb-1.0.0.dylib'));
+  }
+});
+
+test('Mac source and prebuilt bridge resolve within the project, with python3 only as a source fallback', () => {
+  const root = path.resolve('mac-fixture-repo'), files = new Set();
+  const options = { platform: 'darwin', osRelease: '24.3.0', arch: 'arm64', root, env: {}, fileExists: file => files.has(file) };
+  for (const name of ['app/panel_stream_bridge.py', 'resources/ffmpeg/ffmpeg', 'resources/streamd-arm64', 'resources/libusb/libusb-1.0.0.dylib']) {
+    files.add(path.join(root, 'screen-bridge', name));
+  }
+  assert.equal(streamAvailability(options).available, true);
+  assert.equal(bridgeCommand(options).executable, 'python3');
+  const binary = path.join(root, '.local/screen-bridge/XANALI-Panel-Bridge/XANALI-Panel-Bridge');
+  files.add(binary);
+  assert.equal(bridgeCommand(options).executable, binary);
+  assert.equal(streamAvailability(options).available, false, 'an incomplete chosen bundle is not replaced silently');
+  const source = { ...options, env: { XANALI_PYTHON: '/fixture/python3' } };
+  assert.equal(bridgeCommand(source).executable, '/fixture/python3');
+  assert.equal(streamAvailability(source).available, true);
 });
 
 test('development availability follows the chosen prebuilt or Python bridge and its matching resources', () => {

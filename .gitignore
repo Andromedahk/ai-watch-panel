@@ -15,5 +15,6 @@ __pycache__/
 *.py[cod]
 *.spec
 screen-bridge/resources/ffmpeg/
+screen-bridge/resources/libusb/
 screen-bridge/resources/streamd-arm64
 screen-bridge/tools/streamd/streamd-arm64

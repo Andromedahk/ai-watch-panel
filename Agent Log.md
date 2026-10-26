@@ -20,6 +20,21 @@
 
 ---
 
+## 2026-10-27 · Codex（GPT-6 / Codex 桌面本地执行环境；协作 mac_usb_transport、mac_bridge_build、mac_port_review）· macOS 15+ USB 小屏移植
+
+- 分支：`codex/macos-usb-streaming`，先 fetch 最新远端，再从 `origin/main` 的 `2a9f856` 创建分支并执行 `git pull --ff-only origin main`，结果 Already up to date；未在 main 上开发。
+- 目的：按用户要求将原 AI Watch 内置展域 USB 串流移植到 macOS 15 及以上，同时覆盖 Apple Silicon 与 Intel；保留原桌面和已确认的小屏布局。
+- 操作：
+  - 将 `kanali_stream.py` 的协议与系统传输分离，Windows 原实现放入 `usb_windows.py`，新增 `usb_macos.py`，通过随包 libusb 发现固定 VID/PID 的打印接口及 bulk 端点。增加设备占用锁、有限超时、部分读取保留、短写/断开报错和先结束读取再关闭的清理顺序；不强制卸载驱动、不重置设备或修改配置。
+  - Electron、设置页和 Python 桥支持 Mac 原生程序路径及 macOS 15 / 64 位架构检查。`--check` 在 Mac 加载库但不初始化/枚举 USB；`--probe` 仅读取设备信息并关闭，不部署或播放。原布局、动效、台词和只读交互保持共用。
+  - 增加 Mac 固定上游源码的 FFmpeg/x264/libusb 构建器、Python 3.13 桥打包、实际 Mach-O 架构及签名检查，原生双架构 CI 与无 USB 编码验证；同步 Windows hidden import、Widgets 打包入口以及编码测试的跨平台安全拦截。源码与许可证随包，输出和运行时不进 Git。
+  - 更新 README、串流说明、桥接说明和第三方组件说明，区分已公开 v0.20.0 与本次未发布的 Mac 功能。
+- 本地验证：类型检查、Vite 生产构建、35 项定向 Node 测试通过；49 项 Python 测试中 48 通过、1 项 Mac flock 实测因 Windows 跳过。脚本语法和工作流 YAML 检查通过。Vite 保留既有大 chunk 提示。
+- 失败与修正：初次调用未创建的本地 Python 环境失败，随后使用可用解释器。新增资源验证最初使用 Python 3.11 才提供的 `hashlib.file_digest`，导致 Python 3.10 下 8 个测试错误；改为分块 SHA-256 后全部通过。本地 Windows 桥首次重建缺少 PyInstaller，正在准备隔离构建环境。全量 Node 在 Windows 上结果为 507 通过、38 失败、17 跳过；从未修改的 `2a9f856` 导出基线后得到 497 通过、38 失败、17 跳过，失败测试名完全一致，新增失败 0。失败集中在既有 Unix 路径、权限和 socket 假设，不把它们记为通过。
+- 未完成 / 验证边界：准备通过功能分支运行 `publish: false` 的原生 CI，Mac 编译、签名和包内运行尚未记为通过；实际 USB 接口可占用性、两种 Mac 的出画、帧率、热负载和恢复仍须连接实体屏幕验收。未合入 main、未发布或替换用户正在运行的应用。
+
+---
+
 ## 2026-10-26 · Codex（GPT-6 / Codex 桌面本地执行环境；协作 release_review、inspect_local_docs、python_test_portability）· v0.20.0 发布与本机替换安装完成
 
 - 分支：`main`；产品合并/发布提交 `3d50e4aea960077d34c8cee2f259fb95968b9e29`（双亲为 `4b66a00`、`59f20fe`），本记录为后续文档提交，不改变发布代码。

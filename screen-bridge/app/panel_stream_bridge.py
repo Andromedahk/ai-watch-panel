@@ -11,6 +11,7 @@ import argparse
 from collections import deque
 import json
 import os
+import platform
 from pathlib import Path
 import queue
 import signal
@@ -36,6 +37,42 @@ def default_resources():
     if getattr(sys, "frozen", False):
         return Path(sys._MEIPASS) / "resources"
     return ROOT / "resources"
+
+
+def encoder_path(resources):
+    return Path(resources) / "ffmpeg" / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+
+
+def usb_platform_error():
+    if os.name == "nt":
+        return None
+    if sys.platform != "darwin":
+        return "展域 USB 串流需要 Windows 或 macOS 15 及以上；其他平台可以使用面板预览"
+    version = platform.mac_ver()[0].split(".")[0]
+    if not version.isdigit() or int(version) < 15:
+        return "Mac USB 串流需要 macOS 15 及以上"
+    if platform.machine() not in ("arm64", "x86_64"):
+        return "Mac USB 串流支持 Apple Silicon 和 Intel 64 位处理器"
+    return None
+
+
+def validate_runtime(resources, dry_run=False):
+    resources = Path(resources)
+    if not encoder_path(resources).is_file():
+        raise FileNotFoundError("缺少随附的 FFmpeg 编码器；请重新构建完整的 AI Watch 串流组件")
+    if dry_run:
+        return
+    error = usb_platform_error()
+    if error:
+        raise RuntimeError(error)
+    if not (resources / "streamd-arm64").is_file():
+        raise FileNotFoundError("缺少 resources/streamd-arm64；请先构建设备端服务")
+    if os.name != "nt":
+        # Load the bundled native library before any takeover or input worker.
+        # Checking its symbols does not enumerate or claim a USB device.
+        protocol = streaming._protocol()
+        protocol.configure_resources(resources)
+        protocol.backend_check(resources)
 
 
 def unbuffered_input(stream):
@@ -109,7 +146,7 @@ class PanelStreamSession(streaming.StreamSession):
 
     def _raw(self, stop, incoming):
         config = self.config
-        binary = self.resources_dir / "ffmpeg" / "ffmpeg.exe"
+        binary = encoder_path(self.resources_dir)
         proc = subprocess.Popen(raw_ffmpeg_command(binary, config), stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -228,12 +265,7 @@ class PanelStreamSession(streaming.StreamSession):
 
     def run(self, stop):
         error, restored = None, False
-        if not (self.resources_dir / "ffmpeg" / "ffmpeg.exe").is_file():
-            raise FileNotFoundError("缺少 resources/ffmpeg/ffmpeg.exe；请先准备 XANALI 编码器")
-        if not self.dry_run and not (self.resources_dir / "streamd-arm64").is_file():
-            raise FileNotFoundError("缺少 resources/streamd-arm64；请先准备设备端服务")
-        if not self.dry_run and os.name != "nt":
-            raise RuntimeError("展域 USB 串流当前仅支持 Windows；其他平台可以使用面板预览")
+        validate_runtime(self.resources_dir, self.dry_run)
         incoming = LatestFrameInput(self.source, self.config.width * self.config.height * 4, stop)
         incoming.start()
         try:
@@ -290,8 +322,10 @@ def main(argv=None):
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--bitrate-mbps", type=int, default=8)
     parser.add_argument("--resources", type=Path, default=default_resources())
-    parser.add_argument("--check", action="store_true", help="Check local runtime files without opening USB")
-    parser.add_argument("--dry-run", action="store_true", help="Encode input without accessing any USB device")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="Check local runtime files without opening USB")
+    mode.add_argument("--dry-run", action="store_true", help="Encode input without accessing any USB device")
+    mode.add_argument("--probe", action="store_true", help="Read device information without deploying or starting playback")
     args = parser.parse_args(argv)
     stop, output_lock = threading.Event(), threading.Lock()
     if hasattr(sys.stdout, "reconfigure"):
@@ -311,12 +345,28 @@ def main(argv=None):
         config = streaming.StreamConfig(width=args.width, height=args.height, fps=args.fps,
                                         bitrate_mbps=args.bitrate_mbps, show_cursor=False).validate()
         if args.check:
-            encoder = (args.resources / "ffmpeg" / "ffmpeg.exe").is_file()
+            encoder = encoder_path(args.resources).is_file()
             daemon = (args.resources / "streamd-arm64").is_file()
+            problem = None
+            try:
+                validate_runtime(args.resources)
+            except (OSError, RuntimeError) as exc:
+                problem = str(exc)
             emit("check", dict(protocol=PROTOCOL_VERSION, device=DEVICE_ID, encoder=encoder,
                                daemon=daemon, platform=sys.platform,
-                               available=encoder and daemon and os.name == "nt"))
-            return 0 if encoder and daemon and os.name == "nt" else 1
+                               available=problem is None, reason=problem))
+            return 0 if problem is None else 1
+        if args.probe:
+            validate_runtime(args.resources)
+            screen = streaming._protocol().Screen()
+            try:
+                info = screen.info()
+                emit("probe", dict(device=DEVICE_ID, platform=sys.platform,
+                                   info={key: info[key] for key in ("product", "firmware", "app") if key in info},
+                                   playbackStarted=False))
+            finally:
+                screen.close()
+            return 0
         session = PanelStreamSession(config, args.resources, emit, unbuffered_input(sys.stdin.buffer), args.dry_run)
         session.run(stop)
         return 0

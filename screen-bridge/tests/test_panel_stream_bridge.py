@@ -1,4 +1,5 @@
 import io
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -7,7 +8,7 @@ import threading
 import time
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 from app import panel_stream_bridge as bridge
 from app.streaming import StreamConfig
@@ -25,6 +26,7 @@ class PanelBridgeTests(unittest.TestCase):
     def fake_runtime(self, root):
         (root / "ffmpeg").mkdir()
         (root / "ffmpeg" / "ffmpeg.exe").write_bytes(b"placeholder")
+        (root / "ffmpeg" / "ffmpeg").write_bytes(b"placeholder")
         (root / "streamd-arm64").write_bytes(b"placeholder")
 
     def test_fragmented_frames_are_reassembled_and_only_latest_is_retained(self):
@@ -163,7 +165,7 @@ class PanelBridgeTests(unittest.TestCase):
         self.assertTrue(stopped["failed"])
         self.assertFalse(stopped["restored"])
 
-    def test_non_windows_platform_rejects_usb_before_reading_input_or_deploying(self):
+    def test_unsupported_platform_rejects_usb_before_reading_input_or_deploying(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.fake_runtime(root)
@@ -171,12 +173,88 @@ class PanelBridgeTests(unittest.TestCase):
             # Replace only this module's platform view; changing the shared os.name
             # would also alter pathlib's native path selection on the host.
             with patch.object(bridge, "os", SimpleNamespace(name="posix")), \
+                 patch.object(bridge.sys, "platform", "linux"), \
                  patch.object(bridge.LatestFrameInput, "start") as start, \
                  patch.object(session, "_deploy") as deploy:
-                with self.assertRaisesRegex(RuntimeError, "仅支持 Windows"):
+                with self.assertRaisesRegex(RuntimeError, "需要 Windows 或 macOS 15"):
                     session.run(threading.Event())
                 start.assert_not_called()
                 deploy.assert_not_called()
+
+    def test_mac_version_and_architecture_gate_before_any_usb_access(self):
+        for version, machine, supported in [("14.7", "arm64", False), ("15.0", "arm64", True),
+                                             ("15.1", "x86_64", True), ("26.0", "arm64", True),
+                                             ("", "arm64", False), ("15.0", "i386", False)]:
+            with self.subTest(version=version, machine=machine), \
+                 patch.object(bridge, "os", SimpleNamespace(name="posix")), \
+                 patch.object(bridge.sys, "platform", "darwin"), \
+                 patch.object(bridge.platform, "mac_ver", return_value=(version, (), "")), \
+                 patch.object(bridge.platform, "machine", return_value=machine):
+                self.assertEqual(bridge.usb_platform_error() is None, supported)
+
+    def test_mac_checks_library_before_starting_input_or_taking_over_device(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fake_runtime(root)
+            protocol = Mock()
+            protocol.backend_check.side_effect = RuntimeError("libusb architecture mismatch")
+            session = bridge.PanelStreamSession(StreamConfig(), root, lambda *_: None, io.BytesIO())
+            with patch.object(bridge, "os", SimpleNamespace(name="posix")), \
+                 patch.object(bridge, "usb_platform_error", return_value=None), \
+                 patch.object(bridge.streaming, "_protocol", return_value=protocol), \
+                 patch.object(bridge.LatestFrameInput, "start") as start, \
+                 patch.object(session, "_deploy") as deploy:
+                with self.assertRaisesRegex(RuntimeError, "architecture mismatch"):
+                    session.run(threading.Event())
+                start.assert_not_called()
+                deploy.assert_not_called()
+                protocol.configure_resources.assert_called_once_with(root)
+                protocol.backend_check.assert_called_once_with(root)
+                protocol.Screen.assert_not_called()
+
+    def test_mac_dry_run_encodes_without_loading_or_claiming_usb(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "ffmpeg").mkdir()
+            (root / "ffmpeg" / "ffmpeg").write_bytes(b"placeholder")
+            with patch.object(bridge, "os", SimpleNamespace(name="posix")), \
+                 patch.object(bridge.streaming, "_protocol") as protocol:
+                bridge.validate_runtime(root, dry_run=True)
+                protocol.assert_not_called()
+                self.assertEqual(bridge.encoder_path(root), root / "ffmpeg" / "ffmpeg")
+
+    def test_runtime_check_never_opens_a_device_and_reports_unloadable_library(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fake_runtime(root)
+            protocol = Mock()
+            for error in (None, OSError("native library missing")):
+                protocol.backend_check.side_effect = error
+                output = io.StringIO()
+                with patch.object(bridge, "os", SimpleNamespace(name="posix")), \
+                     patch.object(bridge, "usb_platform_error", return_value=None), \
+                     patch.object(bridge.streaming, "_protocol", return_value=protocol), \
+                     patch.object(bridge.sys, "stdout", output):
+                    result = bridge.main(["--check", "--resources", str(root)])
+                message = json.loads(output.getvalue())
+                self.assertEqual(result, 1 if error else 0)
+                self.assertEqual(message["data"]["available"], error is None)
+                protocol.Screen.assert_not_called()
+
+    def test_probe_reads_only_identity_and_closes_without_deployment(self):
+        protocol = Mock()
+        protocol.Screen.return_value.info.return_value = {"product": "PASE_1021", "app": "vendor", "serial": "private-example"}
+        output = io.StringIO()
+        with patch.object(bridge, "validate_runtime"), \
+             patch.object(bridge.streaming, "_protocol", return_value=protocol), \
+             patch.object(bridge.PanelStreamSession, "run") as run, \
+             patch.object(bridge.sys, "stdout", output):
+            self.assertEqual(bridge.main(["--probe"]), 0)
+        run.assert_not_called()
+        self.assertEqual(protocol.Screen.return_value.method_calls, [unittest.mock.call.info(), unittest.mock.call.close()])
+        payload = json.loads(output.getvalue())
+        self.assertFalse(payload["data"]["playbackStarted"])
+        self.assertNotIn("serial", payload["data"]["info"])
 
     def test_slow_usb_applies_backpressure_without_dropping_h264_frames(self):
         stop, sixth_packet = threading.Event(), threading.Event()

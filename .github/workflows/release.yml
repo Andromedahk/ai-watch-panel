@@ -40,10 +40,10 @@ jobs:
   build:
     name: ${{ matrix.platform }}-${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     needs: encoder
     env:
-      MACOSX_DEPLOYMENT_TARGET: '13.0'
+      MACOSX_DEPLOYMENT_TARGET: '15.0'
     strategy:
       fail-fast: false
       matrix:
@@ -72,15 +72,29 @@ jobs:
         run: npm test
       - run: npm run build
       - uses: actions/setup-python@v5
-        if: matrix.platform == 'win'
         with:
           python-version: '3.13'
-          architecture: x64
+          architecture: ${{ matrix.arch }}
       - uses: actions/setup-go@v5
-        if: matrix.platform == 'win'
         with:
           go-version: '1.24.x'
           cache: false
+      - name: Install native macOS build tools
+        if: matrix.platform == 'mac'
+        run: brew install pkg-config nasm
+      - name: Build native macOS encoder and libusb from pinned sources
+        if: matrix.platform == 'mac'
+        run: npm run build:screen-resources:mac
+      - name: Build the native macOS screen bridge
+        if: matrix.platform == 'mac'
+        run: npm run build:screen-bridge:mac
+      - name: Test native macOS bridge and real encoding without USB
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          .local/screen-bridge-venv/bin/python -m unittest discover -s screen-bridge/tests -p 'test_*.py'
+          (cd screen-bridge/tools/streamd && go test ./... && go vet ./...)
+          node scripts/verify-screen-encoder.mjs
       - name: Download this run's source-built encoder
         if: matrix.platform == 'win'
         uses: actions/download-artifact@v4
@@ -131,6 +145,7 @@ jobs:
         run: |
           codesign --verify --deep --strict --all-architectures "$(dirname "$(dirname "$(dirname "${{ matrix.executable }}")")")"
           hdiutil verify release/*.dmg
+          python3 scripts/verify-release-screen-bridge-macos.py --bridge-root "$(dirname "$(dirname "${{ matrix.executable }}")")/Resources/screen-bridge"
       - name: Smoke test packaged application
         run: npm run test:release -- "${{ matrix.executable }}"
       - name: Verify the packaged Windows bridge and source

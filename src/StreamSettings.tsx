@@ -19,7 +19,7 @@ export function StreamSettings({ state, onState }: { state: PanelState; onState:
     fps: stream.fps, bitrateMbps: stream.bitrateMbps, pageSeconds: stream.pageSeconds, showMascot: stream.showMascot }), [configKey]);
   const transitioning = busy || stream.status === 'starting' || stream.status === 'stopping';
   // Preview is granted only by the main process' isolated test fixture; it never opens USB.
-  const available = Boolean(window.panel?.startStream) && (state.platform === 'win32' || stream.preview) && stream.available !== false;
+  const available = Boolean(window.panel?.startStream) && (['win32', 'darwin'].includes(state.platform) || stream.preview) && stream.available !== false;
   const status = { stopped: s('未串流', 'Stopped'), starting: s('正在连接小屏幕', 'Connecting display'), running: s('正在串流', 'Streaming'), stopping: s('正在恢复屏幕', 'Restoring display'), error: s('串流未连接', 'Disconnected') }[stream.status];
   async function apply(start: boolean) {
     const panel = window.panel;
@@ -57,9 +57,10 @@ export function StreamSettings({ state, onState }: { state: PanelState; onState:
     <label className="switch-row"><span>{s('二次元看板娘模块', 'Anime companion module')}<small>{s('保留台词、表情和呼吸动效；刷新间隔沿用外观设置', 'Keep dialogue, expressions and breathing animations; use the appearance refresh interval')}</small></span><input aria-label={s('二次元看板娘模块', 'Anime companion module')} type="checkbox" checked={draft.showMascot} disabled={transitioning} onChange={e => setDraft({ ...draft, showMascot: e.target.checked })} /></label>
     <p className="appearance-hint">{s('小屏幕自动轮播模块、额度和币种。打开程序、拖动排序、刷新和翻页按钮均关闭；提问或授权请求会全屏提醒，请回到对应 Agent 处理。', 'Modules, quotas and currencies rotate automatically. Launch, reorder, refresh and paging controls are disabled. Input or approval requests take over the display; respond in the relevant Agent.')}</p>
     <p className="appearance-hint">{s('首次连接请先退出 KANALI（含 Screen.exe / UDB.exe）。默认保留动效；实际帧率取决于编码与 USB 传输。更改参数会重启当前串流。', 'Exit KANALI (including Screen.exe / UDB.exe) before connecting. Animations are preserved. Actual frame rate depends on encoding and USB transfer. Applying parameters restarts the current stream.')}</p>
-    {!available && <p className="stream-error">{state.platform === 'win32'
+    {state.platform === 'darwin' && <p className="appearance-hint">{s('支持 macOS 15 及以上的 Apple Silicon 和 Intel Mac。连接后若系统询问是否允许 USB 配件，请选择允许；请先关闭其他占用屏幕的软件。', 'Supports Apple Silicon and Intel Macs on macOS 15 or later. Allow the USB accessory if macOS asks, and close other software using the display.')}</p>}
+    {!available && <p className="stream-error">{stream.unavailableReason || (['win32', 'darwin'].includes(state.platform)
       ? s('此安装包未包含完整串流组件，请使用包含串流桥的 AI Watch 构建。', 'This installation does not include the display streaming components. Use an AI Watch build with the display bridge.')
-      : s('连接展域屏幕目前需要 Windows 版 AI Watch；浏览器仅预览界面。', 'Connecting a Zhanyu display currently requires AI Watch for Windows; the browser only previews the UI.')}</p>}
+      : s('USB 串流需要 Windows 或 macOS 15 及以上的 AI Watch；浏览器仅预览界面。', 'USB streaming requires AI Watch for Windows or macOS 15 or later; the browser only previews the UI.'))}</p>}
     {(error || stream.error) && <p className="stream-error" role="alert">{error || stream.error}</p>}
     <div className="stream-actions">
       <button className="save-button" disabled={!available || transitioning} onClick={() => void apply(!stream.enabled)}>{stream.enabled && stream.status !== 'error' ? s('应用串流参数', 'Apply stream parameters') : s('开启小屏幕串流', 'Start display streaming')}</button>

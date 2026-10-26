@@ -10,17 +10,20 @@ assert.match(path.basename(process.env.AI_WATCH_TEST_PROFILE), /^ai-watch-screen
 assert.ok(['fixture', 'glow-running', 'glow-attention'].includes(process.env.AI_WATCH_TEST_STATUS), 'Synthetic status is required');
 assert.notEqual(process.env.AI_WATCH_STREAM_PREVIEW, '1', 'This test must use the real encoder path');
 assert.ok(!process.env.XANALI_PYTHON, 'Only the packaged helper is allowed');
-const expectedBridge = path.resolve(__dirname, '../../.local/screen-bridge/XANALI-Panel-Bridge/XANALI-Panel-Bridge.exe');
+assert.ok(['win32', 'darwin'].includes(process.platform), 'Encoder QA requires a supported native host');
+const bridgeName = process.platform === 'win32' ? 'XANALI-Panel-Bridge.exe' : 'XANALI-Panel-Bridge';
+const expectedBridge = path.resolve(__dirname, '../../.local/screen-bridge/XANALI-Panel-Bridge', bridgeName);
 assert.ok(fs.statSync(expectedBridge).isFile(), 'Build the local display bridge before encoder QA');
 const originalSpawn = childProcess.spawn;
 global.aiWatchEncoderQA = { calls: [] };
 childProcess.spawn = function (command, args = [], options) {
   const basename = path.basename(String(command)).toLowerCase();
-  if (basename !== 'xanali-panel-bridge.exe') {
+  if (!['xanali-panel-bridge.exe', 'xanali-panel-bridge'].includes(basename)) {
     assert.ok(!args.some(argument => String(argument).includes('panel_stream_bridge.py')), 'Python bridge fallback is forbidden in this test');
     return originalSpawn.call(this, command, args, options);
   }
-  assert.equal(path.resolve(String(command)).toLowerCase(), expectedBridge.toLowerCase(), 'Only the verified local helper may run');
+  const normalize = value => process.platform === 'win32' ? value.toLowerCase() : value;
+  assert.equal(normalize(path.resolve(String(command))), normalize(expectedBridge), 'Only the verified local helper may run');
   const safeArgs = [...args.filter(argument => argument !== '--dry-run'), '--dry-run'];
   const report = { basename, dryRun: true, args: safeArgs, events: [], stderr: '', exit: null, closed: false };
   global.aiWatchEncoderQA.calls.push(report);

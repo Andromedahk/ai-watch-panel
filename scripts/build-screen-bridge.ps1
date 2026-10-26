@@ -98,6 +98,7 @@ $bridgeArgs = @(
     '--paths', (Join-Path $sourceRoot 'app'),
     '--paths', (Join-Path $sourceRoot 'tools/poc'),
     '--hidden-import', 'kanali_stream', '--hidden-import', 'deploy_streamd',
+    '--hidden-import', 'usb_windows', '--exclude-module', 'usb_macos',
     '--exclude-module', 'tkinter', '--exclude-module', '_tkinter',
     '--add-data', ($daemonPath + ';resources'),
     (Join-Path $sourceRoot 'app/panel_stream_bridge.py')

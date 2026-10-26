@@ -36,7 +36,7 @@ try {
   assert.ok(running.stream.frames > 0);
   const calls = await app.evaluate(() => global.aiWatchEncoderQA.calls);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].basename, 'xanali-panel-bridge.exe');
+  assert.equal(calls[0].basename, process.platform === 'win32' ? 'xanali-panel-bridge.exe' : 'xanali-panel-bridge');
   assert.equal(calls[0].args.at(-1), '--dry-run');
   const ready = calls[0].events.find(event => event.type === 'ready').data;
   assert.equal(ready.dryRun, true);

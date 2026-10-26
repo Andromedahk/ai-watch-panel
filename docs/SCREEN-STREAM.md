@@ -4,10 +4,12 @@
 
 ## 使用
 
-1. 使用含桥接组件的 Windows x64 AI Watch；关闭 KANALI 及其占用 USB 的子进程。
+1. 使用含桥接组件的 Windows x64 或 macOS 15+ AI Watch（Mac 按芯片选择 arm64 / x64）；通过 USB 连接屏幕，关闭其他占用屏幕的程序，包括 Windows KANALI 及其子进程。
 2. 在「配置 → 小屏幕串流」选择展域屏幕，默认 2240 × 1080、30 FPS、8 Mbps，点击开启。
 3. 主桌面变成配置页。标题栏按钮可最小化或收纳到托盘，屏幕继续运行。外观、模块、来源、图片、LAN 同步均沿用原设置。
 4. 点击关闭串流，等待停止和恢复完成，再使用原厂软件。错误会显示在配置页，可重新应用参数重连。
+
+Mac 的桥、编码器和 libusb 随 AI Watch 打包，使用者无需另装 Python、Homebrew 或系统驱动。Apple Silicon 笔记本可能要求[允许 USB 配件连接](https://support.apple.com/en-ca/102282)；先解锁 Mac，再按系统提示允许。若系统驱动或其他程序已占用接口，程序会报错，不执行驱动卸载、USB 重置或提权。系统睡眠可能中断串流，唤醒后可重新应用参数。
 
 看板娘默认开启，复用原版中英台词，刷新间隔沿用「外观 → 下半屏」。若关闭自动刷新，人物仍根据状态显示台词；若要自动换句，请将间隔设为 5–300 秒。无需开启桌面二次元模式才能在小屏显示看板娘。小屏 Agent 卡片是否使用角色图仍跟随二次元模式。
 
@@ -30,12 +32,13 @@ AI Watch 主进程 ──→ 桌面原配置页
            ↓ 只读 IPC
 离屏 React 页面（原 ProviderCard / Mascot + 额度历史）
            ↓ 固定大小 BGRA 位图
-内部 Python 桥 → FFmpeg H.264 → XANALI USB 传输 → 展域屏幕
+内部 Python 桥 → FFmpeg H.264 → Windows USB / macOS libusb → 展域屏幕
 ```
 
 - 新的 `electron/screen-stream-policy.cjs` 是设备能力表和参数校验边界，目前仅允许 `zhanyu`。分辨率必须是 64–4096 内的偶数，面积不超过 2240 × 1080；目标帧率 1–60、码率 1–50 Mbps、模块间隔 4–120 秒。
 - `screen-preload.cjs` 仅暴露读取状态和订阅，不暴露系统操作。主进程验证消息发送窗口；桌面在串流模式下也禁止程序启动、重排和手动刷新。
 - 离屏窗口使用 sandbox/contextIsolation，后台不节流；内容尺寸与像素比例固定，独立于主显示器 DPI。不采集整个桌面，也不会将电脑上的其他窗口送往设备。
+- Mac 使用随包 libusb 访问 VID `391a` / PID `1021`，按 USB 描述符选择打印接口及双向 bulk 端点。不会更换设备配置或强制卸载驱动；按设备加跨进程锁，阻止两个 AI Watch 同时接管同一屏幕。Windows 保留原有 USB 传输。Mac 不使用桌面采集 API，因此无需屏幕录制权限。
 - 每次只保留最新完整位图，管道堵塞时丢弃旧画面，不积压动画。统计采用桥接实际编码帧数，目标 FPS 不等于实机 FPS。
 - 停止关闭标准输入并等待桥接进程完全退出，读取设备恢复结果；取消连接、编码器错误、USB 中断与退出应用共用停止流程。恢复失败会报告错误，不把杀进程当作成功恢复。
 - `src/ScreenSurface.tsx` 负责屏幕布局与提醒，`src/screen-attention.ts` 从当前等待状态生成稳定的轮播队列；`src/view/skins.tsx` 和 `insights.tsx` 通过可选只读模式复用原组件。台词缺失的旧原型没有使用 Mascot，本次不再维护平行的简化看板娘。
@@ -43,7 +46,7 @@ AI Watch 主进程 ──→ 桌面原配置页
 
 ## 开发和打包
 
-常规桌面/网页构建不需要 Python；连接屏幕或制作含屏幕功能的 Windows 包时需要桥接资源。按 [桥接说明](../screen-bridge/README.md) 准备 Windows x64 Python、FFmpeg 和 Go。Go 源码、Python 桥及许可证随内部组件保留；运行时二进制和构建输出均忽略，不提交到 Git。
+常规桌面/网页构建不需要 Python；连接屏幕或制作含屏幕功能的安装包时需要桥接资源。按 [桥接说明](../screen-bridge/README.md) 准备对应平台的 Python、编码器和 Go。Mac 还会构建 libusb。Go 源码、Python 桥、原生依赖源码及许可证随内部组件保留；运行时二进制和构建输出均忽略，不提交到 Git。
 
 ```powershell
 npm ci
@@ -55,7 +58,9 @@ npm run dist:win  # 原 AI Watch 的 NSIS 安装包
 
 原应用输出在 `release/`；`resources/screen-bridge/` 是内部编码/传输辅助程序，不是独立界面。开发时优先使用已构建的辅助程序，也可设置 `XANALI_PYTHON` 指向装好依赖的 Python 解释器。桥接源文件位于仓库内 `screen-bridge/`，不依赖外部 XANALI 工作目录。
 
-正式 Release CI 从固定的 FFmpeg / x264 官方源码构建 Windows x64 编码器，再构建 Python 桥和 ARM64 设备端程序；完整对应源码、构建脚本与许可证随 Windows 包保留。发布前运行资源检查、真实无 USB 编码、打包应用及 NSIS 安装后检查。自定义本地构建仍需按桥接说明准备编码器；缺少组件时设置页禁用开启按钮并说明原因。macOS / Linux 不含 Windows 桥。
+Mac 在 macOS 15+ 的原生环境执行 `npm run pack:mac` 或 `npm run dist:mac`，分别生成当前芯片的 App 或 DMG / ZIP；不能拿一个架构的桥打入另一架构的应用。两个 CI runner 分别生成 Apple Silicon 与 Intel 包。缺少组件时设置页禁用开启按钮并说明原因；低于 macOS 15 的串流请求会被主进程和桥同时拒绝。
+
+正式 Release CI 从固定的 FFmpeg / x264 官方源码构建对应主机的编码器，Mac 再构建 libusb，随后构建 Python 桥和 ARM64 设备端程序。设备端程序始终运行在屏幕中，与 Mac 芯片架构无关。发布前运行资源检查、真实无 USB 编码和打包应用检查；Windows 另有 NSIS 安装后检查。Linux 不提供展域 USB 适配。
 
 无硬件检查：
 
@@ -69,4 +74,4 @@ node scripts/verify-screen-encoder.mjs  # 先构建内部桥，真实编码但�
 
 测试脚本创建隔离配置、合成 Agent 数据和离屏预览，不访问真实账号或 USB。`AI_WATCH_STREAM_PREVIEW=1` 仅在隔离的测试配置配合合成状态时生效。测试覆盖设置页、只读控件/IPC、后台帧与台词、全屏提醒和清除、翻页、配置重启与恢复桌面。Python 编码测试和 Go 检查见桥接说明。
 
-硬件边界：当前只具备 PASE_1021 适配代码；未在本功能中完成实机 USB 串流、画质、热负载、持续运行或厂商界面恢复验收。macOS / Linux 保留原 AI Watch 功能，展域桥接暂限 Windows。新硬件控制文案提供中文及英文回退，原有面板语言保持完整。
+硬件边界：当前只具备 PASE_1021 适配代码；未在本功能中完成实机 USB 串流、画质、热负载、持续运行或厂商界面恢复验收。Mac 原生编译和实际 USB 接口占用必须分别验证，模拟传输测试不能证明设备一定可被 macOS 占用。新硬件控制文案提供中文及英文回退，原有面板语言保持完整。

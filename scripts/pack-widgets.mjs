@@ -72,6 +72,7 @@ if (typeof identity !== 'string' || !/^[A-Fa-f0-9]{40}$/.test(identity.trim())) 
 const signingFingerprint = identity.trim().toUpperCase();
 
 const architecture = parseArchitecture(process.argv.slice(2));
+if (architecture !== hostArch()) fail('the USB bridge requires packaging on a matching native Mac architecture');
 const appGroup = `${teamIdentifier}.app.aiwatch.panel`;
 const packagingEnvironment = {
   ...process.env,
@@ -103,6 +104,9 @@ try {
 run(process.env.npm_execpath ? process.execPath : 'npm', process.env.npm_execpath
   ? [process.env.npm_execpath, 'run', 'build']
   : ['run', 'build']);
+run(process.env.npm_execpath ? process.execPath : 'npm', process.env.npm_execpath
+  ? [process.env.npm_execpath, 'run', 'build:screen-bridge:mac']
+  : ['run', 'build:screen-bridge:mac']);
 run(process.execPath, [join(repository, 'scripts', 'build-widgets.mjs'), '--arch', architecture, '--check']);
 
 const packageMetadata = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8'));
