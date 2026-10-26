@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build native macOS 15+ FFmpeg/x264 and libusb from pinned upstream releases.
 # Each architecture is built on its own native runner; this is not a Rosetta build.
-set -euo pipefail
+set -Eeuo pipefail
 
 [[ $(uname -s) == Darwin ]] || { echo 'Run this script on macOS 15 or later.' >&2; exit 1; }
 macos_major=$(sw_vers -productVersion | cut -d. -f1)
@@ -31,6 +31,50 @@ for command in curl shasum tar make pkg-config nasm xcrun otool install_name_too
   command -v "$command" >/dev/null || { echo "Missing build tool: $command" >&2; exit 1; }
 done
 mkdir -p "$work" "$output/source" "$output/licenses" "$output/ffmpeg" "$output/libusb"
+build_failed() {
+  local status=$1 line=$2 diagnostic
+  trap - ERR
+  printf '\nNative macOS build failed at line %s (exit %s).\n' "$line" "$status" >&2
+  for diagnostic in "$work/toolchain-info.txt" "$work/compiler-check.log" \
+    "$work/x264-$x264_commit/config.log" "$work/ffmpeg-$ffmpeg_version/ffbuild/config.log" \
+    "$work/libusb-$libusb_version/config.log"; do
+    if [[ -f "$diagnostic" ]]; then
+      printf '\n--- %s ---\n' "${diagnostic#"$work/"}" >&2
+      tail -n 180 "$diagnostic" >&2
+    fi
+  done
+  exit "$status"
+}
+trap 'build_failed "$?" "$LINENO"' ERR
+
+# A clang path returned by `xcrun --find` bypasses xcrun's SDK setup. Also,
+# x264 expands CC as words, so an Xcode path containing spaces cannot be used
+# directly. Keep a stable compiler command in PATH and quote the SDK inside it.
+export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+[[ -d "$SDKROOT" ]] || { echo 'The selected macOS SDK is missing.' >&2; exit 1; }
+export AI_WATCH_NATIVE_ARCH="$(uname -m)"
+mkdir -p "$work/toolchain"
+cat > "$work/toolchain/ai-watch-clang" <<'COMPILER'
+#!/usr/bin/env bash
+set -euo pipefail
+exec /usr/bin/xcrun --sdk macosx clang \
+  -isysroot "$SDKROOT" -arch "$AI_WATCH_NATIVE_ARCH" -mmacosx-version-min=15.0 "$@"
+COMPILER
+chmod +x "$work/toolchain/ai-watch-clang"
+export PATH="$work/toolchain:$PATH"
+export CC=ai-watch-clang
+export AR=/usr/bin/ar
+export RANLIB=/usr/bin/ranlib
+{
+  printf 'Native architecture: %s\nDeployment target: %s\nSDK: %s\n' "$AI_WATCH_NATIVE_ARCH" "$MACOSX_DEPLOYMENT_TARGET" "$SDKROOT"
+  xcrun --sdk macosx --find clang
+  "$CC" --version
+} | tee "$work/toolchain-info.txt"
+printf '#include <stdio.h>\nint main(void) { puts("macOS compiler and SDK work"); return 0; }\n' > "$work/compiler-check.c"
+"$CC" "$work/compiler-check.c" -o "$work/compiler-check" > "$work/compiler-check.log" 2>&1
+"$work/compiler-check" >> "$work/compiler-check.log" 2>&1
+cat "$work/compiler-check.log"
+
 download() {
   local filename=$1 checksum=$2 url=$3
   if [[ ! -f "$output/source/$filename" ]]; then
@@ -50,7 +94,6 @@ tar -xf "$output/source/$x264_archive"
 tar -xf "$output/source/$libusb_archive"
 mkdir prefix
 jobs=${BUILD_JOBS:-$(sysctl -n hw.logicalcpu)}
-export CC=$(xcrun --find clang)
 
 cd "x264-$x264_commit"
 ./configure --prefix=../prefix --host="$host" --enable-static --enable-pic \

@@ -221,7 +221,9 @@ class UsbMacTests(unittest.TestCase):
             library.touch()
             with patch.object(mac.c, "CDLL", return_value=Symbols()) as loader:
                 self.assertTrue(mac.backend_check(root))
-                loader.assert_called_once_with(str(library))
+                # Windows runners may give tempfile an 8.3 path; macOS /var is
+                # also an alias. The backend deliberately loads a resolved path.
+                loader.assert_called_once_with(str(library.resolve()))
             with patch.object(mac.c, "CDLL", side_effect=OSError("wrong architecture")):
                 with self.assertRaisesRegex(RuntimeError, "架构"):
                     mac.backend_check(root)
