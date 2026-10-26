@@ -111,13 +111,13 @@ Antigravity 主卡片将同一基础模型的 High / Medium / Low / Thinking 合
 
 ## 安装包与发布
 
-版本 **0.19.0** 整合 `claude/next-features` 至 `10bd696`。从项目的 [GitHub Releases](https://github.com/Andromedahk/ai-watch-panel/releases) 下载与系统匹配的安装包：
+版本 **0.19.1** 包含局域网多端同步、Codex 与 Claude 桌面 Code 提醒修复，以及更精简的 Windows 安装包。从项目的 [GitHub Releases](https://github.com/Andromedahk/ai-watch-panel/releases) 下载与系统匹配的安装包：
 
 | 平台 | 文件 | 安装方式 |
 | --- | --- | --- |
-| macOS Apple Silicon | `AI-Watch-0.19.0-mac-arm64.dmg` / `.zip` | 打开 DMG 并将应用拖入 Applications，或解压 ZIP。 |
-| macOS Intel | `AI-Watch-0.19.0-mac-x64.dmg` / `.zip` | 同上，选择 x64 包。 |
-| Windows x64 | `AI-Watch-0.19.0-win-x64.exe` | 运行 NSIS 安装程序；安装结束后手动启动。 |
+| macOS Apple Silicon | `AI-Watch-0.19.1-mac-arm64.dmg` / `.zip` | 打开 DMG 并将应用拖入 Applications，或解压 ZIP。 |
+| macOS Intel | `AI-Watch-0.19.1-mac-x64.dmg` / `.zip` | 同上，选择 x64 包。 |
+| Windows x64 | `AI-Watch-0.19.1-win-x64.exe` | 运行 NSIS 安装程序；安装结束后手动启动。 |
 
 Release 同时提供 `SHA256SUMS.txt`，用于核对下载文件。macOS 普通包为 ad hoc 签名，**没有 Developer ID 签名和 Apple 公证**，首次打开可能受到 Gatekeeper 限制；Windows 包**没有 Authenticode 签名**，可能出现 SmartScreen 提示。请核对项目来源及校验值后按系统提示处理，不建议全局关闭系统保护。原生桌面小组件不在普通安装包内。
 
@@ -125,7 +125,7 @@ Windows 原生 CI 已完成构建、NSIS 安装和合成数据下的打包应用
 
 维护者在 Actions 中对最新 `main` 手动运行 **Release installers**。`publish` 默认为 `false`，只构建、检查并保存 Actions 产物；需要公开发布时将 `publish` 设为 `true`。发布任务等待三个原生构建任务全部成功，在 GitHub 内部下载同一次运行的安装包、生成 `SHA256SUMS.txt`，并确认远端 `main` 仍指向本次运行的 `github.sha`。随后创建草稿 Release，将标签固定到该提交，上传并核对五个安装文件及校验清单，最后公开。若 `main` 已更新，须针对最新 `main` 重新构建。
 
-Release 正文来自 [v0.19.0 发布说明](docs/releases/v0.19.0.md)，来源提交和 CI 链接由工作流运行时附加。正式包仅额外包含一份明确标记的合成状态夹具，供 `npm run test:release -- <应用可执行文件>` 在独立临时配置中检查，不会读写真实账户。
+Release 正文来自 [v0.19.1 发布说明](docs/releases/v0.19.1.md)，来源提交和 CI 链接由工作流运行时附加。正式包仅额外包含一份明确标记的合成状态夹具，供 `npm run test:release -- <应用可执行文件>` 在独立临时配置中检查，不会读写真实账户。
 
 ## 本地开发与安装
 
@@ -181,6 +181,10 @@ npm run test:lan-sync # 两个独立测试配置在本机配对、同步、重�
 发布该扩展需要匹配应用标识、签名身份、App Group 与 provisioning profile；仅通过签名校验并不足够。构建、签名、预览与系统验收步骤见[原生小组件开发说明](docs/MACOS-WIDGETS.md)。
 
 ## 更新记录
+
+### 0.19.1 · 2026-10-26 · 发布 v0.19.1 并移除 v0.19.0 · 署名：Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）
+
+- 按人类要求，从最新 main 运行“Release installers”工作流发布 v0.19.1（多端同步、Codex / Claude 提醒修复、精简 Windows 安装包），并在新 Release 核对通过后删除旧的 v0.19.0 Release（保留 git 标签）。新增 [v0.19.1 发布说明](docs/releases/v0.19.1.md)，更新上文安装包表格。
 
 ### 未发布 · 2026-10-26 · 多端同步实机验证并合入 main · 署名：Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）
 
