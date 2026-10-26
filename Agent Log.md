@@ -20,6 +20,23 @@
 
 ---
 
+## 2026-10-26 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 局域网多端同步
+
+- 分支：`claude/lan-sync`，起点 `origin/main` 的 `991ff66`；独立 worktree，依赖从已安装同版本的 worktree 复制。本地提交，未推送。主目录未提交的 relay 改动未触碰。
+- 目的：人类要求支持主客户端和子客户端，子客户端连接局域网主客户端并同步全部信息。
+- 设计调整：动态与趋势记录只存在于渲染进程本地存储，因此主客户端渲染进程把记录交给主进程再共享；发现改用 Node 自带 UDP 广播（不新增 mDNS 依赖），并保留手动地址。
+- 操作：
+  - `electron/lan-sync.cjs`（新增）：Node http 服务 + SSE 推送、局域网来源校验、拒绝带 Origin 的请求、6 位配对码换随机令牌（只存 SHA-256 摘要、恒定时间比较）、按地址与总量限流、1 KB 请求体上限、快照大小上限、字段与本机路径清理、客户端指数退避重连、UDP 发现；配对数据存于 userData 下 0600 的 `lan-sync.json`，不写入偏好。
+  - `electron/lan-sync-controller.cjs`（新增）与 `electron/main.cjs`：按角色启停主 / 子；子客户端暂停本机读取（含 Codex 推送与来源切换时的本机快照），未连上前显示“等待主客户端数据”占位，收到快照后推送界面、菜单栏和小组件，并按主客户端的 Claude / Kimi 来源显示；打开应用与辅助功能授权在子客户端被拒绝；新增同步相关 IPC。`electron/window-policy.cjs` 新增 `syncRole`（off / host / client）与 `syncPort`（1024–65535）校验，`electron/local-status.cjs` 导出占位状态，`electron/preload.cjs`、`src/types.ts` 增加接口。
+  - `src/SyncSettings.tsx`（新增）、`src/App.tsx`、`src/journal.ts`、`src/view/skins.css`：配置新增“多端同步”分区（角色、配对码、地址、端口、重置、搜索、手动地址、连接 / 忘记），顶部“同步 / 未同步”标签；主客户端共享记录，子客户端显示主客户端记录且不污染本机记录；记录校验抽为 `parseJournal`。17 个语言文件新增 39 条文案。
+  - 测试：`tests/lan-sync.test.cjs`（11 项：局域网地址、清理、地址解析、存储权限、配对、限流、令牌 / Origin、快照与增量、撤销、重连、UDP 发现），`tests/window-policy.test.cjs` 新增同步偏好校验，`tests/i18n.test.cjs` 覆盖新组件；新增 `scripts/verify-lan-sync.mjs`（`npm run test:lan-sync`）。
+- 验证：`node --test tests/*.test.cjs` 522 项全部通过；`npx tsc --noEmit`、`git diff --check`、`npm run build`（既有大 chunk 提示）通过；`test:lan-sync` 在本机用两个独立测试配置经界面完成：显示配对码、错码被拒、配对成功、子客户端显示主客户端数据与记录、打开应用被拒、主客户端重启后自动重连、重置配对码后子客户端失效、切回独立后恢复本机数据，0 页面错误；`test:insights`、`test:corners`、`test:i18n`、`test:resources`、`test:skins` 通过。截图仅在忽略的 `.local/qa/lan-sync/`。
+- 失败与修正：首轮双实例检查发现子客户端的 Claude 卡因本机来源设置与主客户端不同而被隐藏，改为子客户端跟随主客户端来源（界面、菜单栏、小组件）后通过；另修正两项偏好测试的默认值清单。
+- 失败或未验证项：未在两台真实设备、Windows 或 Linux 之间实测；macOS 防火墙提示未在打包应用中验证；连接为局域网明文 HTTP（有配对令牌但不加密）；未打包安装。
+- 未完成 / 需要人类决定：是否需要加密传输、是否推送 / 合并 / 安装由人类决定。
+
+---
+
 ## 2026-10-24 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 推送并安装 ce6ac44
 
 - 分支：`claude/desktop-code-prompts`，安装来源 `ce6ac44`；开始时 worktree 干净。

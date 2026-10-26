@@ -8,12 +8,12 @@ const { WidgetPublisher, loadWidgetBridge } = require('./widget-publisher.cjs');
 const { electronTransport } = require('./kimi-work-transport.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
-const { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, isInsightOrder, isMascotInterval, PROVIDER_ORDER, COLLAPSED_WIDTH } = require('./window-policy.cjs');
+const { panelBounds, clampBounds, displayGeometry, validPreferences, isSyncRole, isSyncPort, isTheme, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, isInsightOrder, isMascotInterval, PROVIDER_ORDER, COLLAPSED_WIDTH } = require('./window-policy.cjs');
 const { requestKimiWorkSubscription } = require('./kimi-work-api.cjs');
 const { requestZcodeJson } = require('./zcode-account-api.cjs');
 const { WindowLayout } = require('./window-layout.cjs');
 const { taskDetail } = require('./task-details.cjs');
-const { LocalStatusReader } = require('./local-status.cjs');
+const { LocalStatusReader, unavailable } = require('./local-status.cjs');
 const { ClaudeStatusReader, resolveClaudePaths } = require('./claude-status.cjs');
 const { ClaudeHooks } = require('./claude-hooks.cjs');
 const { createClaudeActivityBridge } = require('./claude-activity-bridge.cjs');
@@ -21,8 +21,9 @@ const { readDesktopActivity } = require('./claude-desktop.cjs');
 const { ProviderLauncher } = require('./provider-launcher.cjs');
 const { cleanupOrphanedHelpers } = require('./orphan-helpers.cjs');
 const { clearStartupDiskCaches, clearSessionCaches } = require('./app-cache.cjs');
+const { LanSyncController } = require('./lan-sync-controller.cjs');
 const statusReader = new LocalStatusReader({ onCodexActivity: snapshot => {
-  if (fixtureMode) return;
+  if (fixtureMode || preferences?.syncRole === 'client') return;
   statusSnapshot = { ...statusSnapshot, sampledAt: snapshot.sampledAt, codex: snapshot.codex };
   publishStatus();
 }, claudeReader: new ClaudeStatusReader({
@@ -56,7 +57,45 @@ async function applyClaudeHooks(enabled) {
     throw error;
   }
 }
+// A sync client shows the host's data and pauses its own readers.
+const isSyncClient = () => preferences?.syncRole === 'client';
+let lanSync = null, remoteJournal = null;
+function acceptRemote(snapshot) {
+  if (!isSyncClient()) return;
+  if (snapshot.status && typeof snapshot.status === 'object') {
+    statusSnapshot = { ...snapshot.status, remote: { host: snapshot.host || null, sentAt: snapshot.sentAt || null } };
+    publishStatus();
+  }
+  if (snapshot.journal && typeof snapshot.journal === 'object') {
+    remoteJournal = snapshot.journal;
+    if (window && !window.isDestroyed()) window.webContents.send('panel:journal-changed', remoteJournal);
+  }
+}
+async function applySync() {
+  if (!lanSync) return;
+  const wasClient = Boolean(statusSnapshot?.remote);
+  if (isSyncClient() && !wasClient) {
+    // Never show this machine's own readings as if they came from the host.
+    statusSnapshot = { sampledAt: null, remote: { host: null, sentAt: null },
+      ...Object.fromEntries(PROVIDER_ORDER.map(id => [id, { ...unavailable(id), task: '等待主客户端数据', detail: '子客户端只显示主客户端同步的数据' }])) };
+    publishStatus();
+  }
+  await lanSync.apply(preferences.syncRole, preferences.syncPort);
+  if (!isSyncClient() && wasClient) {
+    // Leaving client mode: drop the host's data and read this machine again.
+    remoteJournal = null; statusSnapshot = statusReader.current;
+    if (window && !window.isDestroyed()) window.webContents.send('panel:journal-changed', null);
+    await refreshLocalStatus(true).catch(() => {});
+  }
+  if (preferences.syncRole === 'host') lanSync.publish({ status: statusSnapshot });
+}
+// Tray and widgets filter by data source; a client follows the host's sources.
+function viewPreferences() {
+  if (!isSyncClient() || !statusSnapshot?.remote) return preferences;
+  return { ...preferences, kimiSource: statusSnapshot.kimi?.kimiSource || 'code', claudeSource: statusSnapshot.claude?.claudeSource || preferences.claudeSource };
+}
 async function refreshLocalStatus(force = false) {
+  if (isSyncClient()) return statusSnapshot;
   statusSnapshot = fixtureMode
     ? JSON.parse(await fs.promises.readFile(path.join(__dirname, '../tests/fixtures/local-status.json'), 'utf8'))
     : await statusReader.poll(force);
@@ -83,6 +122,7 @@ async function refreshLocalStatus(force = false) {
 }
 function publishStatus() {
   if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
+  if (preferences?.syncRole === 'host') lanSync?.publish({ status: statusSnapshot });
   panelTray?.updateMenu();
   publishWidgets();
 }
@@ -135,6 +175,7 @@ function currentState() {
     widgetBackground: panelTray?.widgetBackground === true,
     widgetLastPublishedAt: widgetPublisher?.lastPublishedAt || null,
     claudeHooksStatus,
+    lanSync: lanSync?.summary() ?? { role: 'off', state: 'off' },
     resolvedLanguage: currentLanguage().language,
     resolvedTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
@@ -143,16 +184,18 @@ function emitState() {
   const details = preferences?.layout === 'fullscreen' && !collapsed;
   if (statusReader.taskDetailsEnabled !== details) {
     statusReader.setTaskDetailsEnabled(details);
-    statusSnapshot = statusReader.current;
-    if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
-    void refreshLocalStatus().catch(() => {});
+    if (!isSyncClient()) {
+      statusSnapshot = statusReader.current;
+      if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
+      void refreshLocalStatus().catch(() => {});
+    }
   }
   panelTray?.updateMenu();
   publishWidgets();
   if (window && !window.isDestroyed()) window.webContents.send('panel:changed', currentState());
 }
 function publishWidgets() {
-  widgetPublisher?.publish(statusSnapshot, { ...preferences, language: currentLanguage().language }, { isTestData: fixtureMode });
+  widgetPublisher?.publish(statusSnapshot, { ...viewPreferences(), language: currentLanguage().language }, { isTestData: fixtureMode });
   const health = `${widgetPublisher?.available === true}:${widgetPublisher?.error === true}`;
   if (health !== widgetHealth) {
     widgetHealth = health;
@@ -237,6 +280,7 @@ else {
     }
     statusReader.claudeReader.setDesktopPlanCacheFile(path.join(app.getPath('userData'), 'claude-desktop-plan.json'));
     createClaudeHooks();
+    lanSync = new LanSyncController({ userData: app.getPath('userData'), onRemote: acceptRemote, onChange: () => emitState() });
     // Refresh the script on start so a moved or updated app keeps reporting; failures stay visible in settings.
     if (preferences.claudeHooksEnabled) await applyClaudeHooks(true).catch(() => {});
     widgetPublisher = new WidgetPublisher({ bridge: loadWidgetBridge({ app, fixtureMode,
@@ -261,7 +305,7 @@ else {
     windowLayout = new WindowLayout({ window, screen, getPreferences: () => preferences, save: savePreferences, changed: emitState, pin: lock, setBounds });
     if (process.platform === 'win32') app.setAppUserModelId('app.aiwatch.panel');
     panelTray = new PanelTray({ app, window, Tray, Menu, nativeImage,
-      getSummary: () => ({ rows: traySummary(statusSnapshot, { ...preferences, language: currentLanguage().language }), isTestData: fixtureMode }),
+      getSummary: () => ({ rows: traySummary(statusSnapshot, { ...viewPreferences(), language: currentLanguage().language }), isTestData: fixtureMode }),
       getLanguage: () => currentLanguage().language,
       onChange: () => { emitState(); buildApplicationMenu(); }, onRefresh: () => refreshLocalStatus(true) });
     window.on('close', event => panelTray.handleClose(event));
@@ -397,7 +441,34 @@ else {
       try { savePreferences(); } catch (error) { preferences.skin = previous; throw error; }
       emitState(); return currentState();
     });
-    handle('panel:open-provider', (id) => providerLauncher.launch(id,
+    handle('panel:sync-role', async (value) => {
+      if (!isSyncRole(value)) throw new Error('Invalid sync role');
+      const previous = preferences.syncRole;
+      preferences.syncRole = value;
+      try { savePreferences(); } catch (error) { preferences.syncRole = previous; throw error; }
+      await applySync(); emitState(); return currentState();
+    });
+    handle('panel:sync-port', async (value) => {
+      if (!isSyncPort(value)) throw new Error('Invalid sync port');
+      const previous = preferences.syncPort;
+      preferences.syncPort = value;
+      try { savePreferences(); } catch (error) { preferences.syncPort = previous; throw error; }
+      await applySync(); emitState(); return currentState();
+    });
+    handle('panel:sync-pair', async (address, code) => {
+      if (typeof address !== 'string' || address.length > 80 || typeof code !== 'string' || !/^\d{6}$/.test(code)) throw new Error('Invalid pairing');
+      await lanSync.pairWith(address, code); emitState(); return currentState();
+    });
+    handle('panel:sync-forget', () => { lanSync.forget(); emitState(); return currentState(); });
+    handle('panel:sync-regenerate', () => { lanSync.regenerate(); emitState(); return currentState(); });
+    handle('panel:sync-discover', () => lanSync.discoverHosts());
+    handle('panel:journal', (journal) => {
+      // Only a host shares its journal; it is size-bounded and sanitized again on send.
+      if (preferences.syncRole !== 'host' || !journal || typeof journal !== 'object' || JSON.stringify(journal).length > 2 * 1024 * 1024) return false;
+      lanSync.publish({ journal }); return true;
+    });
+    handle('panel:remote-journal', () => (isSyncClient() ? remoteJournal : null));
+    handle('panel:open-provider', (id) => isSyncClient() ? { status: 'remote', message: '' } : providerLauncher.launch(id,
       id === 'kimi' && preferences.kimiSource === 'work' ? preferences.kimiWorkApp : preferences.providerApps[id], preferences.kimiSource));
     handle('panel:choose-provider-app', (id) => {
       const source = preferences.kimiSource;
@@ -437,7 +508,7 @@ else {
       try { savePreferences(); } catch (error) { preferences.qwenKeychainAllowed = previous; throw error; }
       // Fixture profiles must never prompt the real keychain, even when testing this control.
       statusReader.qwenReader.setKeychainAllowed(!fixtureMode && value);
-      if (!fixtureMode && !value) {
+      if (!fixtureMode && !value && !isSyncClient()) {
         statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), qwen: {
           ...statusSnapshot.qwen, source: 'unavailable', connection: 'auth-required', accessRequired: true, plan: { name: null },
           credits: { items: [], stale: false }, quotas: [], observedAt: null,
@@ -450,7 +521,7 @@ else {
       return currentState();
     });
     handle('panel:claude-activity-access', async () => {
-      if (!fixtureMode && preferences.claudeSource === 'desktop') {
+      if (!fixtureMode && !isSyncClient() && preferences.claudeSource === 'desktop') {
         const result = await statusReader.claudeReader.requestActivityAccess();
         // macOS only prompts once per signature. A rebuilt ad hoc copy keeps a stale,
         // switched-on entry that no longer matches, so open the pane to re-add it.
@@ -477,7 +548,7 @@ else {
       const pending = statusReader.pending;
       // Synthetic UI profiles must never read real credentials or prompt the keychain.
       statusReader.setClaudeNetworkAllowed(!fixtureMode && value);
-      if (!fixtureMode) {
+      if (!fixtureMode && !isSyncClient()) {
         statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), claude: statusReader.current.claude };
         window.webContents.send('panel:status-changed', statusSnapshot);
       }
@@ -493,8 +564,10 @@ else {
       try { savePreferences(); } catch (error) { preferences.claudeSource = previous; throw error; }
       const pending = statusReader.pending;
       statusReader.setClaudeSource(value);
-      statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), claude: statusReader.current.claude };
-      window.webContents.send('panel:status-changed', statusSnapshot);
+      if (!isSyncClient()) {
+        statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), claude: statusReader.current.claude };
+        window.webContents.send('panel:status-changed', statusSnapshot);
+      }
       emitState();
       if (pending) await pending.catch(() => {});
       await refreshLocalStatus(true);
@@ -507,8 +580,10 @@ else {
       try { savePreferences(); } catch (error) { preferences.kimiSource = previous; throw error; }
       const pending = statusReader.pending;
       statusReader.setKimiSource(value);
-      statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), kimi: statusReader.current.kimi };
-      window.webContents.send('panel:status-changed', statusSnapshot);
+      if (!isSyncClient()) {
+        statusSnapshot = { ...statusSnapshot, sampledAt: new Date().toISOString(), kimi: statusReader.current.kimi };
+        window.webContents.send('panel:status-changed', statusSnapshot);
+      }
       emitState();
       if (pending) await pending.catch(() => {});
       await refreshLocalStatus(true);
@@ -537,6 +612,7 @@ else {
     });
     handle('panel:open-repository', () => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(REPOSITORY) ? shell.openExternal(REPOSITORY) : undefined);
     handle('panel:quit', () => app.quit());
+    await applySync().catch(() => {});
     void refreshLocalStatus().catch(() => {});
     statusTimer = setInterval(() => { void refreshLocalStatus().catch(() => {}); }, 5000);
     app.on('activate', () => { void panelTray.restore(); });
@@ -545,6 +621,7 @@ else {
   app.on('before-quit', () => {
     panelTray?.dispose(); clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance);
     statusReader.codexAttention.close(); statusReader.codexQuotaReader.close();
+    void lanSync?.close();
     // Tear down Chromium's window/IPC while the host is still alive.
     if (window && !window.isDestroyed()) window.destroy();
   });

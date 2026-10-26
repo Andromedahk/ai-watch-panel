@@ -505,6 +505,19 @@ legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; colo
 .segmented button { flex: 1; padding: 7px 4px; border: 0; border-radius: 7px; background: none; color: var(--muted); }
 .segmented .selected { background: var(--raised); color: var(--text); box-shadow: 0 0 0 1px var(--line-strong); }
 .dock-button { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 8px; padding: 9px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); font-size: 12px; }
+/* LAN sync settings and the client status tag. */
+.sync-status { margin: 8px 0 0; font-size: 12px; font-weight: 600; color: var(--text); }
+.sync-code { margin: 4px 0 2px; font: 700 28px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .28em; color: var(--text); }
+.sync-addresses, .sync-hosts { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.sync-addresses li { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+.sync-hosts button { width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); font-size: 12px; text-align: start; }
+.sync-hosts button[aria-pressed="true"] { border-color: var(--focus); }
+.sync-hosts small { color: var(--muted); }
+.sync-field { display: grid; gap: 4px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.sync-field input { min-width: 0; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--text); font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sync-field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.sync-tag[data-sync-state="connected"] { border-color: var(--ok); color: var(--ok-fg); }
+.sync-tag:not([data-sync-state="connected"]) { border-style: dashed; }
 .module-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .module-option { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 9px; border-radius: 9px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); font-size: 12px; cursor: pointer; }
 .module-option input { margin: 0; accent-color: var(--ink); }

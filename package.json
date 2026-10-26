@@ -42,7 +42,8 @@
     "preview:widgets": "node scripts/preview-widgets.mjs",
     "test:widgets:bundle": "node scripts/verify-widget-bundle.mjs",
     "test:release": "node scripts/verify-release.mjs",
-    "test:codex-attention": "node scripts/verify-codex-attention.mjs"
+    "test:codex-attention": "node scripts/verify-codex-attention.mjs",
+    "test:lan-sync": "node scripts/verify-lan-sync.mjs"
   },
   "dependencies": {
     "big.js": "^7.0.1",

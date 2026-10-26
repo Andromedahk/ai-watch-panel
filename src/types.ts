@@ -9,6 +9,10 @@ export type ClaudeSource = 'desktop' | 'code';
 export type InsightId = 'timeline' | 'resets' | 'trend' | 'mascot';
 export type Insights = Record<InsightId, boolean>;
 export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: boolean };
+export type SyncRole = 'off' | 'host' | 'client';
+export type SyncSummary = { role: SyncRole; state: string; error?: string | null; code?: string; port?: number | null; addresses?: string[];
+  paired?: number | boolean; connected?: number; name?: string; hostName?: string | null; address?: string | null };
+export type SyncHost = { address: string; port: number; name: string };
 export type PanelState = Preferences & {
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
   trayAvailable: boolean; stored: boolean;
@@ -22,6 +26,7 @@ export type PanelState = Preferences & {
   claudeSource: ClaudeSource;
   claudeNetworkAllowed: boolean;
   claudeHooksEnabled: boolean;
+  syncRole: SyncRole; syncPort: number; lanSync?: SyncSummary;
   animeMode: boolean; insights: Insights; insightOrder: InsightId[]; mascotInterval: number; skin: Skin; layout: Layout; windowLayout: 'single' | 'double';
   language: Language; resolvedLanguage?: Exclude<Language, 'system'>;
   theme: Theme; resolvedTheme: 'light' | 'dark';
@@ -49,7 +54,7 @@ export type LocalProviderStatus = {
   plan?: { name: string | null; status?: string; expiresAt?: string | null; stale?: boolean };
   credits?: { items: CreditItem[]; stale: boolean };
 };
-export type LocalStatus = Record<ProviderId, LocalProviderStatus> & { sampledAt: string | null; isTestData?: boolean };
+export type LocalStatus = Record<ProviderId, LocalProviderStatus> & { sampledAt: string | null; isTestData?: boolean; remote?: { host: string | null; sentAt: string | null } };
 export type Provider = {
   id: ProviderId; name: string; subtitle: string; color: string; running: boolean;
   task: string; quotas: Quota[]; image: string; local?: LocalProviderStatus;
@@ -75,6 +80,15 @@ declare global {
       setClaudeNetworkAccess(allowed: boolean): Promise<PanelState>;
       setClaudeHooks(enabled: boolean): Promise<PanelState>;
       requestClaudeActivityAccess(): Promise<LocalStatus>;
+      setSyncRole(role: SyncRole): Promise<PanelState>;
+      setSyncPort(port: number): Promise<PanelState>;
+      pairSync(address: string, code: string): Promise<PanelState>;
+      forgetSync(): Promise<PanelState>;
+      regenerateSync(): Promise<PanelState>;
+      discoverSync(): Promise<SyncHost[]>;
+      shareJournal(journal: unknown): Promise<boolean>;
+      getRemoteJournal(): Promise<unknown>;
+      onRemoteJournal(callback: (journal: unknown) => void): () => void;
       clearCache(): Promise<{ freedBytes: number }>;
       setAnimeMode(enabled: boolean): Promise<PanelState>;
       setInsights(insights: Insights): Promise<PanelState>;

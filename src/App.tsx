@@ -4,7 +4,8 @@ import packageInfo from '../package.json';
 import { providers as baseProviders, providerIds } from './data';
 import { useVisibleCards } from './useVisibleCards';
 import { replayEntrance } from './motion';
-import { demoJournal, loadJournal, record, saveJournal } from './journal';
+import { demoJournal, emptyJournal, loadJournal, parseJournal, record, saveJournal, type Journal } from './journal';
+import { SyncSettings, syncStatusText } from './SyncSettings';
 import { DEFAULT_INSIGHT_ORDER, InsightsArea, useInsightSpace } from './view/insights';
 import { MASCOT_INTERVAL_DEFAULT, MASCOT_INTERVAL_MAX, MASCOT_INTERVAL_MIN, clampMascotInterval, isMascotInterval } from './view/mascot-cadence';
 import { TestControls } from './TestControls';
@@ -16,6 +17,7 @@ import { GrantAccessContext, Portrait, RED_ALERT } from './view/parts';
 import { Overview, ProviderCard, RailItem, summarize } from './view/skins';
 import type { InsightId, Insights, LocalStatus, PanelState, Preferences, Provider, ProviderId, Theme, KimiSource, ClaudeSource, Layout, Skin } from './types';
 const providers = baseProviders;
+const EMPTY_JOURNAL = emptyJournal();
 
 const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
@@ -25,6 +27,7 @@ const previewState: PanelState = {
   providerOrder: readOrder(), enabledProviders: readEnabled(),
   qwenKeychainAllowed: false,
   kimiSource: 'code', claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, layout: 'single', windowLayout: 'single',
+  syncRole: 'off', syncPort: 47321,
   animeMode: readAnimeMode(), insights: readInsights(), insightOrder: readInsightOrder(), mascotInterval: readMascotInterval(), skin: readSkin(),
   language: window.panel ? 'zh-CN' : readLanguage(),
   theme: window.panel ? 'system' : readTheme(),
@@ -146,8 +149,12 @@ export default function App() {
   const [widgetsSaving, setWidgetsSaving] = useState(false);
   const storeLabel = state.platform === 'darwin' ? t("收纳到菜单栏") : t("收纳到托盘");
   const storeHint = state.trayAvailable ? t("{p0}，后台继续监看", { p0: storeLabel }) : state.desktop ? t("系统托盘暂不可用") : t("桌面版支持菜单栏与托盘收纳");
-  const providers = baseProviders.map(provider => provider.id === 'kimi' && state.kimiSource === 'work'
-    ? { ...provider, name: 'Kimi Work', subtitle: 'MOONSHOT AI · WORK' } : provider.id === 'claude' && state.claudeSource === 'desktop'
+  // A sync client follows the host's Claude / Kimi sources, not its own settings.
+  const remoteStatus = !testMode && displayStatus?.remote ? displayStatus : null;
+  const kimiSource = remoteStatus ? remoteStatus.kimi?.kimiSource || 'code' : state.kimiSource;
+  const claudeSource = remoteStatus ? remoteStatus.claude?.claudeSource || state.claudeSource : state.claudeSource;
+  const providers = baseProviders.map(provider => provider.id === 'kimi' && kimiSource === 'work'
+    ? { ...provider, name: 'Kimi Work', subtitle: 'MOONSHOT AI · WORK' } : provider.id === 'claude' && claudeSource === 'desktop'
     ? { ...provider, name: 'Claude', subtitle: 'ANTHROPIC' } : provider).map(provider => localizeProvider(provider, i18n));
   const viewport = useRef<HTMLDivElement>(null);
   const enabledOrder = state.providerOrder.filter(id => state.enabledProviders.includes(id));
@@ -158,6 +165,9 @@ export default function App() {
   const stage = useRef<HTMLDivElement>(null);
   const [liveJournal, setLiveJournal] = useState(() => loadJournal());
   const [testJournal, setTestJournal] = useState(() => demoJournal());
+  // A sync client shows the host's journal and keeps its own untouched.
+  const [remoteJournal, setRemoteJournal] = useState<Journal | null>(null);
+  const syncClient = state.syncRole === 'client';
   const [insightsSaving, setInsightsSaving] = useState(false);
   const [insightOrderSaving, setInsightOrderSaving] = useState(false);
   const [mascotSaving, setMascotSaving] = useState(false);
@@ -178,14 +188,14 @@ export default function App() {
       local = { ...local, kimiSource: 'work', activity: 'unknown', activeTasks: 0, task: t("测试数据 · Work 活动未知"),
         quotas: local.quotas.slice(0, 2).map((quota, index) => ({ ...quota, model: t("共享积分"),
           period: index ? t("赠送额度") : t("订阅额度"), resetKind: 'expiry' })) };
-    } else if (provider.id === 'kimi' && local && (local.kimiSource || 'code') !== state.kimiSource) local = undefined;
+    } else if (provider.id === 'kimi' && local && !remoteStatus && (local.kimiSource || 'code') !== state.kimiSource) local = undefined;
     if (provider.id === 'claude' && testMode && local) local = { ...local, claudeSource: state.claudeSource };
-    else if (provider.id === 'claude' && local && (local.claudeSource || 'code') !== state.claudeSource) local = undefined;
+    else if (provider.id === 'claude' && local && !remoteStatus && (local.claudeSource || 'code') !== state.claudeSource) local = undefined;
     return { ...provider, running: local?.activity === 'running', task: local?.task || t("正在读取本地状态"),
       quotas: local?.quotas || [], local: local || { id: provider.id, source: 'unavailable' as const,
         connection: 'unavailable' as const, activity: 'unknown' as const, activeTasks: 0,
         task: t("正在读取本地状态"), quotas: [], observedAt: null, sampledAt: null, detail: t("等待首次读取"),
-        claudeSource: provider.id === 'claude' ? state.claudeSource : undefined } };
+        claudeSource: provider.id === 'claude' ? claudeSource : undefined } };
   });
   const translatedProviders = visibleProviders.map(provider => localizeProvider(provider, i18n));
   const activeTasks = visibleProviders.reduce((total, provider) => total + (displayStatus?.[provider.id]?.activeTasks || 0), 0);
@@ -281,6 +291,7 @@ export default function App() {
     catch { setNotice(t('保存失败，请重试')); }
   }
   async function openProvider(provider: Provider) {
+    if (syncClient && !testMode) { setNotice(t('子客户端不能打开主客户端上的应用')); return; }
     if (testMode) { if (state.collapsed) await collapse(false); setNotice(t("测试模式：已模拟打开 {p0}", { p0: provider.name })); return; }
     if (!window.panel) { if (state.collapsed) await collapse(false); setNotice(t("打开应用请使用桌面版")); return; }
     if (launching) return;
@@ -395,16 +406,26 @@ export default function App() {
     const bridge = window.panel;
     if (!bridge) return;
     const acceptStatus = (next: LocalStatus) => setLocalStatus((current) =>
-      current?.sampledAt && (!next.sampledAt || Date.parse(next.sampledAt) < Date.parse(current.sampledAt)) ? current : next);
+      current?.sampledAt && Boolean(current.remote) === Boolean(next.remote) && current.remote?.host === next.remote?.host
+        && (!next.sampledAt || Date.parse(next.sampledAt) < Date.parse(current.sampledAt)) ? current : next);
     bridge.getState().then(setState).catch(() => setNotice(t("无法读取窗口状态")));
     bridge.getStatus().then(acceptStatus).catch(() => setNotice(t("无法读取本地工具状态")));
     const stateListener = bridge.onState(setState);
     const statusListener = bridge.onStatus(acceptStatus);
-    return () => { stateListener(); statusListener(); };
+    const acceptJournal = (value: unknown) => setRemoteJournal(value ? parseJournal(value) : null);
+    bridge.getRemoteJournal?.().then(acceptJournal).catch(() => {});
+    const journalListener = bridge.onRemoteJournal?.(acceptJournal);
+    return () => { stateListener(); statusListener(); journalListener?.(); };
   }, []);
   // The journal keeps only ids, states, times and percentages; test mode has its own sample journal.
-  useEffect(() => { if (localStatus) setLiveJournal(current => record(current, localStatus)); }, [localStatus]);
-  useEffect(() => { const timer = setTimeout(() => saveJournal(liveJournal), 2000); return () => clearTimeout(timer); }, [liveJournal]);
+  useEffect(() => { if (localStatus && !localStatus.remote) setLiveJournal(current => record(current, localStatus)); }, [localStatus]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveJournal(liveJournal);
+      if (state.syncRole === 'host') void window.panel?.shareJournal({ events: liveJournal.events, samples: liveJournal.samples, last: liveJournal.last }).catch(() => {});
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [liveJournal, state.syncRole]);
   useEffect(() => { if (testMode) setTestJournal(demoJournal()); }, [testMode]);
   useEffect(() => { if (testMode) setTestJournal(current => record(current, testStatus)); }, [testMode, testStatus]);
   useLayoutEffect(() => {
@@ -537,6 +558,7 @@ export default function App() {
   const insightSpace = useInsightSpace(stage, viewport, `${layoutKey}:${state.collapsed}:${views.map(view => view.id).join(',')}:${Object.values(insights).join(',')}`, sorting.sorting);
   const stamp = state.desktop || testMode ? refreshTime : '';
   const badge = testMode ? <button className="demo-tag test-badge" aria-label={t('测试模式设置')} onClick={openSettings}>{t('测试模式')}</button>
+    : syncClient ? <span className="demo-tag sync-tag" data-sync-state={state.lanSync?.state} title={syncStatusText(state, t)}>{state.lanSync?.state === 'connected' ? t('同步') : t('未同步')}</span>
     : <span className="demo-tag">{localStatus?.isTestData ? t('测试') : state.desktop ? t('本地') : t('演示')}</span>;
   const lockButton = (className = '') => <button className={`${className} ${state.locked && state.layout !== 'fullscreen' ? 'selected' : ''}`} disabled={state.layout === 'fullscreen'} aria-label={t('锁定窗口')} aria-pressed={state.locked && state.layout !== 'fullscreen'}
     title={state.locked ? t('解除跨桌面锁定') : t('锁定：置顶并显示在所有桌面')} onClick={toggleLock}>{state.locked ? <LockKeyhole /> : <UnlockKeyhole />}</button>;
@@ -547,7 +569,7 @@ export default function App() {
   ];
   const section = (id: string) => modal.current?.querySelector<HTMLElement>(`[data-section="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
-  return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={state.desktop ? () => void grantClaudeAccess() : null}><main ref={main} lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
+  return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={state.desktop && !syncClient ? () => void grantClaudeAccess() : null}><main ref={main} lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
     {state.collapsed ? <aside className="collapsed-rail" aria-label={t('收起的监看面板')}>
       <button className="rail-expand" title={t('展开面板')} aria-label={t('展开面板')} onClick={() => collapse(false)}>{state.side === 'right' ? <ArrowLeftToLine size={18} /> : <ArrowRightToLine size={18} />}</button>
       <div className="rail-counts" title={t('运行中 {p0} · 等你处理 {p1}', { p0: summary.running, p1: summary.waiting.length })}>
@@ -558,7 +580,7 @@ export default function App() {
       <div className="rail-tools">
         <button className="rail-store" aria-label={storeLabel} title={storeHint} disabled={!state.trayAvailable} onClick={storePanel}><PanelTopClose size={16} /></button>
         {lockButton('rail-lock')}
-        {testMode ? <button className="rail-demo test-badge" aria-label={t('测试模式设置')} onClick={async () => { await collapse(false); openSettings(); }}>{t('测试')}</button> : <span className="rail-demo">{state.desktop ? t('本地') : t('演示')}</span>}
+        {testMode ? <button className="rail-demo test-badge" aria-label={t('测试模式设置')} onClick={async () => { await collapse(false); openSettings(); }}>{t('测试')}</button> : <span className="rail-demo" title={syncClient ? syncStatusText(state, t) : undefined}>{syncClient ? state.lanSync?.state === 'connected' ? t('同步') : t('未同步') : state.desktop ? t('本地') : t('演示')}</span>}
       </div>
     </aside> : <div className={`panel-regions ${sorting.sorting ? 'is-sorting' : ''}`}>
       <header className="control-region">
@@ -594,7 +616,7 @@ export default function App() {
       {!sorting.sorting && <InsightsArea insights={insights} height={insightSpace.height} width={insightSpace.width} layout={state.layout} views={views}
         order={state.insightOrder || readInsightOrder()} onOrder={order => void saveInsightOrder(order)} onSortingChange={setInsightSorting}
         sortingDisabled={settingsOpen || state.collapsed || insightOrderSaving || insightsSaving || layoutSaving || animeSaving}
-        journal={testMode ? testJournal : liveJournal} anime={state.animeMode} image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)}
+        journal={testMode ? testJournal : syncClient ? remoteJournal || EMPTY_JOURNAL : liveJournal} anime={state.animeMode} image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)}
         interval={mascotInterval} paused={settingsOpen || pageHidden || state.stored || state.collapsed} />}
       </div>
     </div>}
@@ -610,7 +632,7 @@ export default function App() {
     <dialog ref={modal} className="settings-dialog" aria-labelledby="settings-title" onCancel={() => setSettingsOpen(false)}>
       <div className="settings-heading"><h2 id="settings-title">{t('面板配置')}</h2><button className="icon-button" aria-label={t('关闭配置')} onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
       <nav className="settings-nav" aria-label={t('配置分区')}>
-        {[['look', t('外观')], ['modules', t('模块')], ['data', t('数据来源')], ['window', t('窗口')], ['images', t('图片与应用')], ['about', t('关于')]].map(([id, label]) =>
+        {[['look', t('外观')], ['modules', t('模块')], ['data', t('数据来源')], ['window', t('窗口')], ['images', t('图片与应用')], ['sync', t('多端同步')], ['about', t('关于')]].map(([id, label]) =>
           <button key={id} type="button" onClick={() => section(id)}>{label}</button>)}
       </nav>
       <div className="settings-content">
@@ -730,6 +752,7 @@ export default function App() {
             <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={t('选择 {p0} 启动应用', { p0: provider.name })}>{t('选择应用')}</button>
           </div>)}</div>
         </section>
+        <SyncSettings state={state} onState={setState} notify={setNotice} />
         <section className="settings-group settings-note" data-section="about"><h3>{t('关于')}</h3><span className="note-title">{`AI Watch · v${packageInfo.version}`}</span>
           <p><a className="about-link" href={packageInfo.homepage} target="_blank" rel="noreferrer" onClick={event => { if (window.panel) { event.preventDefault(); void window.panel.openRepository(); } }}><bdi>{packageInfo.homepage}</bdi></a></p>
           <p>{t('作者：{p0}', { p0: 'Claude大小姐 · GPT龙娘' })}</p></section>

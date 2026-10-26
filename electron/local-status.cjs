@@ -374,4 +374,4 @@ class LocalStatusReader {
         : '本地服务未连接；尝试只读任务缓存，历史运行标记不作为当前运行证据。' };
   }
 }
-module.exports = { LocalStatusReader, postLocal, readTail, parseProcessList };
+module.exports = { LocalStatusReader, postLocal, readTail, parseProcessList, unavailable };

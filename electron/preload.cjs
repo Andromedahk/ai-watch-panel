@@ -37,6 +37,19 @@ contextBridge.exposeInMainWorld('panel', {
   dock: () => ipcRenderer.invoke('panel:dock'),
   chooseImage: (provider) => ipcRenderer.invoke('panel:image', provider),
   openRepository: () => ipcRenderer.invoke('panel:open-repository'),
+  setSyncRole: (role) => ipcRenderer.invoke('panel:sync-role', role),
+  setSyncPort: (port) => ipcRenderer.invoke('panel:sync-port', port),
+  pairSync: (address, code) => ipcRenderer.invoke('panel:sync-pair', address, code),
+  forgetSync: () => ipcRenderer.invoke('panel:sync-forget'),
+  regenerateSync: () => ipcRenderer.invoke('panel:sync-regenerate'),
+  discoverSync: () => ipcRenderer.invoke('panel:sync-discover'),
+  shareJournal: (journal) => ipcRenderer.invoke('panel:journal', journal),
+  getRemoteJournal: () => ipcRenderer.invoke('panel:remote-journal'),
+  onRemoteJournal: (callback) => {
+    const listener = (_event, journal) => callback(journal);
+    ipcRenderer.on('panel:journal-changed', listener);
+    return () => ipcRenderer.removeListener('panel:journal-changed', listener);
+  },
   quit: () => ipcRenderer.invoke('panel:quit'),
   onState: (callback) => {
     const listener = (_event, state) => callback(state);

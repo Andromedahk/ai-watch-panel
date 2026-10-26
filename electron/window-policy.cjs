@@ -44,6 +44,9 @@ const validInsights = value => Object.fromEntries(INSIGHTS.map(key => [key, valu
 // 看板娘 auto refresh: whole seconds in 5–300, or 0 when disabled.
 const MASCOT_INTERVAL = 15;
 const isMascotInterval = value => value === 0 || (Number.isInteger(value) && value >= 5 && value <= 300);
+// LAN sync is off unless the user chooses to share (host) or follow (client).
+const isSyncRole = value => ['off', 'host', 'client'].includes(value);
+const isSyncPort = value => Number.isInteger(value) && value >= 1024 && value <= 65535;
 const isTheme = value => ['system', 'light', 'dark'].includes(value);
 const isKimiSource = value => ['code', 'work'].includes(value);
 const isClaudeSource = value => ['desktop', 'code'].includes(value);
@@ -99,6 +102,8 @@ function validPreferences(value) {
     insights: validInsights(value?.insights && typeof value.insights === 'object' && !Array.isArray(value.insights) ? value.insights : {}),
     insightOrder: isInsightOrder(value?.insightOrder) ? [...value.insightOrder] : [...INSIGHT_ORDER],
     mascotInterval: isMascotInterval(value?.mascotInterval) ? value.mascotInterval : MASCOT_INTERVAL,
+    syncRole: isSyncRole(value?.syncRole) ? value.syncRole : 'off',
+    syncPort: isSyncPort(value?.syncPort) ? value.syncPort : 47321,
     skin: isSkin(value?.skin) ? value.skin : 'watch',
     layout: isLayout(value?.layout) ? value.layout : 'single',
     windowLayout: value?.windowLayout === 'double' ? 'double' : 'single',
@@ -108,4 +113,4 @@ function validPreferences(value) {
   };
 }
 
-module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, isInsightOrder, isMascotInterval, MASCOT_INTERVAL, INSIGHT_ORDER, INSIGHTS, PROVIDER_ORDER, SKINS, COLLAPSED_WIDTH, MIN_WIDTH, MAX_WIDTH, WIDTH_DIVISOR, columnWidth };
+module.exports = { panelBounds, clampBounds, displayGeometry, validPreferences, isTheme, isLanguage, isKimiSource, isClaudeSource, isLayout, isProviderOrder, isEnabledProviders, isSkin, isInsights, isInsightOrder, isMascotInterval, MASCOT_INTERVAL, isSyncRole, isSyncPort, INSIGHT_ORDER, INSIGHTS, PROVIDER_ORDER, SKINS, COLLAPSED_WIDTH, MIN_WIDTH, MAX_WIDTH, WIDTH_DIVISOR, columnWidth };

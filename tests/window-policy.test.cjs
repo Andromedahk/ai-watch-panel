@@ -38,7 +38,7 @@ test('restore clamps a moved rail into the available display area', () => {
   assert.deepEqual(clampBounds({ x: 1500, y: 100, width: 200, height: 900 }, { x: 0, y: 25, width: 1600, height: 900 }), { x: 1400, y: 25, width: 200, height: 900 });
 });
 test('unknown configuration values fall back without broadening capabilities', () => {
-  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, language: 'zh-CN', theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', widgetsEnabled: false, claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, cacheCleanupPending: false, kimiWorkApp: null, animeMode: false, insights: { timeline: true, resets: true, trend: true, mascot: true }, insightOrder: INSIGHT_ORDER, mascotInterval: 15, skin: 'watch', layout: 'single', windowLayout: 'single', providerApps: {} });
+  assert.deepEqual(validPreferences({ side: 'anywhere', locked: 'yes', animate: 0 }), { side: 'right', locked: false, animate: true, language: 'zh-CN', theme: 'system', providerOrder: PROVIDER_ORDER, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', widgetsEnabled: false, claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, cacheCleanupPending: false, kimiWorkApp: null, animeMode: false, insights: { timeline: true, resets: true, trend: true, mascot: true }, insightOrder: INSIGHT_ORDER, mascotInterval: 15, syncRole: 'off', syncPort: 47321, skin: 'watch', layout: 'single', windowLayout: 'single', providerApps: {} });
 });
 test('provider order rejects missing, duplicate and unknown cards and migrates old preferences', () => {
   for (const value of [null, 'codex', [], ['codex', 'codex', 'claude', 'deepseek'], ['claude', 'codex', 'antigravity', 'other']]) {
@@ -48,7 +48,7 @@ test('provider order rejects missing, duplicate and unknown cards and migrates o
   const reversed = [...PROVIDER_ORDER].reverse();
   assert.equal(isProviderOrder(reversed), true);
   const settings = validPreferences({ side: 'left', locked: true, animate: false, language: 'zh-CN', theme: 'system', providerOrder: reversed });
-  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, language: 'zh-CN', theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', widgetsEnabled: false, claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, cacheCleanupPending: false, kimiWorkApp: null, animeMode: false, insights: { timeline: true, resets: true, trend: true, mascot: true }, insightOrder: INSIGHT_ORDER, mascotInterval: 15, skin: 'watch', layout: 'single', windowLayout: 'single', providerApps: {} });
+  assert.deepEqual(settings, { side: 'left', locked: true, animate: false, language: 'zh-CN', theme: 'system', providerOrder: reversed, enabledProviders: PROVIDER_ORDER, qwenKeychainAllowed: false, kimiSource: 'code', widgetsEnabled: false, claudeSource: 'desktop', claudeNetworkAllowed: false, claudeHooksEnabled: false, cacheCleanupPending: false, kimiWorkApp: null, animeMode: false, insights: { timeline: true, resets: true, trend: true, mascot: true }, insightOrder: INSIGHT_ORDER, mascotInterval: 15, syncRole: 'off', syncPort: 47321, skin: 'watch', layout: 'single', windowLayout: 'single', providerApps: {} });
   reversed.reverse();
   assert.notDeepEqual(settings.providerOrder, reversed);
 });
@@ -165,4 +165,11 @@ test('Kimi source stays explicit and launch selections remain separate', () => {
  test('widget sync is opt-in and requires a literal boolean', () => {
   for (const value of [undefined, null, false, 1, 'true', {}, [true]]) assert.equal(validPreferences({ widgetsEnabled: value }).widgetsEnabled, false);
   assert.equal(validPreferences({ widgetsEnabled: true }).widgetsEnabled, true);
+});
+
+test('LAN sync stays off unless a valid role is saved, and ports stay unprivileged', () => {
+  for (const role of ['off', 'host', 'client']) assert.equal(validPreferences({ syncRole: role }).syncRole, role);
+  for (const role of [undefined, 'server', 'HOST', true, ['host']]) assert.equal(validPreferences({ syncRole: role }).syncRole, 'off');
+  assert.equal(validPreferences({ syncPort: 50000 }).syncPort, 50000);
+  for (const port of [80, 1023, 65536, '47321', 47321.5, null]) assert.equal(validPreferences({ syncPort: port }).syncPort, 47321);
 });

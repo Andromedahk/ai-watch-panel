@@ -73,8 +73,12 @@ function validEvent(value: unknown): value is JournalEvent {
     && (event.reason === undefined || ['input', 'approval', 'both'].includes(event.reason));
 }
 export function loadJournal(now = Date.now()): Journal {
+  try { return parseJournal(JSON.parse(localStorage.getItem(KEY) || 'null'), now); }
+  catch { return emptyJournal(); }
+}
+/** Validate a stored or host-synced journal; anything malformed is dropped. */
+export function parseJournal(value: any, now = Date.now()): Journal {
   try {
-    const value = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (!value || typeof value !== 'object') return emptyJournal();
     const events = Array.isArray(value.events) ? value.events.filter(validEvent).filter((event: JournalEvent) => now - event.at <= DAY).slice(-MAX_EVENTS) : [];
     const samples: Journal['samples'] = {};
