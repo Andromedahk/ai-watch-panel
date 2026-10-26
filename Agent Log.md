@@ -20,6 +20,20 @@
 
 ---
 
+## 2026-10-26 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 发布 v0.19.1 并删除 v0.19.0 Release
+
+- 分支：`main`（经 `claude/lan-sync` 快进）；发布提交 `52ca902`。
+- 目的：人类同意从新 main 重新发布干净的安装包，并要求删除之前的 Release。
+- 操作：
+  - 发布工作流需要 `docs/releases/v<版本>.md`，新增 `docs/releases/v0.19.1.md` 并更新 README 安装包表格，提交 `52ca902` 后快进推送 main（无强制推送）。
+  - 在 main 上手动运行 “Release installers”（`publish=true`），运行编号 40300586507；运行期间未改动 main。mac-arm64、mac-x64、win-x64 三个构建任务与发布任务全部成功，工作流创建标签 `v0.19.1`（指向 `52ca902`）并公开 Release，设为 Latest。
+  - 新 Release 核对通过后执行 `gh release delete v0.19.0 --yes`，未使用 `--cleanup-tag`，git 标签 `v0.19.0` 保留。此前只有这一个旧 Release。
+- 验证：Release 含 6 个资产（mac arm64 / x64 的 DMG 与 ZIP、Windows x64 EXE、SHA256SUMS.txt），上传摘要由工作流核对。下载 Windows 安装器，`SHA256SUMS.txt` 校验通过；从 NSIS 安装器中取出 7z 载荷并检查 app.asar（56 MB）：仅含 dist、electron、依赖、package.json 与合成夹具，无仓库文档 / 脚本 / 本机目录或 macOS 原生辅助程序，版本 0.19.1 且包含多端同步模块，确认 CI 打包修正生效。
+- 失败或未验证项：未在 Windows 实机安装 Release 版（人类此前已用本地交叉构建版实测子客户端）；macOS Release 包未下载复查（工作流内已做签名完整性与 DMG 校验）。
+- 未完成 / 需要人类决定：无。
+
+---
+
 ## 2026-10-26 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 多端同步实机验证并合入 main
 
 - 分支：`claude/lan-sync`，起点 `2c53df7`；合入 `main`（起点 `991ff66`，为本分支祖先，快进）。
