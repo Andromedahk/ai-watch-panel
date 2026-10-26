@@ -20,6 +20,20 @@
 
 ---
 
+## 2026-10-26 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· Windows 安装包与打包文件范围修正
+
+- 分支：`claude/lan-sync`，起点 `fc23c8c`；本地提交，未推送。
+- 目的：人类要求编译一份 Windows 安装包。
+- 操作与发现：
+  - 已有 NSIS x64 配置；在 Mac 上用 `electron-builder --win nsis --x64` 交叉构建，无需 wine。首次下载 NSIS 工具时出现 TLS 中断，重试成功。
+  - 首个产物的 app.asar 达 783 MB：`build.win.files` 只含一条排除规则，electron-builder 因此退回打包整个项目，混入了忽略目录中的安装备份（含用户数据副本）、旧构建与文档。该产物未分发，立即删除。核对已安装的 macOS 应用不受影响（仅含 dist、electron、依赖、package.json 与合成夹具）。
+  - 平台文件列表与通用列表按并集合并，平台内的排除无法覆盖通用的 `electron/**/*`。改为通用列表排除 `electron/native/bin/**/*`，在 `build.mac.files` 中加回，删除 `build.win.files`。
+- 验证：Windows 安装器 `AI-Watch-0.19.1-win-x64.exe`（130,617,108 字节，SHA-256 `c68e04e78f63b41c04a661f6f5a590210c500af4e95b885dd6b31f337569bb56`）为 NSIS PE32 安装器，`win-unpacked/AI Watch.exe` 为 x86-64 PE；app.asar 53 MB，dist 与源码一致，electron 脚本仅缺 macOS 原生辅助程序，无 .local / release / docs 内容。macOS 试打包仍解出两个原生辅助程序，文件集与已安装版相同。522 项单元测试、`tsc --noEmit`、`git diff --check` 通过。
+- 失败或未验证项：未在 Windows 实机安装、启动或使用（含多端同步与防火墙提示）；安装包未做 Authenticode 签名。此前 CI 生成的 0.19.0 Windows 包很可能也因同一配置打入了仓库内的文档、脚本等文件（CI 为全新检出，不含本机备份），未下载核实。
+- 未完成 / 需要人类决定：是否推送此配置修正、是否重新发布 Windows 包由人类决定。
+
+---
+
 ## 2026-10-26 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 推送并安装 029c4a2
 
 - 分支：`claude/lan-sync`，安装来源 `029c4a2`；开始时 worktree 干净。

@@ -182,6 +182,12 @@ npm run test:lan-sync # 两个独立测试配置在本机配对、同步、重�
 
 ## 更新记录
 
+### 未发布 · 2026-10-26 · Windows 安装包与打包文件范围修正 · 署名：Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）
+
+- 按人类要求在 Mac 上交叉构建 Windows x64 NSIS 安装包（`AI-Watch-0.19.1-win-x64.exe`，来源 `claude/lan-sync` 的 `fc23c8c`，未签名，SmartScreen 可能提示），输出在忽略的 `release/` 目录。
+- 修正打包配置：原 Windows 文件列表只有一条排除规则，electron-builder 会因此打包整个项目目录；在本机构建时会混入忽略目录中的备份和旧构建。现改为在通用列表中排除 macOS 原生辅助程序、仅在 macOS 配置中加回；Windows 包只含网页构建、Electron 脚本、依赖和合成夹具，macOS 包内容不变。含错误内容的首个 Windows 输出未分发，已立即删除。
+- 验证：Windows 包内网页构建与 Electron 脚本与源码一致，主程序为 x86-64 PE，安装器为 NSIS；macOS 试打包仍解出两个原生辅助程序。522 项单元测试、TypeScript 与空白检查通过。未在 Windows 实机安装或启动。
+
 ### 未发布 · 2026-10-26 · 安装 029c4a2 · 署名：Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）
 
 - 按人类要求推送 `claude/lan-sync`，从 `029c4a2` 构建普通 macOS App（0.19.1），正常退出旧应用、备份旧应用和完整用户数据后替换原安装副本并启动。严格签名检查通过，包内网页构建与 Electron 脚本与源码一致，原生辅助程序与上一安装版一致；新版持续运行，启动前后设置文件逐字节一致。多端同步保持默认“独立”，未监听同步端口。备份保留在忽略目录 `.local/install-backups/`。未合并到 main；两台设备之间的实测尚待进行。

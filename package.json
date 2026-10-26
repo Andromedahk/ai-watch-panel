@@ -74,6 +74,7 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "!electron/native/bin/**/*",
       "package.json",
       "tests/fixtures/local-status.json"
     ],
@@ -87,7 +88,10 @@
         "dmg",
         "zip"
       ],
-      "identity": "-"
+      "identity": "-",
+      "files": [
+        "electron/native/bin/**/*"
+      ]
     },
     "win": {
       "target": [
@@ -97,9 +101,6 @@
             "x64"
           ]
         }
-      ],
-      "files": [
-        "!electron/native/bin/**/*"
       ]
     },
     "linux": {
