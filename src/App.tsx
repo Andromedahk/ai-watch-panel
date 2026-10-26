@@ -6,11 +6,15 @@ import { useVisibleCards } from './useVisibleCards';
 import { replayEntrance } from './motion';
 import { demoJournal, emptyJournal, loadJournal, parseJournal, record, saveJournal, type Journal } from './journal';
 import { SyncSettings, syncStatusText } from './SyncSettings';
-import { DEFAULT_INSIGHT_ORDER, InsightsArea, useInsightSpace } from './view/insights';
+import { ScreenSurface } from './ScreenSurface';
+import { ScreenQuotaTrend } from './ScreenQuotaTrend';
+import { useScreenHistory } from './screen-history';
+import { StreamSettings, defaultScreenStream } from './StreamSettings';
+import { DEFAULT_INSIGHT_ORDER, InsightsArea, Mascot, useInsightSpace } from './view/insights';
 import { MASCOT_INTERVAL_DEFAULT, MASCOT_INTERVAL_MAX, MASCOT_INTERVAL_MIN, clampMascotInterval, isMascotInterval } from './view/mascot-cadence';
 import { TestControls } from './TestControls';
 import { useCardSort } from './useCardSort';
-import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection } from './test-mode';
+import { applyTestPreset, defaultTestConfig, makeTestStatus, type TestSelection, type TestConfig } from './test-mode';
 import { I18nContext, useI18n, createI18n, readLanguage, languages, localizeProvider, type Language } from './i18n';
 import { buildView } from './view/model';
 import { GrantAccessContext, Portrait, RED_ALERT } from './view/parts';
@@ -18,6 +22,10 @@ import { Overview, ProviderCard, RailItem, summarize } from './view/skins';
 import type { InsightId, Insights, LocalStatus, PanelState, Preferences, Provider, ProviderId, Theme, KimiSource, ClaudeSource, Layout, Skin } from './types';
 const providers = baseProviders;
 const EMPTY_JOURNAL = emptyJournal();
+const screenSurface = new URLSearchParams(location.search).get('surface') === 'screen';
+function readScreenTest() {
+  try { return JSON.parse(localStorage.getItem('ai-watch:screen-test') || 'null'); } catch { return null; }
+}
 
 const previewState: PanelState = {
   side: 'right', locked: false, animate: true, collapsed: false,
@@ -111,7 +119,11 @@ function TaskDetails({ provider, testing }: { provider: Provider; testing: boole
   </div>;
 }
 export default function App() {
-  const [state, setState] = useState(previewState);
+  const [state, setState] = useState(() => ({ ...previewState, desktop: Boolean(window.panel) }));
+  const [stateLoaded, setStateLoaded] = useState(!window.panel);
+  const [statusLoaded, setStatusLoaded] = useState(!window.panel);
+  const stream = state.stream || defaultScreenStream;
+  const streamController = !screenSurface && stream.enabled;
   const [pageHidden, setPageHidden] = useState(document.hidden);
   useEffect(() => {
     const update = () => setPageHidden(document.hidden);
@@ -122,9 +134,9 @@ export default function App() {
   const { t, date, number, percent } = i18n;
   const [languageSaving, setLanguageSaving] = useState(false);
   const [localStatus, setLocalStatus] = useState<LocalStatus | null>(null);
-  const [testMode, setTestMode] = useState(false);
-  const [testConfig, setTestConfig] = useState(defaultTestConfig);
-  const [testSampledAt, setTestSampledAt] = useState(() => new Date().toISOString());
+  const [testMode, setTestMode] = useState<boolean>(() => screenSurface && Boolean(readScreenTest()?.enabled));
+  const [testConfig, setTestConfig] = useState<TestConfig>(() => screenSurface ? readScreenTest()?.config || defaultTestConfig() : defaultTestConfig());
+  const [testSampledAt, setTestSampledAt] = useState(() => screenSurface ? readScreenTest()?.sampledAt || new Date().toISOString() : new Date().toISOString());
   const testStatus = useMemo(() => makeTestStatus(testConfig, testSampledAt), [testConfig, testSampledAt]);
   const displayStatus = testMode ? testStatus : localStatus;
   const [images, setImages] = useState(() => readImages());
@@ -158,7 +170,7 @@ export default function App() {
     ? { ...provider, name: 'Claude', subtitle: 'ANTHROPIC' } : provider).map(provider => localizeProvider(provider, i18n));
   const viewport = useRef<HTMLDivElement>(null);
   const enabledOrder = state.providerOrder.filter(id => state.enabledProviders.includes(id));
-  const layoutKey = `${state.skin}:${state.layout}:${state.animeMode}`;
+  const layoutKey = `${state.skin}:${state.layout}:${state.animeMode}:${stateLoaded && statusLoaded}:${streamController}`;
   const visibleCards = useVisibleCards(viewport, enabledOrder, state.collapsed, testMode, layoutKey);
   const main = useRef<HTMLElement>(null);
   const [entrance, setEntrance] = useState(0);
@@ -168,6 +180,8 @@ export default function App() {
   // A sync client shows the host's journal and keeps its own untouched.
   const [remoteJournal, setRemoteJournal] = useState<Journal | null>(null);
   const syncClient = state.syncRole === 'client';
+  const screenJournal = useScreenHistory(screenSurface, syncClient ? remoteJournal || EMPTY_JOURNAL : liveJournal,
+    syncClient, localStatus?.remote?.host || null);
   const [insightsSaving, setInsightsSaving] = useState(false);
   const [insightOrderSaving, setInsightOrderSaving] = useState(false);
   const [mascotSaving, setMascotSaving] = useState(false);
@@ -200,7 +214,7 @@ export default function App() {
   const translatedProviders = visibleProviders.map(provider => localizeProvider(provider, i18n));
   const activeTasks = visibleProviders.reduce((total, provider) => total + (displayStatus?.[provider.id]?.activeTasks || 0), 0);
   const refreshTime = displayStatus?.sampledAt ? date(displayStatus.sampledAt, {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : t("读取中");
-  const sorting = useCardSort(enabledOrder, order => { void saveVisibleOrder(order); }, settingsOpen || state.collapsed || orderSaving || modulesSaving || insightSorting);
+  const sorting = useCardSort(enabledOrder, order => { void saveVisibleOrder(order); }, screenSurface || streamController || settingsOpen || state.collapsed || orderSaving || modulesSaving || insightSorting);
   const hiddenActive = translatedProviders.filter(provider => !visibleCards.has(provider.id)
     && (provider.running || provider.local?.activity === 'waiting'));
   function revealProvider(id: ProviderId) {
@@ -291,6 +305,7 @@ export default function App() {
     catch { setNotice(t('保存失败，请重试')); }
   }
   async function openProvider(provider: Provider) {
+    if (screenSurface || streamController) return;
     if (syncClient && !testMode) { setNotice(t('子客户端不能打开主客户端上的应用')); return; }
     if (testMode) { if (state.collapsed) await collapse(false); setNotice(t("测试模式：已模拟打开 {p0}", { p0: provider.name })); return; }
     if (!window.panel) { if (state.collapsed) await collapse(false); setNotice(t("打开应用请使用桌面版")); return; }
@@ -323,6 +338,7 @@ export default function App() {
   }
 
   async function saveOrder(order: ProviderId[]) {
+    if (screenSurface || streamController) return;
     if (orderSaving) return;
     const previous = state.providerOrder;
     setOrderSaving(true); setState(current => ({ ...current, providerOrder: order }));
@@ -408,8 +424,8 @@ export default function App() {
     const acceptStatus = (next: LocalStatus) => setLocalStatus((current) =>
       current?.sampledAt && Boolean(current.remote) === Boolean(next.remote) && current.remote?.host === next.remote?.host
         && (!next.sampledAt || Date.parse(next.sampledAt) < Date.parse(current.sampledAt)) ? current : next);
-    bridge.getState().then(setState).catch(() => setNotice(t("无法读取窗口状态")));
-    bridge.getStatus().then(acceptStatus).catch(() => setNotice(t("无法读取本地工具状态")));
+    bridge.getState().then(setState).catch(() => setNotice(t("无法读取窗口状态"))).finally(() => setStateLoaded(true));
+    bridge.getStatus().then(acceptStatus).catch(() => setNotice(t("无法读取本地工具状态"))).finally(() => setStatusLoaded(true));
     const stateListener = bridge.onState(setState);
     const statusListener = bridge.onStatus(acceptStatus);
     const acceptJournal = (value: unknown) => setRemoteJournal(value ? parseJournal(value) : null);
@@ -418,8 +434,9 @@ export default function App() {
     return () => { stateListener(); statusListener(); journalListener?.(); };
   }, []);
   // The journal keeps only ids, states, times and percentages; test mode has its own sample journal.
-  useEffect(() => { if (localStatus && !localStatus.remote) setLiveJournal(current => record(current, localStatus)); }, [localStatus]);
+  useEffect(() => { if (!screenSurface && localStatus && !localStatus.remote) setLiveJournal(current => record(current, localStatus)); }, [localStatus]);
   useEffect(() => {
+    if (screenSurface) return;
     const timer = setTimeout(() => {
       saveJournal(liveJournal);
       if (state.syncRole === 'host') void window.panel?.shareJournal({ events: liveJournal.events, samples: liveJournal.samples, last: liveJournal.last }).catch(() => {});
@@ -432,7 +449,7 @@ export default function App() {
     document.documentElement.lang = i18n.language; document.documentElement.dir = i18n.dir;
     document.title = `AI Watch · ${t('AI 工具监看面板')}`;
   }, [i18n.language]);
-  useLayoutEffect(() => { document.documentElement.dataset.layout = state.collapsed ? 'single' : state.layout; }, [state.layout, state.collapsed]);
+  useLayoutEffect(() => { document.documentElement.dataset.layout = screenSurface ? 'screen' : streamController ? 'stream-controller' : state.collapsed ? 'single' : state.layout; }, [state.layout, state.collapsed, streamController]);
   useLayoutEffect(() => {
     // Swap palettes in one frame: colour transitions are for state changes, not for a theme flip.
     const root = document.documentElement;
@@ -442,7 +459,7 @@ export default function App() {
   }, [resolvedTheme]);
   useLayoutEffect(() => { document.documentElement.dataset.skin = state.skin; }, [state.skin]);
   // Agent cards load in again after a refresh, a skin / layout / mode switch and when the stored panel is reopened.
-  useLayoutEffect(() => { if (!state.stored && !state.collapsed) replayEntrance(main.current); }, [entrance, layoutKey, state.stored, state.collapsed]);
+  useLayoutEffect(() => { if (!screenSurface && !streamController && !state.stored && !state.collapsed) replayEntrance(main.current); }, [entrance, layoutKey, state.stored, state.collapsed]);
   useEffect(() => {
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused.matches('.provider-card')) focused.scrollIntoView({ block: 'nearest' });
@@ -459,11 +476,35 @@ export default function App() {
     const timeout = setTimeout(() => setNotice(''), 3500);
     return () => clearTimeout(timeout);
   }, [notice]);
+  useLayoutEffect(() => {
+    const dialog = modal.current;
+    if (!dialog) return;
+    if (dialog.open) dialog.close();
+    if (streamController) dialog.show();
+    else if (settingsOpen) dialog.showModal();
+  }, [settingsOpen, streamController, stateLoaded, statusLoaded]);
   useEffect(() => {
-    if (settingsOpen) modal.current?.showModal();
-    else modal.current?.close();
-  }, [settingsOpen]);
+    if (streamController) setDraft({ side: state.side, locked: state.locked, animate: state.animate });
+  }, [streamController]);
   useEffect(() => {
+    const update = (event: StorageEvent) => {
+      if (event.key === 'ai-watch:images') setImages(readImages());
+      if (event.key === 'ai-watch:anime-images') setAnimeImages(readImages(true));
+      if (screenSurface && event.key === 'ai-watch:screen-test') {
+        const value = readScreenTest(); setTestMode(Boolean(value?.enabled));
+        setTestConfig(value?.config || defaultTestConfig());
+        setTestSampledAt(value?.sampledAt || new Date().toISOString());
+      }
+    };
+    window.addEventListener('storage', update);
+    return () => window.removeEventListener('storage', update);
+  }, []);
+  useEffect(() => {
+    if (screenSurface) return;
+    try { localStorage.setItem('ai-watch:screen-test', JSON.stringify({ enabled: testMode, config: testConfig, sampledAt: testSampledAt })); } catch { /* preview still works locally */ }
+  }, [testMode, testConfig, testSampledAt]);
+  useEffect(() => {
+    if (screenSurface || streamController) return;
     const keydown = (event: KeyboardEvent) => {
       if (!event.defaultPrevented && event.key === 'Escape' && state.layout === 'fullscreen' && !settingsOpen && !sorting.sorting && !insightSorting) { event.preventDefault(); void changeLayout(state.windowLayout); }
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'b' && !state.desktop) {
@@ -472,7 +513,7 @@ export default function App() {
     };
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
-  }, [state.desktop, state.layout, settingsOpen, sorting.sorting, insightSorting]);
+  }, [state.desktop, state.layout, settingsOpen, sorting.sorting, insightSorting, streamController]);
 
   async function toggleLock() {
     try {
@@ -491,7 +532,7 @@ export default function App() {
     catch { setNotice(t("收纳失败，面板保持打开，请重试")); }
   }
   async function refresh() {
-    if (refreshing) return;
+    if (screenSurface || streamController || refreshing) return;
     setRefreshing(true);
     try {
       if (testMode) {
@@ -569,8 +610,19 @@ export default function App() {
   ];
   const section = (id: string) => modal.current?.querySelector<HTMLElement>(`[data-section="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
-  return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={state.desktop && !syncClient ? () => void grantClaudeAccess() : null}><main ref={main} lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
-    {state.collapsed ? <aside className="collapsed-rail" aria-label={t('收起的监看面板')}>
+  if (!stateLoaded || !statusLoaded) return <I18nContext.Provider value={i18n}><div className="screen-loading" role="status">{t('读取中')}</div></I18nContext.Provider>;
+  if (screenSurface) return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={null}>
+    <ScreenSurface remote={Boolean(displayStatus?.remote)} sampledAt={displayStatus?.sampledAt} providers={translatedProviders} views={views} stream={stream} skin={skin} anime={state.animeMode} animate={state.animate}
+      testing={Boolean(testMode || displayStatus?.isTestData)} demo={!state.desktop} renderCard={(view, index, visible) =>
+        <ProviderCard key={view.id} view={view} skin={skin} index={index} anime={state.animeMode} image={imageFor(view.id)} readOnly cycleSeconds={Math.max(3, stream.pageSeconds / 2)} animationPaused={!visible} dragging={false} fullscreen={false} sortProps={{ style: { display: visible ? undefined : 'none' } }} onOpen={() => {}} busy={false} />}
+      imageForAttention={provider => animeImages[provider.id]}
+      renderMascot={<Mascot views={views} anime image={view => animeImages[view.id]} interval={mascotInterval} paused={false} readOnly />}
+      renderTrend={<ScreenQuotaTrend views={views} journal={testMode || !state.desktop ? testJournal : screenJournal}
+        testing={Boolean(testMode || displayStatus?.isTestData)} demo={!state.desktop} pageSeconds={stream.pageSeconds} />} />
+  </GrantAccessContext.Provider></I18nContext.Provider>;
+
+  return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={state.desktop && !syncClient ? () => void grantClaudeAccess() : null}><main ref={main} data-surface={streamController ? 'controller' : 'desktop'} lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel ${streamController ? 'stream-controller' : ''} skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
+    {!streamController && (state.collapsed ? <aside className="collapsed-rail" aria-label={t('收起的监看面板')}>
       <button className="rail-expand" title={t('展开面板')} aria-label={t('展开面板')} onClick={() => collapse(false)}>{state.side === 'right' ? <ArrowLeftToLine size={18} /> : <ArrowRightToLine size={18} />}</button>
       <div className="rail-counts" title={t('运行中 {p0} · 等你处理 {p1}', { p0: summary.running, p1: summary.waiting.length })}>
         <span data-kind="running"><strong>{number(summary.running)}</strong>{t('运行')}</span>
@@ -619,8 +671,8 @@ export default function App() {
         journal={testMode ? testJournal : syncClient ? remoteJournal || EMPTY_JOURNAL : liveJournal} anime={state.animeMode} image={view => imageFor(view.id)} onOpen={view => void openProvider(view.provider)}
         interval={mascotInterval} paused={settingsOpen || pageHidden || state.stored || state.collapsed} />}
       </div>
-    </div>}
-    {!state.collapsed && !settingsOpen && !sorting.sorting && hiddenActive.length > 0 && <div className="hidden-activity" aria-label={t('屏幕外模块活动')}>
+    </div>)}
+    {!streamController && !state.collapsed && !settingsOpen && !sorting.sorting && hiddenActive.length > 0 && <div className="hidden-activity" aria-label={t('屏幕外模块活动')}>
       {hiddenActive.map(provider => <button key={provider.id} className="hidden-activity-light" data-provider={provider.id} style={{ '--accent': provider.color } as CSSProperties}
         data-glow={provider.local?.activity === 'waiting' && RED_ALERT.has(provider.id) ? 'attention' : 'running'}
         aria-label={t('{p0} {p1}，点击查看', { p0: provider.name, p1: provider.local?.activity === 'waiting' ? '等待处理' : '正在运行' })}
@@ -629,13 +681,17 @@ export default function App() {
     </div>}
     <span id="card-sort-help" className="sr-only">{t('长按卡片拖动排序；Escape 取消。Alt 加方向键按行列排序。')}</span>
     {sorting.sorting && <div className="sort-hint" role="status" title={t('排序说明')}>{t('排序')} · {t('第 {p0} 位', { p0: (sorting.target ?? 0) + 1 })}</div>}
-    <dialog ref={modal} className="settings-dialog" aria-labelledby="settings-title" onCancel={() => setSettingsOpen(false)}>
-      <div className="settings-heading"><h2 id="settings-title">{t('面板配置')}</h2><button className="icon-button" aria-label={t('关闭配置')} onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
+    <dialog ref={modal} className="settings-dialog" aria-labelledby="settings-title" onCancel={event => { if (streamController) event.preventDefault(); else setSettingsOpen(false); }}>
+      <div className="settings-heading"><h2 id="settings-title">{t('面板配置')}</h2>{streamController ? <div className="stream-window-actions">
+        <button className="icon-button" aria-label={t('最小化')} title={t('最小化')} onClick={() => void window.panel?.minimize().then(setState)}><Minimize size={18} /></button>
+        <button className="icon-button" aria-label={storeLabel} title={storeHint} disabled={!state.trayAvailable} onClick={storePanel}><PanelTopClose size={18} /></button>
+      </div> : <button className="icon-button" aria-label={t('关闭配置')} onClick={() => setSettingsOpen(false)}><X size={18} /></button>}</div>
       <nav className="settings-nav" aria-label={t('配置分区')}>
-        {[['look', t('外观')], ['modules', t('模块')], ['data', t('数据来源')], ['window', t('窗口')], ['images', t('图片与应用')], ['sync', t('多端同步')], ['about', t('关于')]].map(([id, label]) =>
+        {[['stream', i18n.language.startsWith('zh') ? '小屏幕串流' : 'Display streaming'], ['look', t('外观')], ['modules', t('模块')], ['data', t('数据来源')], ['window', t('窗口')], ['images', t('图片与应用')], ['sync', t('多端同步')], ['about', t('关于')]].map(([id, label]) =>
           <button key={id} type="button" onClick={() => section(id)}>{label}</button>)}
       </nav>
       <div className="settings-content">
+        <section className="settings-group" data-section="stream"><StreamSettings state={state} onState={setState} /></section>
         <section className="settings-group" data-section="look"><h3>{t('外观')}</h3>
           <fieldset className="skin-settings"><legend>{t('界面风格')}</legend>
             <div className="skin-options">{skinOptions.map(option => <button key={option.id} type="button" className={`skin-option ${skin === option.id ? 'selected' : ''}`} data-skin-option={option.id}
@@ -646,7 +702,7 @@ export default function App() {
           <label className="switch-row"><span>{t('跟随系统')}<small>{t('自动切换浅色和深色外观')}</small></span><input aria-label={t('跟随系统')} type="checkbox" checked={state.theme === 'system'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'system' : resolvedTheme)} /></label>
           <label className="switch-row"><span>{t('暗夜模式')}<small>{state.theme === 'system' ? t('手动切换后停止跟随系统') : t('已手动指定外观')}</small></span><input aria-label={t('暗夜模式')} type="checkbox" checked={resolvedTheme === 'dark'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'dark' : 'light')} /></label>
           <fieldset className="layout-settings"><legend>{t('窗口模式')}</legend>
-            <select aria-label={t('窗口模式')} value={state.layout} disabled={layoutSaving} onChange={event => void changeLayout(event.target.value as Layout)}>
+            <select aria-label={t('窗口模式')} value={state.layout} disabled={layoutSaving || streamController} onChange={event => void changeLayout(event.target.value as Layout)}>
               <option value="single">{t('单列模式')}</option><option value="double">{t('双排模式')}</option><option value="fullscreen">{t('全屏模式')}</option>
             </select><p className="appearance-hint">{t('双排宽度加倍；全屏显示任务详情。Escape 退出全屏。')}</p>
           </fieldset>

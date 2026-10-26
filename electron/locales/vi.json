@@ -582,5 +582,7 @@
   "连接": "Kết nối",
   "子客户端不能打开主客户端上的应用": "Máy khách không thể mở ứng dụng trên máy chủ",
   "同步": "Đồng bộ",
-  "未同步": "Chưa đồng bộ"
+  "未同步": "Chưa đồng bộ",
+  "最小化": "Thu nhỏ",
+  "自动轮播": "Tự động luân phiên"
 }

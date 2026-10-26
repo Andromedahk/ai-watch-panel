@@ -36,12 +36,17 @@ export function Portrait({ provider, image, anime, crop = 'face', glow }: { prov
   </div>;
 }
 
-export function LaunchAvatar({ view, image, anime, crop, busy, onOpen, children, mirror }: {
+export function LaunchAvatar({ view, image, anime, crop, busy, onOpen, children, mirror, readOnly = false }: {
   view: ProviderView; image?: string; anime: boolean; crop?: Crop; busy?: boolean; onOpen: () => void; children?: ReactNode;
   /** A pointer-only duplicate (e.g. the attention banner) that stays out of the tab order and accessibility tree. */
   mirror?: boolean;
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
+  if (readOnly) return <div className="avatar-launch avatar-display">
+    <Portrait provider={view.provider} image={image} anime={anime} crop={crop} glow={glowOf(view)} />
+    {children}
+  </div>;
   return <button type="button" className="avatar-launch" aria-label={mirror ? undefined : t('打开 {p0}', { p0: view.name })} aria-hidden={mirror || undefined} tabIndex={mirror ? -1 : undefined}
     title={t('打开 {p0}', { p0: view.name })} disabled={busy} onClick={onOpen}>
     <Portrait provider={view.provider} image={image} anime={anime} crop={crop} glow={glowOf(view)} />
@@ -94,7 +99,7 @@ export function QuotaRing({ row, size = 46 }: { row: QuotaRow; size?: number }) 
   </div>;
 }
 
-export function Balance({ view }: { view: ProviderView }) {
+export function Balance({ view, readOnly = false }: { view: ProviderView; readOnly?: boolean }) {
   const { t, number } = useI18n();
   const [page, setPage] = useState(0);
   if (view.metrics.kind !== 'balance') return null;
@@ -108,7 +113,7 @@ export function Balance({ view }: { view: ProviderView }) {
     </div>
     <div className="balance-parts"><span>{stale ? t('历史余额 · 待更新') : t('账户可用余额')}</span>
       <span>{t('现金')} <b>{fmt(wallet.paid)}</b> · {t('赠送')} <b>{fmt(wallet.bonus)}</b></span>
-      {wallets.length > 1 && <button className="currency-switch" onClick={() => setPage((page + 1) % wallets.length)} aria-label={t('切换余额币种')}>{wallet.currency} ↔</button>}
+      {!readOnly && wallets.length > 1 && <button className="currency-switch" onClick={() => setPage((page + 1) % wallets.length)} aria-label={t('切换余额币种')}>{wallet.currency} ↔</button>}
     </div>
   </div>;
 }
@@ -140,25 +145,26 @@ export function headline(view: ProviderView, number: (value: string | number, op
   return view.tightest === null ? '—' : `${Math.round(view.tightest)}%`;
 }
 
-export function TaskLine({ view, children }: { view: ProviderView; children?: ReactNode }) {
+export function TaskLine({ view, children, readOnly = false }: { view: ProviderView; children?: ReactNode; readOnly?: boolean }) {
   const { t } = useI18n();
   const grant = useContext(GrantAccessContext);
   return <div className="task-line" title={view.taskTitle} data-inferred={view.inferred || undefined}><span className={`status-dot ${dotClass(view)}`} aria-hidden="true" /><span className="task-text">{view.task}</span>
-    {view.accessRequired && grant ? <button type="button" className="grant-access" onClick={grant}>{t('授权辅助功能')}</button> : children}</div>;
+    {!readOnly && view.accessRequired && grant ? <button type="button" className="grant-access" onClick={grant}>{t('授权辅助功能')}</button> : children}</div>;
 }
 
 export function SourceTag({ view }: { view: ProviderView }) {
   return <span className={`source-tag ${view.isLocal ? 'local' : ''}`} title={view.sourceTitle}>{view.source}</span>;
 }
 
-export function CardShell({ view, skin, index, sortProps, dragging, animationPaused, children }: {
+export function CardShell({ view, skin, index, sortProps, dragging, animationPaused, children, readOnly = false }: {
   view: ProviderView; skin: Skin; index: number; sortProps?: HTMLAttributes<HTMLElement>; dragging: boolean; animationPaused: boolean; children: ReactNode;
+  readOnly?: boolean;
 }) {
   const { t, number } = useI18n();
-  return <section {...sortProps} className={`provider-card card-${skin} ${view.state === 'running' ? 'is-running' : ''} ${dragging ? 'is-dragging' : ''}`}
+  return <section {...(readOnly ? {} : sortProps)} className={`provider-card card-${skin} ${view.state === 'running' ? 'is-running' : ''} ${!readOnly && dragging ? 'is-dragging' : ''}`}
     style={{ '--accent': view.color, '--i': index, ...sortProps?.style } as CSSProperties} data-provider={view.id} data-state={view.state} data-attention={view.attention}
-    data-animation-paused={animationPaused} aria-label={t('{p0} 面板', { p0: view.name })} tabIndex={0} aria-describedby="card-sort-help" onDragStart={event => event.preventDefault()}>
-    <span className="card-index" title={t('长按卡片拖动排序')}><GripVertical size={10} aria-hidden="true" /><bdi dir="ltr">{number(index + 1, { minimumIntegerDigits: 2 })}</bdi></span>
+    data-animation-paused={animationPaused} data-read-only={readOnly || undefined} aria-label={t('{p0} 面板', { p0: view.name })} tabIndex={readOnly ? undefined : 0} aria-describedby={readOnly ? undefined : 'card-sort-help'} onDragStart={readOnly ? undefined : event => event.preventDefault()}>
+    {!readOnly && <span className="card-index" title={t('长按卡片拖动排序')}><GripVertical size={10} aria-hidden="true" /><bdi dir="ltr">{number(index + 1, { minimumIntegerDigits: 2 })}</bdi></span>}
     {children}
   </section>;
 }

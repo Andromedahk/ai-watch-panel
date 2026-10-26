@@ -1,0 +1,26 @@
+.screen-quota-trend {
+  container-type: size; width: 100%; height: 100%; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; gap: 1.8cqh; padding: 2.2cqw;
+  border: 1px solid var(--line); border-radius: 2vmin; background: var(--surface);
+  overflow: hidden; color: var(--text); --trend-type: min(3.3cqw, 6.9cqh);
+}
+.screen-quota-trend .screen-trend-heading { display: flex; flex: none; align-items: baseline; justify-content: space-between; gap: 1em; min-width: 0; }
+.screen-quota-trend .screen-trend-heading h2 { margin: 0; color: var(--text); font: 750 calc(var(--trend-type) * 1.15)/1.2 var(--font); }
+.screen-quota-trend .screen-trend-heading > span { flex: none; font: 500 calc(var(--trend-type) * .8)/1.2 var(--font); color: var(--muted); }
+.screen-quota-trend .screen-trend-chart { flex: 1 1 0; min-height: 0; min-width: 0; display: grid; grid-template-columns: 2.5em minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: .35em .7em; font: 500 calc(var(--trend-type) * .78)/1.1 var(--mono); color: var(--muted); }
+.screen-quota-trend .screen-trend-y-axis { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; padding-block: .05em; }
+.screen-quota-trend .screen-trend-plot { position: relative; min-width: 0; min-height: 0; }
+.screen-quota-trend .screen-trend-plot svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.screen-quota-trend .screen-trend-grid { stroke: var(--line-strong); stroke-width: 1.5px; stroke-dasharray: 5 7; }
+.screen-quota-trend .screen-trend-series, .screen-quota-trend .screen-trend-legend li { --curve-ink: color-mix(in oklch, var(--accent) var(--ink-mix), var(--ink-base)); }
+.screen-quota-trend .screen-trend-line { fill: none; stroke: var(--curve-ink); stroke-width: max(2px, .35cqw); stroke-linejoin: round; stroke-linecap: round; }
+.screen-quota-trend .screen-trend-point { fill: var(--curve-ink); stroke: var(--surface); stroke-width: 1.5px; }
+.screen-quota-trend .screen-trend-x-axis { grid-column: 2; display: flex; justify-content: space-between; padding-inline: 1%; }
+.screen-quota-trend .screen-trend-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 1em; text-align: center; font: 500 var(--trend-type)/1.4 var(--font); }
+.screen-quota-trend .screen-trend-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35em 1em; margin: 0; padding: 0; flex: none; list-style: none; font: 500 var(--trend-type)/1.25 var(--font); }
+.screen-quota-trend .screen-trend-legend li { display: flex; align-items: baseline; gap: .35em; min-width: 0; }
+.screen-quota-trend .screen-trend-legend i { flex: none; width: .65em; height: .22em; align-self: center; border-radius: 999px; background: var(--curve-ink); }
+.screen-quota-trend .screen-trend-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.screen-quota-trend .screen-trend-legend strong { margin-inline-start: auto; flex: none; color: var(--curve-ink); font: 700 .95em/1.25 var(--mono); }
+.screen-quota-trend .screen-trend-caption { display: flex; justify-content: space-between; gap: 1em; flex: none; font: 500 calc(var(--trend-type) * .72)/1.2 var(--font); color: var(--muted); }
+.screen-quota-trend .screen-trend-caption bdi { flex: none; font-family: var(--mono); }

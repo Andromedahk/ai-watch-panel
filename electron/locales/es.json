@@ -582,5 +582,7 @@
   "连接": "Conectar",
   "子客户端不能打开主客户端上的应用": "Un cliente no puede abrir apps del anfitrión",
   "同步": "Sincronizado",
-  "未同步": "Sin sincronizar"
+  "未同步": "Sin sincronizar",
+  "最小化": "Minimizar",
+  "自动轮播": "Rotación automática"
 }

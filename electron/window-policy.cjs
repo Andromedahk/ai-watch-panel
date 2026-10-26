@@ -1,4 +1,5 @@
 const path = require('node:path');
+const { streamPreferences } = require('./screen-stream-policy.cjs');
 const { isLanguage } = require('./i18n.cjs');
 // Panel width follows the screen height within a readable range; the 4.5 : 1 ratio is retired.
 const WIDTH_DIVISOR = 3.4;
@@ -104,6 +105,7 @@ function validPreferences(value) {
     mascotInterval: isMascotInterval(value?.mascotInterval) ? value.mascotInterval : MASCOT_INTERVAL,
     syncRole: isSyncRole(value?.syncRole) ? value.syncRole : 'off',
     syncPort: isSyncPort(value?.syncPort) ? value.syncPort : 47321,
+    stream: streamPreferences(value?.stream),
     skin: isSkin(value?.skin) ? value.skin : 'watch',
     layout: isLayout(value?.layout) ? value.layout : 'single',
     windowLayout: value?.windowLayout === 'double' ? 'double' : 'single',

@@ -23,7 +23,7 @@ function fixture(platform, options = {}) {
   const Menu = { buildFromTemplate(items) { return { items, getMenuItemById: id => items.find(item => item.id === id) }; } };
   const icon = { isEmpty: () => options.emptyIcon === true, setTemplateImage: value => calls.push(`template:${value}`) };
   const panel = new PanelTray({ app, window, Tray, Menu, nativeImage: { createFromPath: () => icon }, platform, getSummary: options.getSummary,
-    onChange: () => calls.push('changed'), onRefresh: () => calls.push('refresh'), now: () => time,
+    onChange: () => calls.push('changed'), onRefresh: () => calls.push('refresh'), canRefresh: options.canRefresh, now: () => time,
     schedule: (fn, ms) => { timers.set(++serial, { fn, ms }); return serial; }, cancel: id => timers.delete(id) });
   return { panel, calls, timers, get visible() { return visible; },
     advance(ms) { time += ms; for (const [id, timer] of timers) { timers.delete(id); timer.fn(); } },
@@ -162,5 +162,17 @@ test('a delayed Dock activation is retried once and a later restore cancels it',
   await f.panel.restore();
   f.panel.storeForWidgets(); await f.panel.restore();
   assert.equal(f.timers.size, 0);
+  f.panel.dispose();
+});
+
+test('streaming removes manual refresh from the tray and restores it when disabled', () => {
+  let streaming = false;
+  const f = fixture('win32', { canRefresh: () => !streaming });
+  assert.ok(f.panel.menu.items.some(item => item.label === '刷新本地状态'));
+  streaming = true; f.panel.updateMenu();
+  assert.equal(f.panel.menu.items.some(item => item.label === '刷新本地状态'), false);
+  assert.ok(f.panel.menu.getMenuItemById('show-panel'));
+  streaming = false; f.panel.updateMenu();
+  assert.ok(f.panel.menu.items.some(item => item.label === '刷新本地状态'));
   f.panel.dispose();
 });
