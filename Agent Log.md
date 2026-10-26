@@ -20,6 +20,17 @@
 
 ---
 
+## 2026-10-26 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 推送并安装 029c4a2
+
+- 分支：`claude/lan-sync`，安装来源 `029c4a2`；开始时 worktree 干净。
+- 目的：人类要求推送并安装局域网多端同步版本。
+- 操作：首次 HTTPS 推送因 HTTP/2 帧错误失败，仅对该命令改用 HTTP/1.1 后推送成功（新分支，未强制推送、未合并 main）。`npm run build` 后用 electron-builder 打包普通 macOS App（`--mac --dir`），输出在忽略的 `release/` 版本目录。正常退出旧应用（2 秒内退出、无残留进程），完整复制用户数据并将旧应用移入备份目录（未删除），放入新应用并启动。备份与安装摘要在忽略的 `.local/install-backups/`。
+- 验证：`codesign --verify --deep --strict --all-architectures` 通过；包内网页构建与 `dist`、Electron 脚本与源码一致，版本 0.19.1；两个原生辅助程序（构建产物，源码未改）与上一安装版逐字节一致，与工作区文件的差异来自打包签名。安装后应用摘要与打包结果一致；新版持续运行；启动前后设置文件 SHA-256 一致。多端同步为默认“独立”，未生成配对文件，TCP 47321 与 UDP 47322 均无监听。
+- 失败或未验证项：未截取运行截图；未在两台真实设备之间实测同步；本轮未重复测试（`029c4a2` 提交前已全部通过）。应用仍为本地 ad hoc 签名。
+- 未完成 / 需要人类决定：是否合并到 main、在另一台设备安装并实测由人类决定。
+
+---
+
 ## 2026-10-26 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 局域网多端同步
 
 - 分支：`claude/lan-sync`，起点 `origin/main` 的 `991ff66`；独立 worktree，依赖从已安装同版本的 worktree 复制。本地提交，未推送。主目录未提交的 relay 改动未触碰。
