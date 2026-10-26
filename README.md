@@ -81,7 +81,7 @@ Mac 需要 **macOS 15 或更新版本**及匹配芯片的构建：M 系列使用
 - 当前提问或授权请求全屏显示：**左半角色、右半大号红字**，文字向右留出约一个大字的额外间距。多条提醒每 6 秒自动切换，角色和文字滑入淡入，底部显示轮换进度；有当前等待任务明细时，同一 Agent 的多条任务也分别展示。缺少明细时按 Agent 汇总，同时待回答和待授权分两行显示。普通状态刷新不重置轮换，关闭动效仍会换页；处理完成后恢复监看布局。过期任务、登录提示和辅助功能权限提示不会仅凭文字触发全屏提醒。仍需在电脑上的对应 Agent 中回答或授权。
 - 局域网子客户端可将主客户端的状态显示到本机小屏；测试模式会同步到小屏并标为测试数据。系统减少动态效果和原有动效开关仍有效。
 
-当前已完成 Windows 离屏渲染及无 USB 编码验证，Mac 新增原生 USB 传输和双架构构建流程；**实体展域设备的显示、帧率与退出恢复尚待实机验收**。构建、依赖准备、架构和验证范围见 [小屏幕串流说明](docs/SCREEN-STREAM.md)和[桥接组件资源](screen-bridge/README.md)。
+Windows 离屏渲染及无 USB 编码验证已通过；Mac Apple Silicon / Intel 均已通过原生构建、严格签名、离屏编码及打包应用启动检查。**实体展域设备的显示、帧率与退出恢复尚待实机验收**。构建、依赖准备、架构和验证范围见 [小屏幕串流说明](docs/SCREEN-STREAM.md)和[桥接组件资源](screen-bridge/README.md)。
 
 发布流程从固定的 FFmpeg / x264 源码构建编码器，再构建并打包内部串流桥；Mac 额外包含固定源码构建的 libusb。Apple Silicon 与 Intel 分别原生构建，完整对应源码、构建脚本与许可证随包保留。CI 先完成不连接 USB 的真实编码检查，再检查安装包中的组件。缺少组件的自定义构建仍会禁用串流开关并说明原因。已发布的 **v0.20.0 Mac 包不含这次 Mac USB 移植**，需使用本分支的新构建。
 
@@ -142,7 +142,7 @@ Antigravity 主卡片将同一基础模型的 High / Medium / Low / Thinking 合
 
 Release 同时提供 `SHA256SUMS.txt`，用于核对下载文件。macOS 普通包为 ad hoc 签名，**没有 Developer ID 签名和 Apple 公证**，首次打开可能受到 Gatekeeper 限制；Windows 包**没有 Authenticode 签名**，可能出现 SmartScreen 提示。请核对项目来源及校验值后按系统提示处理，不建议全局关闭系统保护。原生桌面小组件不在普通安装包内。
 
-Windows 原生 CI 已完成构建、NSIS 安装和合成数据下的打包应用启动检查；各助手的真实服务、辅助功能和完整窗口交互仍待 Windows 实机验收。Linux 本次不发布。macOS 原生辅助程序以 macOS 13 为部署目标，旧版本系统的完整兼容性尚未另行验收。
+Windows 原生 CI 已完成构建、NSIS 安装和合成数据下的打包应用启动检查；各助手的真实服务、辅助功能和完整窗口交互仍待 Windows 实机验收。Linux 本次不发布。已发布 v0.20.0 的 macOS 原生辅助程序以 macOS 13 为部署目标，旧版本系统的完整兼容性尚未另行验收；本分支新增 USB 串流的 Mac 构建改为要求 macOS 15+。
 
 维护者在 Actions 中对最新 `main` 手动运行 **Release installers**。`publish` 默认为 `false`，只构建、检查并保存 Actions 产物；需要公开发布时将 `publish` 设为 `true`。发布任务等待三个原生构建任务全部成功，在 GitHub 内部下载同一次运行的安装包、生成 `SHA256SUMS.txt`，并确认远端 `main` 仍指向本次运行的 `github.sha`。随后创建草稿 Release，将标签固定到该提交，上传并核对五个安装文件及校验清单，最后公开。若 `main` 已更新，须针对最新 `main` 重新构建。
 
@@ -212,9 +212,9 @@ npm run test:lan-sync # 两个独立测试配置在本机配对、同步、重�
 - 从拉取后的最新 `main`（`2a9f856`）创建 `codex/macos-usb-streaming`，为 Apple Silicon 和 Intel 增加原生 USB 传输，串流继续作为 AI Watch 内置功能。保留原小屏布局、动效、看板娘、曲线和全屏等待提醒。
 - Windows 与 Mac 共用设备协议，分别使用原 Windows USB 传输和随包 libusb；Mac 最低版本为 15，不强制卸载驱动或改变设备配置。新增无 USB 的库预检及手工设备信息预检。
 - 增加固定源码构建的 Mac FFmpeg / x264 / libusb、Python 桥、架构与签名检查；两种 Mac 架构分别原生构建和验证。使用者无需外部 XANALI 目录或另装运行时。
-- Mac 首轮原生 CI 的 568 项单元测试在两种架构均通过；显式指定 SDK、芯片和部署目标后，Intel 的 FFmpeg / x264 / libusb 编译与签名已通过。Python Framework 按完整目录结构重新签名并严格验证，完整安装包验证仍在进行。
+- [原生 CI 40363505467](https://github.com/Andromedahk/ai-watch-panel/actions/runs/40363505467) 的 Apple Silicon / Intel 均成功：各 568 项 Node 测试、52 项 Python 测试（51 通过、1 项 Windows 专用测试跳过）、Go 检查、固定源码依赖编译、严格签名、真实编码、Electron 离屏链、DMG / ZIP 及打包应用启动检查通过。两种架构安装包保存在该次 Actions 产物中，未公开发布。
 - 随包重建源码保留仓库目录结构，优先复用随包上游归档并核对摘要；Python 桥使用默认 ad hoc 签名，避免显式参数意外启用未配置的 hardened runtime。增加仅 Mac 验证入口，发布仍要求完整三平台检查。
-- 本地类型检查、网页构建、35 项定向 Node 测试及完整小屏预览通过；49 项 Python 测试中 48 通过，1 项 macOS 文件锁实测因 Windows 主机跳过。Windows 桥重建、真实 H.264 编码和 Electron 离屏链通过；全量 Node 与未修改基线相比新增失败 0。修正 CI 的 Python 测试工作目录，以及原有 Windows 高 DPI 窗口高度的 1 DIP 测试舍入误差。原生 Mac 构建、签名及实机 USB 验收尚待完成；详细失败与复测记录见 [Agent Log](Agent%20Log.md)。
+- 本地类型检查、网页构建、35 项定向 Node 测试及完整小屏预览通过；最终 52 项 Python 测试中 51 通过，1 项 macOS 文件锁实测因 Windows 主机跳过。Windows 桥重建、真实 H.264 编码和 Electron 离屏链通过；全量 Node 与未修改基线相比新增失败 0。修正 CI 的 Python 测试工作目录，以及原有 Windows 高 DPI 窗口高度的 1 DIP 测试舍入误差。实体 USB 接管、出画、持续运行及恢复仍待实机验收；详细失败与复测记录见 [Agent Log](Agent%20Log.md)。
 
 ### 0.20.0 · 2026-10-26 · 正式发布并完成 macOS 升级 · 署名：Codex（GPT-6 / Codex 桌面本地执行环境）
 

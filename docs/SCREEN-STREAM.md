@@ -75,3 +75,5 @@ node scripts/verify-screen-encoder.mjs  # 先构建内部桥，真实编码但�
 测试脚本创建隔离配置、合成 Agent 数据和离屏预览，不访问真实账号或 USB。`AI_WATCH_STREAM_PREVIEW=1` 仅在隔离的测试配置配合合成状态时生效。测试覆盖设置页、只读控件/IPC、后台帧与台词、全屏提醒和清除、翻页、配置重启与恢复桌面。Python 编码测试和 Go 检查见桥接说明。
 
 硬件边界：当前只具备 PASE_1021 适配代码；未在本功能中完成实机 USB 串流、画质、热负载、持续运行或厂商界面恢复验收。Mac 原生编译和实际 USB 接口占用必须分别验证，模拟传输测试不能证明设备一定可被 macOS 占用。新硬件控制文案提供中文及英文回退，原有面板语言保持完整。
+
+2026-10-27 的[双架构原生 CI](https://github.com/Andromedahk/ai-watch-panel/actions/runs/40363505467)已通过 Apple Silicon 与 Intel 的组件编译、严格签名、独立编码、Electron 离屏链、DMG / ZIP 和包内应用启动检查。两套 Actions 安装产物可用于后续实体 USB 验收；未创建公开 Release。
