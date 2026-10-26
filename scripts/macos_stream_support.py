@@ -89,11 +89,15 @@ def verify_resource_bundle(root: Path, arch: str) -> None:
     verify_source_archives(root / "source")
 
 
-def verify_native_binary(path: Path, arch: str, *, system_dependencies_only: bool = True) -> None:
+def verify_native_architecture(path: Path, arch: str) -> None:
     expected = "arm64" if arch == "arm64" else "x86_64"
     actual = subprocess.check_output(["lipo", "-archs", str(path)], text=True).split()
     if actual != [expected]:
         raise ValueError(f"Wrong architecture in {path.name}: expected {expected}, got {actual}")
+
+
+def verify_native_binary(path: Path, arch: str, *, system_dependencies_only: bool = True) -> None:
+    verify_native_architecture(path, arch)
     if system_dependencies_only:
         listing = subprocess.check_output(["otool", "-L", str(path)], text=True)
         for line in listing.splitlines()[1:]:
@@ -106,9 +110,32 @@ def verify_native_binary(path: Path, arch: str, *, system_dependencies_only: boo
     subprocess.run(["codesign", "--verify", "--strict", str(path)], check=True)
 
 
+def framework_bundles(root: Path) -> list[Path]:
+    """Return real framework directories inside the runtime, innermost first."""
+    return sorted((path for path in root.rglob("*.framework") if path.is_dir() and not path.is_symlink()),
+                  key=lambda path: (-len(path.parts), str(path)))
+
+
+def verify_framework_signature(path: Path) -> None:
+    # A framework's executable and resources form one signed bundle. Checking
+    # only Versions/<version>/<name> loses the resource-envelope context.
+    subprocess.run(["codesign", "--verify", "--deep", "--strict", "--all-architectures", str(path)], check=True)
+
+
+def sign_python_frameworks(root: Path) -> None:
+    """Seal PyInstaller's reconstructed frameworks after console COLLECT."""
+    for framework in framework_bundles(root):
+        # COLLECT signs cached Mach-O files before assembling the slim framework.
+        # Sign its final Info.plist/resources as a bundle, from the inside out.
+        # Do not use --deep for signing or enable hardened runtime here.
+        subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(framework)], check=True)
+        verify_framework_signature(framework)
+
+
 def verify_python_binaries(root: Path, arch: str) -> None:
     """Check PyInstaller's native extensions/frameworks after app re-signing."""
     count = 0
+    frameworks = framework_bundles(root)
     for path in root.rglob("*"):
         if not path.is_file() or path.is_symlink():
             continue
@@ -116,10 +143,17 @@ def verify_python_binaries(root: Path, arch: str) -> None:
             magic = binary.read(4)
         if magic not in (b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf"):
             continue
-        verify_native_binary(path, arch, system_dependencies_only=False)
+        if any(framework in path.parents for framework in frameworks):
+            # Keep checking each real Mach-O's architecture, including nested
+            # code. Its signature is verified through the complete bundle below.
+            verify_native_architecture(path, arch)
+        else:
+            verify_native_binary(path, arch, system_dependencies_only=False)
         count += 1
     if not count:
         raise ValueError("The packaged Python native runtime is missing")
+    for framework in frameworks:
+        verify_framework_signature(framework)
 
 
 def verify_daemon(path: Path) -> None:

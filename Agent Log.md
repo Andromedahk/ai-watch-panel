@@ -35,6 +35,7 @@
 - 首轮原生 CI：两种 Mac 的 568/568 Node 测试与网页构建通过，Windows 桥编译和 `--check` 通过。Mac 均在 x264 的 C 编译器探测失败，原日志缺少 config.log，尚无法断言具体链接错误；改用 xcrun 编译入口并显式设置 SDK、原生架构及 macOS 15 目标，增加最小 C 编译/运行预检与失败日志归档。Windows Python 测试的临时路径存在 8.3 别名，实际库路径已规范化而断言未规范化；修正断言后本地49项恢复通过。第二轮 `40357786459` 在获知相同旧脚本问题后主动取消，避免重复失败；将针对这些修正重新构建。
 - 打包复审：附带的桥源码现保留 `source/screen-bridge` 与 `source/scripts` 的仓库结构，重建直接复用 `source/native` 的固定归档，仍核验 SHA-256。新增复制后在全新解释器中实际加载构建入口和桥的测试，资源测试现为6项。核对同版 PyInstaller 实现后移除显式 `--codesign-identity '-'`，采用默认 ad hoc 签名，避免提前开启未附权限配置的 hardened runtime；原生二进制验签不放宽。
 - CI 调度：第三轮 `40358780440` 卡在 Ubuntu 安装 Windows 交叉编译工具，超过8分钟仍未开始 Mac 任务，已主动取消。为 apt 增加网络和步骤超时，并增加 `macos_only` 验证入口，让双 Mac 任务独立执行；此模式强制禁止发布，默认完整三平台发布路径不变。
+- 第四轮 `40360878619`：Intel 的固定源码原生编码器与 libusb 编译/签名成功，PyInstaller 桥构建完成，随后严格校验发现重建的 Python.framework 资源封套不完整。构建器改为在 COLLECT 后对完整 Framework 从内到外重新 ad hoc 签名，验证器仍逐个核对实际 Mach-O 架构，并从 Framework 根执行 deep/strict/all-architectures 验签；非 Framework 仍逐文件严格验签。8项资源测试通过。该轮 ARM64 一直排队，因同一打包缺陷取消后统一重跑。CI 另缓存按架构和源码构建脚本区分的原生资源，每次使用仍核验源码摘要、架构与签名，减少桥代码修复时重复编译。
 - 未完成 / 验证边界：功能提交 `7f548a9` 已推送并启动 [首轮原生 CI](https://github.com/Andromedahk/ai-watch-panel/actions/runs/40356801404)，`publish: false`；工作目录修正后会针对新提交重新验证。Mac 编译、签名和包内运行尚未记为通过；实际 USB 接口可占用性、两种 Mac 的出画、帧率、热负载和恢复仍须连接实体屏幕验收。未合入 main、未发布或替换用户正在运行的应用。
 
 ---

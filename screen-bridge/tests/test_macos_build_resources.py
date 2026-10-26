@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import macos_stream_support as support
@@ -62,6 +62,50 @@ class MacBuildResourcesTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Unbundled runtime dependency"):
                 support.verify_native_binary(self.root / "libusb-1.0.0.dylib", "arm64")
             command.assert_not_called()
+
+    def framework_fixture(self):
+        framework = self.root / "Python.framework"
+        binary = framework / "Versions" / "3.13" / "Python"
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(b"\xcf\xfa\xed\xfe" + b"Mach-O fixture")
+        return framework, binary
+
+    def test_framework_architecture_and_entire_resource_seal_are_checked(self):
+        framework, binary = self.framework_fixture()
+        extension = self.root / "_socket.so"
+        extension.write_bytes(b"\xcf\xfa\xed\xfe" + b"extension fixture")
+        with patch.object(support.subprocess, "check_output", return_value="arm64\n") as inspect, \
+                patch.object(support.subprocess, "run") as command:
+            support.verify_python_binaries(self.root, "arm64")
+            inspect.assert_any_call(["lipo", "-archs", str(binary)], text=True)
+            inspect.assert_any_call(["lipo", "-archs", str(extension)], text=True)
+            self.assertEqual(command.call_args_list, [
+                call(["codesign", "--verify", "--strict", str(extension)], check=True),
+                call(["codesign", "--verify", "--deep", "--strict", "--all-architectures", str(framework)], check=True),
+            ])
+        with patch.object(support.subprocess, "check_output", return_value="x86_64\n"), \
+                patch.object(support.subprocess, "run") as command:
+            with self.assertRaisesRegex(ValueError, "Wrong architecture"):
+                support.verify_python_binaries(self.root, "arm64")
+            command.assert_not_called()
+        extension.unlink()
+        with patch.object(support.subprocess, "check_output", return_value="arm64\n"), \
+                patch.object(support.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "codesign")):
+            with self.assertRaises(subprocess.CalledProcessError):
+                support.verify_python_binaries(self.root, "arm64")
+
+    def test_reconstructed_frameworks_are_signed_inside_out_before_verification(self):
+        framework, _ = self.framework_fixture()
+        nested = framework / "Versions" / "3.13" / "Frameworks" / "Nested.framework"
+        nested.mkdir(parents=True)
+        with patch.object(support.subprocess, "run") as command:
+            support.sign_python_frameworks(self.root)
+            self.assertEqual(command.call_args_list, [
+                call(["codesign", "--force", "--sign", "-", "--timestamp=none", str(nested)], check=True),
+                call(["codesign", "--verify", "--deep", "--strict", "--all-architectures", str(nested)], check=True),
+                call(["codesign", "--force", "--sign", "-", "--timestamp=none", str(framework)], check=True),
+                call(["codesign", "--verify", "--deep", "--strict", "--all-architectures", str(framework)], check=True),
+            ])
 
     def test_packaged_sources_keep_runnable_repository_layout(self):
         repository = Path(__file__).resolve().parents[2]

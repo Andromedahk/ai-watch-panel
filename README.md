@@ -212,7 +212,7 @@ npm run test:lan-sync # 两个独立测试配置在本机配对、同步、重�
 - 从拉取后的最新 `main`（`2a9f856`）创建 `codex/macos-usb-streaming`，为 Apple Silicon 和 Intel 增加原生 USB 传输，串流继续作为 AI Watch 内置功能。保留原小屏布局、动效、看板娘、曲线和全屏等待提醒。
 - Windows 与 Mac 共用设备协议，分别使用原 Windows USB 传输和随包 libusb；Mac 最低版本为 15，不强制卸载驱动或改变设备配置。新增无 USB 的库预检及手工设备信息预检。
 - 增加固定源码构建的 Mac FFmpeg / x264 / libusb、Python 桥、架构与签名检查；两种 Mac 架构分别原生构建和验证。使用者无需外部 XANALI 目录或另装运行时。
-- Mac 首轮原生 CI 的 568 项单元测试在两种架构均通过；原生依赖构建尚在修正，编译入口已显式指定 SDK、芯片和部署目标，并增加实际 C 编译预检及失败诊断归档。
+- Mac 首轮原生 CI 的 568 项单元测试在两种架构均通过；显式指定 SDK、芯片和部署目标后，Intel 的 FFmpeg / x264 / libusb 编译与签名已通过。Python Framework 按完整目录结构重新签名并严格验证，完整安装包验证仍在进行。
 - 随包重建源码保留仓库目录结构，优先复用随包上游归档并核对摘要；Python 桥使用默认 ad hoc 签名，避免显式参数意外启用未配置的 hardened runtime。增加仅 Mac 验证入口，发布仍要求完整三平台检查。
 - 本地类型检查、网页构建、35 项定向 Node 测试及完整小屏预览通过；49 项 Python 测试中 48 通过，1 项 macOS 文件锁实测因 Windows 主机跳过。Windows 桥重建、真实 H.264 编码和 Electron 离屏链通过；全量 Node 与未修改基线相比新增失败 0。修正 CI 的 Python 测试工作目录，以及原有 Windows 高 DPI 窗口高度的 1 DIP 测试舍入误差。原生 Mac 构建、签名及实机 USB 验收尚待完成；详细失败与复测记录见 [Agent Log](Agent%20Log.md)。
 

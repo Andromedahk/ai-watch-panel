@@ -10,7 +10,8 @@ import shutil
 import subprocess
 import sys
 
-from macos_stream_support import require_native_macos, verify_daemon, verify_native_binary, verify_resource_bundle
+from macos_stream_support import (require_native_macos, sign_python_frameworks, verify_daemon,
+                                 verify_native_binary, verify_resource_bundle)
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "screen-bridge"
@@ -91,6 +92,7 @@ def main(argv=None):
         "--hidden-import", "kanali_stream", "--hidden-import", "deploy_streamd", "--hidden-import", "usb_macos",
         "--exclude-module", "usb_windows", "--exclude-module", "tkinter", "--exclude-module", "_tkinter",
         "--add-data", f"{daemon}:resources", SOURCE / "app" / "panel_stream_bridge.py", env=env)
+    sign_python_frameworks(BUNDLE / "_internal")
 
     # Copy these after PyInstaller's analysis. The backend loads the explicit
     # bundled path; FFmpeg is a separate process. Neither needs a Homebrew path.
