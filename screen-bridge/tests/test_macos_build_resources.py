@@ -1,6 +1,8 @@
 """Portable tests for the native Mac resource integrity gates (no USB or compiler)."""
 import json
 from pathlib import Path
+import runpy
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -60,6 +62,34 @@ class MacBuildResourcesTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Unbundled runtime dependency"):
                 support.verify_native_binary(self.root / "libusb-1.0.0.dylib", "arm64")
             command.assert_not_called()
+
+    def test_packaged_sources_keep_runnable_repository_layout(self):
+        repository = Path(__file__).resolve().parents[2]
+        builder = runpy.run_path(str(repository / "scripts" / "build-screen-bridge-macos.py"))
+        resources, bundle = self.root / "resources", self.root / "bundle"
+        (resources / "source").mkdir(parents=True)
+        archive = resources / "source" / next(iter(support.SOURCE_HASHES))
+        archive.write_bytes(b"source archive fixture")
+        (resources / "resources-manifest.json").write_text("{}", encoding="utf-8")
+        checksums = resources / "SHA256SUMS.txt"
+        checksums.write_text(f"{support.digest(archive)}  source/{archive.name}\n", encoding="utf-8")
+
+        builder["copy_rebuild_sources"](repository, resources, bundle)
+        source = bundle / "source"
+        # Import the copied build entrypoint from its new root, then import the
+        # copied bridge in a fresh interpreter. Neither operation opens USB.
+        subprocess.run([sys.executable, "-c", "import pathlib,runpy,sys; sys.path.insert(0,'scripts'); "
+                        "build=runpy.run_path('scripts/build-screen-bridge-macos.py'); "
+                        "assert build['ROOT']==pathlib.Path.cwd(); "
+                        "assert (build['SOURCE']/'app'/'panel_stream_bridge.py').is_file()"], cwd=source, check=True)
+        subprocess.run([sys.executable, "-c", "from app import panel_stream_bridge; assert panel_stream_bridge.PROTOCOL_VERSION == 1"],
+                       cwd=source / "screen-bridge", check=True)
+        for relative in ("scripts/build-macos-stream-resources.sh", "screen-bridge/requirements-macos.txt",
+                         "screen-bridge/THIRD-PARTY-NOTICES.md", "screen-bridge/licenses/Go-LICENSE.txt",
+                         "screen-bridge/tests/smoke_panel_stream_bridge.py"):
+            self.assertTrue((source / relative).is_file(), relative)
+        self.assertEqual((source / "native" / archive.name).read_bytes(), archive.read_bytes())
+        self.assertEqual((source / "native" / "RESOURCE-SHA256SUMS.txt").read_bytes(), checksums.read_bytes())
 
 
 if __name__ == "__main__":

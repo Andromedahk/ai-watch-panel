@@ -22,6 +22,30 @@ def run(*args, **kwargs):
     subprocess.run([str(arg) for arg in args], check=True, **kwargs)
 
 
+def copy_rebuild_sources(repository, resources, bundle):
+    """Keep the repository layout so the supplied build scripts run unchanged."""
+    source = repository / "screen-bridge"
+    packaged_source = bundle / "source"
+    bridge_source = packaged_source / "screen-bridge"
+    for relative in ("app", "tools/poc", "tools/streamd", "tests"):
+        target = bridge_source / relative
+        target.mkdir(parents=True, exist_ok=True)
+        for path in (source / relative).iterdir():
+            if path.is_file() and (path.suffix in (".py", ".go", ".md") or path.name == "go.mod"):
+                shutil.copy2(path, target)
+    for name in ("README.md", "requirements-macos.txt", "THIRD-PARTY-NOTICES.md"):
+        shutil.copy2(source / name, bridge_source / name)
+    shutil.copytree(source / "licenses", bridge_source / "licenses", dirs_exist_ok=True)
+    scripts = packaged_source / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    for name in ("build-screen-bridge-macos.py", "build-macos-stream-resources.sh",
+                 "macos_stream_support.py", "verify-release-screen-bridge-macos.py"):
+        shutil.copy2(repository / "scripts" / name, scripts / name)
+    shutil.copytree(resources / "source", packaged_source / "native", dirs_exist_ok=True)
+    shutil.copy2(resources / "resources-manifest.json", packaged_source / "native" / "resources-manifest.json")
+    shutil.copy2(resources / "SHA256SUMS.txt", packaged_source / "native" / "RESOURCE-SHA256SUMS.txt")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--resources-dir", type=Path, help="A complete native resource bundle made by build-macos-stream-resources.sh")
@@ -60,7 +84,9 @@ def main(argv=None):
     env = {**os.environ, "MACOSX_DEPLOYMENT_TARGET": "15.0"}
     run(python, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--console", "--noupx",
         "--name", "XANALI-Panel-Bridge", "--distpath", BUILD, "--workpath", work, "--specpath", work,
-        "--target-architecture", "arm64" if arch == "arm64" else "x86_64", "--codesign-identity", "-",
+        # PyInstaller's default ad-hoc signing does not enable hardened runtime.
+        # An explicit '-' identity would enable it without helper entitlements.
+        "--target-architecture", "arm64" if arch == "arm64" else "x86_64",
         "--paths", SOURCE / "app", "--paths", SOURCE / "tools" / "poc",
         "--hidden-import", "kanali_stream", "--hidden-import", "deploy_streamd", "--hidden-import", "usb_macos",
         "--exclude-module", "usb_windows", "--exclude-module", "tkinter", "--exclude-module", "_tkinter",
@@ -71,22 +97,7 @@ def main(argv=None):
     internal = BUNDLE / "_internal" / "resources"
     for name in ("ffmpeg", "libusb"):
         shutil.copytree(resources / name, internal / name, dirs_exist_ok=True)
-    packaged_source = BUNDLE / "source"
-    for relative in ("app", "tools/poc", "tools/streamd", "tests"):
-        target = packaged_source / relative
-        target.mkdir(parents=True, exist_ok=True)
-        for path in (SOURCE / relative).iterdir():
-            if path.is_file() and (path.suffix in (".py", ".go", ".md") or path.name == "go.mod"):
-                shutil.copy2(path, target)
-    for name in ("README.md", "requirements-macos.txt"):
-        shutil.copy2(SOURCE / name, packaged_source / name)
-    scripts = packaged_source / "scripts"
-    scripts.mkdir(parents=True, exist_ok=True)
-    for name in ("build-screen-bridge-macos.py", "macos_stream_support.py", "verify-release-screen-bridge-macos.py"):
-        shutil.copy2(ROOT / "scripts" / name, scripts / name)
-    shutil.copytree(resources / "source", packaged_source / "native", dirs_exist_ok=True)
-    shutil.copy2(resources / "resources-manifest.json", packaged_source / "native" / "resources-manifest.json")
-    shutil.copy2(resources / "SHA256SUMS.txt", packaged_source / "native" / "RESOURCE-SHA256SUMS.txt")
+    copy_rebuild_sources(ROOT, resources, BUNDLE)
     shutil.copytree(SOURCE / "licenses", BUNDLE / "licenses", dirs_exist_ok=True)
     shutil.copytree(resources / "licenses", BUNDLE / "licenses" / "native", dirs_exist_ok=True)
     shutil.copy2(SOURCE / "THIRD-PARTY-NOTICES.md", BUNDLE / "THIRD-PARTY-NOTICES.md")

@@ -146,6 +146,8 @@ Windows 原生 CI 已完成构建、NSIS 安装和合成数据下的打包应用
 
 维护者在 Actions 中对最新 `main` 手动运行 **Release installers**。`publish` 默认为 `false`，只构建、检查并保存 Actions 产物；需要公开发布时将 `publish` 设为 `true`。发布任务等待三个原生构建任务全部成功，在 GitHub 内部下载同一次运行的安装包、生成 `SHA256SUMS.txt`，并确认远端 `main` 仍指向本次运行的 `github.sha`。随后创建草稿 Release，将标签固定到该提交，上传并核对五个安装文件及校验清单，最后公开。若 `main` 已更新，须针对最新 `main` 重新构建。
 
+仅验证 Mac 移植时可选 `macos_only: true`，Apple Silicon / Intel 两个原生任务会独立运行，不等待 Windows 交叉编译工具安装；该模式始终禁止发布。正式发布必须关闭此选项并完成三个平台的检查。
+
 Release 正文来自 [v0.20.0 发布说明](docs/releases/v0.20.0.md)，来源提交和 CI 链接由工作流运行时附加。正式包仅额外包含一份明确标记的合成状态夹具，供 `npm run test:release -- <应用可执行文件>` 在独立临时配置中检查，不会读写真实账户。
 
 ## 本地开发与安装
@@ -211,6 +213,7 @@ npm run test:lan-sync # 两个独立测试配置在本机配对、同步、重�
 - Windows 与 Mac 共用设备协议，分别使用原 Windows USB 传输和随包 libusb；Mac 最低版本为 15，不强制卸载驱动或改变设备配置。新增无 USB 的库预检及手工设备信息预检。
 - 增加固定源码构建的 Mac FFmpeg / x264 / libusb、Python 桥、架构与签名检查；两种 Mac 架构分别原生构建和验证。使用者无需外部 XANALI 目录或另装运行时。
 - Mac 首轮原生 CI 的 568 项单元测试在两种架构均通过；原生依赖构建尚在修正，编译入口已显式指定 SDK、芯片和部署目标，并增加实际 C 编译预检及失败诊断归档。
+- 随包重建源码保留仓库目录结构，优先复用随包上游归档并核对摘要；Python 桥使用默认 ad hoc 签名，避免显式参数意外启用未配置的 hardened runtime。增加仅 Mac 验证入口，发布仍要求完整三平台检查。
 - 本地类型检查、网页构建、35 项定向 Node 测试及完整小屏预览通过；49 项 Python 测试中 48 通过，1 项 macOS 文件锁实测因 Windows 主机跳过。Windows 桥重建、真实 H.264 编码和 Electron 离屏链通过；全量 Node 与未修改基线相比新增失败 0。修正 CI 的 Python 测试工作目录，以及原有 Windows 高 DPI 窗口高度的 1 DIP 测试舍入误差。原生 Mac 构建、签名及实机 USB 验收尚待完成；详细失败与复测记录见 [Agent Log](Agent%20Log.md)。
 
 ### 0.20.0 · 2026-10-26 · 正式发布并完成 macOS 升级 · 署名：Codex（GPT-6 / Codex 桌面本地执行环境）

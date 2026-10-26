@@ -7,6 +7,10 @@ on:
         description: Publish verified installers as a GitHub Release
         type: boolean
         default: false
+      macos_only:
+        description: Verify both native Mac architectures only (never publish)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,15 +21,17 @@ concurrency:
 
 jobs:
   encoder:
+    if: ${{ !inputs.macos_only }}
     name: Windows encoder and corresponding source
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Install the Windows cross compiler
+        timeout-minutes: 8
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y gcc-mingw-w64-x86-64 mingw-w64-common make nasm pkg-config curl xz-utils bzip2
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --no-install-recommends -y gcc-mingw-w64-x86-64 mingw-w64-common make nasm pkg-config curl xz-utils bzip2
       - name: Build the pinned minimal FFmpeg and x264 sources
         run: bash scripts/build-release-ffmpeg.sh
       - name: Upload encoder, complete source, licenses, and checksums
@@ -42,24 +48,16 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     needs: encoder
+    if: ${{ !cancelled() && (needs.encoder.result == 'success' || (inputs.macos_only && needs.encoder.result == 'skipped')) }}
     env:
       MACOSX_DEPLOYMENT_TARGET: '15.0'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: mac
-            arch: arm64
-            runner: macos-15
-            executable: release/mac-arm64/AI Watch.app/Contents/MacOS/AI Watch
-          - platform: mac
-            arch: x64
-            runner: macos-15-intel
-            executable: release/mac/AI Watch.app/Contents/MacOS/AI Watch
-          - platform: win
-            arch: x64
-            runner: windows-latest
-            executable: release/win-unpacked/AI Watch.exe
+        include: >-
+          ${{ fromJSON(inputs.macos_only &&
+          '[{"platform":"mac","arch":"arm64","runner":"macos-15","executable":"release/mac-arm64/AI Watch.app/Contents/MacOS/AI Watch"},{"platform":"mac","arch":"x64","runner":"macos-15-intel","executable":"release/mac/AI Watch.app/Contents/MacOS/AI Watch"}]' ||
+          '[{"platform":"mac","arch":"arm64","runner":"macos-15","executable":"release/mac-arm64/AI Watch.app/Contents/MacOS/AI Watch"},{"platform":"mac","arch":"x64","runner":"macos-15-intel","executable":"release/mac/AI Watch.app/Contents/MacOS/AI Watch"},{"platform":"win","arch":"x64","runner":"windows-latest","executable":"release/win-unpacked/AI Watch.exe"}]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -189,7 +187,7 @@ jobs:
 
   publish:
     name: Publish verified release
-    if: inputs.publish && github.ref == 'refs/heads/main'
+    if: inputs.publish && !inputs.macos_only && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15

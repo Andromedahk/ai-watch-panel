@@ -48,7 +48,7 @@ def main(argv=None):
     subprocess.run([str(helper), "--check"], check=True)
     smoke = Path(__file__).resolve().parent.parent / "screen-bridge" / "tests" / "smoke_panel_stream_bridge.py"
     if not smoke.is_file():
-        smoke = root / "source" / "tests" / "smoke_panel_stream_bridge.py"
+        smoke = root / "source" / "screen-bridge" / "tests" / "smoke_panel_stream_bridge.py"
     subprocess.run([sys.executable, str(smoke), "--bridge", str(helper)], check=True)
     print(f"Native macOS {arch} bridge, sources, signatures and no-USB encoding verified.")
 

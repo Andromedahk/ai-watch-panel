@@ -78,7 +78,12 @@ cat "$work/compiler-check.log"
 download() {
   local filename=$1 checksum=$2 url=$3
   if [[ ! -f "$output/source/$filename" ]]; then
-    curl --fail --location --retry 3 --connect-timeout 30 --max-time 300 "$url" -o "$output/source/$filename"
+    if [[ -f "$project_root/native/$filename" ]]; then
+      # Installed packages include the pinned archives beside their build scripts.
+      cp "$project_root/native/$filename" "$output/source/$filename"
+    else
+      curl --fail --location --retry 3 --connect-timeout 30 --max-time 300 "$url" -o "$output/source/$filename"
+    fi
   fi
   printf '%s  %s\n' "$checksum" "$output/source/$filename" | shasum -a 256 --check --strict
 }

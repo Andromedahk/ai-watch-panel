@@ -63,6 +63,8 @@ python3 scripts/build-screen-bridge-macos.py
 
 构建器复制 Python/Pillow/PyInstaller 许可证、桥与设备端源码，以及完整原生依赖源码、构建记录和校验清单。签名检查覆盖实际 Mac 可执行文件和动态库，源归档与 Linux 设备端文件作为数据保留。CI 在 macOS 15 的 Apple Silicon 和 Intel runner 分别运行编译、Python/Go 测试、`--check`、真实 H.264 `--dry-run`、Electron 离屏编码以及打包后验证；这些自动检查均不打开 USB。
 
+包内 `source/screen-bridge/` 与 `source/scripts/` 保留构建所需的目录结构。将整个 `source/` 复制到可写的工作目录后，可直接执行 `python3 scripts/build-screen-bridge-macos.py`；构建器优先复用 `native/` 中的上游归档并重新校验摘要，仍需文档列出的编译工具和 Python 构建依赖。手工 CI 仅验证 Mac 时可选 `macos_only`，不会触发公开发布。
+
 普通使用不需要安装 Python、Homebrew、系统服务或驱动，也不需要屏幕录制权限。USB 传输只选择 `391a:1021` 设备的双向打印接口，不重置 USB、不切换配置、不强制卸载内核驱动。若接口已被系统或其他程序占用，会提示错误并停止连接；实际可用性必须在连接了屏幕的 Mac 上验收。
 
 ## 进程协议
