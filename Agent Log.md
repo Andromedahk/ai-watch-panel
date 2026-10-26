@@ -20,6 +20,16 @@
 
 ---
 
+## 2026-10-26 · Claude（Anthropic / Claude App 云端会话，经桌面连接写入） · 新增 AGENT-README
+
+- 分支：`claude/agent-readme`，起点 `origin/main` `bacf618`。
+- 目的：为项目新增 AGENT README，便于使用 AI Agent 在本地部署本项目。
+- 操作：新增 `AGENT-README.md`（结构、IPC、偏好、数据来源、局域网同步、部署、验证、环境变量、约定），内容依据 `bacf618` 的源码、`package.json`、发布工作流与 README 整理；README 增加链接与更新记录。
+- 验证：仅文档变化，未运行测试；核对了文中通道名、偏好默认值、端口与脚本名与源码一致，且不含绝对本机路径或用户名。
+- 未完成 / 需要人类决定：无。
+
+---
+
 ## 2026-10-26 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 发布 v0.19.1 并删除 v0.19.0 Release
 
 - 分支：`main`（经 `claude/lan-sync` 快进）；发布提交 `52ca902`。

@@ -156,6 +156,8 @@ npx --no-install electron-builder --mac --dir --config.electronDist=node_modules
 
 `npm run dist:linux` 准备 AppImage 打包，仍需在对应系统验证。Windows 安装包的构建及启动检查与真实服务验收分别记录。构建、签名或启动成功不代替真实服务与系统能力验收。
 
+面向 AI Agent 的结构化部署规格（目录结构、IPC、偏好字段、数据来源、构建与验证步骤）见 [AGENT-README.md](AGENT-README.md)。
+
 ### 验证命令
 
 ```sh
@@ -181,6 +183,10 @@ npm run test:lan-sync # 两个独立测试配置在本机配对、同步、重�
 发布该扩展需要匹配应用标识、签名身份、App Group 与 provisioning profile；仅通过签名校验并不足够。构建、签名、预览与系统验收步骤见[原生小组件开发说明](docs/MACOS-WIDGETS.md)。
 
 ## 更新记录
+
+### 未发布 · 2026-10-26 · 新增 AGENT-README · 署名：Claude（Anthropic / Claude App 云端会话，经桌面连接写入）
+
+- 新增根目录 [AGENT-README.md](AGENT-README.md)：以紧凑结构化格式描述项目结构、主进程 / preload / 界面分工、IPC 通道、偏好字段与默认值、各助手本地数据来源、局域网同步协议、本地构建 / 打包 / 安装步骤、验证命令、环境变量与仓库约定；在“本地开发与安装”中加入链接。仅文档变化。
 
 ### 0.19.1 · 2026-10-26 · 发布 v0.19.1 并移除 v0.19.0 · 署名：Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）
 
