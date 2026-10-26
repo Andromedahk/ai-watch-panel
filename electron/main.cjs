@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, shell, systemPreferences } = require('electron');
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
+const { ScreenStream, streamAvailability } = require('./screen-stream.cjs');
+const { validateStreamConfig } = require('./screen-stream-policy.cjs');
 // About links only to this fixed project page; the renderer never supplies a URL.
 const { homepage: REPOSITORY } = require('../package.json');
 const { traySummary } = require('./tray-summary.cjs');
@@ -104,7 +106,7 @@ async function refreshLocalStatus(force = false) {
     if (fixtureVariant === 'glow-attention') Object.assign(statusSnapshot.codex, { activity: 'waiting', activeTasks: 1, waitingTasks: 1, waitingReason: 'both', task: '合成测试 · 待回答 / 待授权' });
   }
   if (fixtureMode) {
-    if (preferences.layout === 'fullscreen') for (const id of PROVIDER_ORDER) statusSnapshot[id].taskDetails = [taskDetail({
+    if (preferences.layout === 'fullscreen' || preferences.stream.enabled) for (const id of PROVIDER_ORDER) statusSnapshot[id].taskDetails = [taskDetail({
       title: 'UI review · sample task', state: statusSnapshot[id].activity, updatedAt: Date.now(), operation: 'fileChange', steps: 6, toolCalls: 3, progress: 65,
     }, { live: true, source: 'local-api' })];
     statusSnapshot.sampledAt = new Date().toISOString();
@@ -121,6 +123,7 @@ async function refreshLocalStatus(force = false) {
   return statusSnapshot;
 }
 function publishStatus() {
+  screenStream?.broadcast('panel:status-changed', statusSnapshot);
   if (window && !window.isDestroyed()) window.webContents.send('panel:status-changed', statusSnapshot);
   if (preferences?.syncRole === 'host') lanSync?.publish({ status: statusSnapshot });
   panelTray?.updateMenu();
@@ -128,6 +131,13 @@ function publishStatus() {
 }
 
 let window;
+let screenStream;
+let streamShutdownComplete = false;
+let streamShuttingDown = false;
+let streamDesktopBounds;
+let streamDesktopCollapsed = false;
+let streamSettingsBounds;
+let streamOperation = Promise.resolve();
 let panelTray;
 let widgetPublisher;
 let widgetHealth;
@@ -161,7 +171,7 @@ function buildApplicationMenu() {
       { label: t('展开 / 收起'), accelerator: 'CommandOrControl+Shift+B', click: () => { void setCollapsed(!collapsed).catch(() => {}); } },
       { label: t('收纳到菜单栏'), accelerator: 'CommandOrControl+Shift+H', enabled: panelTray.available, click: () => panelTray.store() },
       { label: t('额度速览'), accelerator: 'CommandOrControl+Shift+U', enabled: panelTray.available, click: () => panelTray.openMenu() },
-      { label: t('重新贴边'), click: dock }, { type: 'separator' }, { role: 'quit', label: t('退出 AI Watch') },
+      { label: t('重新贴边'), enabled: !preferences.stream.enabled, click: dock }, { type: 'separator' }, { role: 'quit', label: t('退出 AI Watch') },
     ] }] : []),
     { label: t('编辑'), submenu: [['undo','撤销'], ['redo','重做'], [null,null], ['cut','剪切'], ['copy','复制'], ['paste','粘贴'], ['selectAll','全选']].map(([role,label]) => role ? { role, label: t(label) } : { type: 'separator' }) },
   ]));
@@ -169,7 +179,7 @@ function buildApplicationMenu() {
 function currentState() {
   const display = screen.getDisplayMatching(window.getBounds());
   const { providerApps: _privateLaunchPaths, kimiWorkApp: _privateWorkPath, cacheCleanupPending: _cacheFlag, ...publicPreferences } = preferences;
-  return { ...publicPreferences, collapsed, desktop: true, platform: process.platform,
+  return { ...publicPreferences, stream: screenStream?.state() || { ...preferences.stream, ...streamAvailability({ packaged: app.isPackaged }), status: 'stopped', error: null, frames: 0, droppedFrames: 0, preview: false }, surface: 'desktop', collapsed, desktop: true, platform: process.platform,
     trayAvailable: panelTray?.available === true, stored: panelTray?.stored === true,
     widgetsAvailable: widgetPublisher?.available === true, widgetSyncError: widgetPublisher?.error === true,
     widgetBackground: panelTray?.widgetBackground === true,
@@ -181,7 +191,7 @@ function currentState() {
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
 }
 function emitState() {
-  const details = preferences?.layout === 'fullscreen' && !collapsed;
+  const details = preferences?.stream.enabled || preferences?.layout === 'fullscreen' && !collapsed;
   if (statusReader.taskDetailsEnabled !== details) {
     statusReader.setTaskDetailsEnabled(details);
     if (!isSyncClient()) {
@@ -193,6 +203,10 @@ function emitState() {
   panelTray?.updateMenu();
   publishWidgets();
   if (window && !window.isDestroyed()) window.webContents.send('panel:changed', currentState());
+  if (screenStream?.window && !screenStream.window.isDestroyed()) {
+    screenStream.broadcast('panel:changed', screenStream.screenState());
+    screenStream.broadcast('panel:status-changed', statusSnapshot);
+  }
 }
 function publishWidgets() {
   widgetPublisher?.publish(statusSnapshot, { ...viewPreferences(), language: currentLanguage().language }, { isTestData: fixtureMode });
@@ -213,6 +227,7 @@ function setBounds(bounds) {
   setTimeout(() => { repositioning = false; }, 100);
 }
 function dock() {
+  if (preferences.stream.enabled) return;
   if (preferences.layout === 'fullscreen' || windowLayout?.transitioning) return;
   const display = screen.getDisplayMatching(window.getBounds());
   lastDisplayId = display.id;
@@ -221,7 +236,7 @@ function dock() {
   emitState();
 }
 function lock() {
-  const pinned = preferences.locked && preferences.layout !== 'fullscreen' && !window.isFullScreen();
+  const pinned = preferences.locked && !preferences.stream.enabled && preferences.layout !== 'fullscreen' && !window.isFullScreen();
   window.setAlwaysOnTop(pinned, 'floating');
   if (process.platform !== 'win32') {
     window.setVisibleOnAllWorkspaces(pinned, { visibleOnFullScreen: pinned });
@@ -230,6 +245,20 @@ function lock() {
 }
 async function setCollapsed(value) {
   await windowLayout?.pending;
+  if (preferences.stream.enabled && streamDesktopBounds) {
+    if (collapsed === value) return;
+    const area = screen.getDisplayMatching(window.getBounds()).workArea;
+    if (value) {
+      streamSettingsBounds = window.getBounds();
+      setBounds(panelBounds(area, preferences.side, true));
+    } else {
+      setBounds(clampBounds(streamSettingsBounds, area));
+    }
+    collapsed = value;
+    window.setResizable(!value);
+    lock(); emitState();
+    return;
+  }
   if (value && preferences.layout === 'fullscreen') await windowLayout.change(preferences.windowLayout);
   if (collapsed === value) return;
   const display = screen.getDisplayMatching(window.getBounds());
@@ -255,6 +284,69 @@ function requirePanel(event) {
 }
 function handle(channel, callback) {
   ipcMain.handle(channel, async (event, ...args) => { requirePanel(event); return callback(...args); });
+}
+
+function serializeStream(callback) {
+  const next = streamOperation.then(callback);
+  streamOperation = next.catch(() => {});
+  return next;
+}
+function requireInteractivePanel() {
+  if (preferences.stream.enabled) throw new Error('小屏幕串流模式已关闭打开程序、排序和手动刷新');
+}
+function resetUnavailableStream() {
+  if (!preferences.stream.enabled || screenStream.availability().available) return;
+  preferences.stream.enabled = false;
+  try { savePreferences(); } catch { /* Missing optional resources must not block normal startup, even in a read-only profile. */ }
+}
+async function setStreamDesktop(enabled) {
+  await windowLayout.pending;
+  if (enabled) {
+    if (!streamDesktopBounds) { streamDesktopBounds = window.getBounds(); streamDesktopCollapsed = collapsed; }
+    collapsed = false;
+    windowLayout.transitioning = true;
+    try { await windowLayout.nativeFullscreen(false); }
+    finally { windowLayout.transitioning = false; }
+    const area = screen.getDisplayMatching(window.getBounds()).workArea;
+    const width = Math.min(880, area.width), height = Math.min(900, area.height);
+    setBounds({ x: area.x + Math.round((area.width - width) / 2), y: area.y + Math.round((area.height - height) / 2), width, height });
+    streamSettingsBounds = window.getBounds();
+    window.setResizable(true);
+  } else if (streamDesktopBounds) {
+    window.setResizable(false);
+    collapsed = streamDesktopCollapsed;
+    setBounds(streamDesktopBounds);
+    streamDesktopBounds = null;
+    streamSettingsBounds = null;
+    if (preferences.layout === 'fullscreen' && !collapsed) {
+      // Preserve WindowLayout's original normal bounds across the temporary settings window.
+      windowLayout.transitioning = true;
+      try { await windowLayout.nativeFullscreen(true); }
+      finally { windowLayout.transitioning = false; }
+    }
+  }
+  lock(); buildApplicationMenu(); emitState();
+}
+
+async function restoreStreamDesktop() {
+  // Device recovery errors must not trap the desktop in the stream controller.
+  preferences.stream.enabled = false;
+  try { savePreferences(); }
+  finally { await setStreamDesktop(false); }
+}
+async function startStreamOutput() {
+  try {
+    if (!streamDesktopBounds) await setStreamDesktop(true);
+    await screenStream.start();
+  } catch (error) {
+    try { await restoreStreamDesktop(); }
+    catch (cleanupError) { throw new Error(`${error.message}；${cleanupError.message}`); }
+    throw error;
+  }
+}
+async function stopStreamOutput() {
+  try { await screenStream.stop(); }
+  finally { await restoreStreamDesktop(); }
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -303,16 +395,25 @@ else {
       },
     });
     windowLayout = new WindowLayout({ window, screen, getPreferences: () => preferences, save: savePreferences, changed: emitState, pin: lock, setBounds });
+    screenStream = new ScreenStream({ app, BrowserWindow, devUrl, getConfig: () => preferences.stream,
+      getState: currentState, getStatus: () => statusSnapshot, onChange: emitState,
+      preview: fixtureMode && process.env.AI_WATCH_STREAM_PREVIEW === '1' });
+    resetUnavailableStream();
     if (process.platform === 'win32') app.setAppUserModelId('app.aiwatch.panel');
     panelTray = new PanelTray({ app, window, Tray, Menu, nativeImage,
       getSummary: () => ({ rows: traySummary(statusSnapshot, { ...viewPreferences(), language: currentLanguage().language }), isTestData: fixtureMode }),
       getLanguage: () => currentLanguage().language,
-      onChange: () => { emitState(); buildApplicationMenu(); }, onRefresh: () => refreshLocalStatus(true) });
+      onChange: () => { emitState(); buildApplicationMenu(); }, canRefresh: () => !preferences.stream.enabled,
+      onRefresh: () => { requireInteractivePanel(); return refreshLocalStatus(true); } });
     window.on('close', event => panelTray.handleClose(event));
     nativeTheme.on('updated', updateAppearance);
     buildApplicationMenu();
     lock();
-    window.once('ready-to-show', () => { window.show(); if (preferences.layout === 'fullscreen') void windowLayout.change('fullscreen').catch(() => {}); });
+    window.once('ready-to-show', () => {
+      window.show();
+      if (preferences.stream.enabled) void serializeStream(startStreamOutput).catch(() => {});
+      else if (preferences.layout === 'fullscreen') void windowLayout.change('fullscreen').catch(() => {});
+    });
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     window.webContents.on('will-navigate', (event, url) => {
       if (url !== window.webContents.getURL()) event.preventDefault();
@@ -322,7 +423,7 @@ else {
       window.loadURL(devUrl);
     } else window.loadFile(path.join(__dirname, '../dist/index.html'));
     window.on('move', () => {
-      if (repositioning || windowLayout.transitioning || preferences.layout === 'fullscreen') return;
+      if (repositioning || preferences.stream.enabled || windowLayout.transitioning || preferences.layout === 'fullscreen') return;
       const target = screen.getDisplayMatching(window.getBounds());
       if (target.id !== lastDisplayId) {
         lastDisplayId = target.id;
@@ -345,18 +446,49 @@ else {
     screen.on('display-removed', (_event, display) => { displayLayouts.delete(display.id); dock(); });
     handle('panel:state', currentState);
     handle('panel:status', () => statusSnapshot);
+    ipcMain.handle('screen:state', event => { if (!screenStream.accepts(event)) throw new Error('Invalid screen sender'); return screenStream.screenState(); });
+    ipcMain.handle('screen:status', event => { if (!screenStream.accepts(event)) throw new Error('Invalid screen sender'); return statusSnapshot; });
+    handle('panel:stream-config', value => {
+      const patch = validateStreamConfig(value, { partial: true });
+      return serializeStream(async () => {
+        if (streamShuttingDown) throw new Error('Application is shutting down');
+        const previous = preferences.stream;
+        const { enabled, ...config } = { ...previous, ...patch };
+        preferences.stream = { ...validateStreamConfig(config), enabled };
+        try { savePreferences(); } catch (error) { preferences.stream = previous; throw error; }
+        emitState();
+        if (enabled) await startStreamOutput();
+        return currentState();
+      });
+    });
+    handle('panel:stream-start', () => serializeStream(async () => {
+      if (streamShuttingDown) throw new Error('Application is shutting down');
+      screenStream.assertAvailable();
+      const previous = preferences.stream.enabled;
+      preferences.stream.enabled = true;
+      try { savePreferences(); } catch (error) { preferences.stream.enabled = previous; throw error; }
+      await startStreamOutput(); return currentState();
+    }));
+    handle('panel:stream-stop', () => {
+      screenStream.cancelStart?.();
+      return serializeStream(async () => {
+        await stopStreamOutput(); return currentState();
+      });
+    });
+    handle('panel:minimize', () => { window.minimize(); return currentState(); });
     handle('panel:clear-cache', async () => {
       const result = await clearSessionCaches({ session: window.webContents.session });
       if (!result.cleared.length) throw new Error('Cache cleanup unavailable');
       preferences.cacheCleanupPending = true; savePreferences();
       return { freedBytes: result.freedBytes };
     });
-    handle('panel:refresh', () => refreshLocalStatus(true));
+    handle('panel:refresh', () => { requireInteractivePanel(); return refreshLocalStatus(true); });
     handle('panel:lock', (value) => {
       if (typeof value !== 'boolean') throw new Error('Invalid lock state');
       preferences.locked = value; lock(); savePreferences(); emitState(); return currentState();
     });
     handle('panel:layout', async value => {
+      requireInteractivePanel();
       if (!isLayout(value)) throw new Error('Invalid layout');
       if (collapsed) await setCollapsed(false);
       await windowLayout.change(value); return currentState();
@@ -399,7 +531,7 @@ else {
       buildApplicationMenu(); emitState(); return currentState();
     });
     handle('panel:configure', (value) => {
-      const next = validPreferences({ ...value, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
+      const next = validPreferences({ ...value, stream: preferences.stream, syncRole: preferences.syncRole, syncPort: preferences.syncPort, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
         kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, claudeHooksEnabled: preferences.claudeHooksEnabled, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, insights: preferences.insights, insightOrder: preferences.insightOrder, mascotInterval: preferences.mascotInterval, skin: preferences.skin, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
@@ -421,6 +553,7 @@ else {
       emitState(); return currentState();
     });
     handle('panel:insight-order', (value) => {
+      requireInteractivePanel();
       if (!isInsightOrder(value)) throw new Error('Invalid insight order');
       const previous = preferences.insightOrder;
       preferences.insightOrder = [...value];
@@ -468,8 +601,11 @@ else {
       lanSync.publish({ journal }); return true;
     });
     handle('panel:remote-journal', () => (isSyncClient() ? remoteJournal : null));
-    handle('panel:open-provider', (id) => isSyncClient() ? { status: 'remote', message: '' } : providerLauncher.launch(id,
-      id === 'kimi' && preferences.kimiSource === 'work' ? preferences.kimiWorkApp : preferences.providerApps[id], preferences.kimiSource));
+    handle('panel:open-provider', (id) => {
+      requireInteractivePanel();
+      return isSyncClient() ? { status: 'remote', message: '' } : providerLauncher.launch(id,
+        id === 'kimi' && preferences.kimiSource === 'work' ? preferences.kimiWorkApp : preferences.providerApps[id], preferences.kimiSource);
+    });
     handle('panel:choose-provider-app', (id) => {
       const source = preferences.kimiSource;
       return providerLauncher.choose(id,
@@ -590,6 +726,7 @@ else {
       return currentState();
     });
     handle('panel:order', (value) => {
+      requireInteractivePanel();
       if (!isProviderOrder(value)) throw new Error('Invalid provider order');
       const previous = preferences.providerOrder;
       preferences.providerOrder = [...value];
@@ -618,7 +755,15 @@ else {
     app.on('activate', () => { void panelTray.restore(); });
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => {
+  app.on('before-quit', event => {
+    if (screenStream && !streamShutdownComplete) {
+      event.preventDefault();
+      if (!streamShuttingDown) {
+        streamShuttingDown = true; screenStream.cancelStart?.();
+        void serializeStream(() => screenStream.stop()).catch(() => {}).finally(() => { streamShutdownComplete = true; app.quit(); });
+      }
+      return;
+    }
     panelTray?.dispose(); clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance);
     statusReader.codexAttention.close(); statusReader.codexQuotaReader.close();
     void lanSync?.close();

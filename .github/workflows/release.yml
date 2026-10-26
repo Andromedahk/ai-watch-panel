@@ -16,10 +16,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  encoder:
+    name: Windows encoder and corresponding source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Windows cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y gcc-mingw-w64-x86-64 mingw-w64-common make nasm pkg-config curl xz-utils bzip2
+      - name: Build the pinned minimal FFmpeg and x264 sources
+        run: bash scripts/build-release-ffmpeg.sh
+      - name: Upload encoder, complete source, licenses, and checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-ffmpeg-win-x64
+          path: .local/release-ffmpeg/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
   build:
     name: ${{ matrix.platform }}-${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    needs: encoder
     env:
       MACOSX_DEPLOYMENT_TARGET: '13.0'
     strategy:
@@ -49,6 +71,54 @@ jobs:
         if: matrix.platform == 'mac'
         run: npm test
       - run: npm run build
+      - uses: actions/setup-python@v5
+        if: matrix.platform == 'win'
+        with:
+          python-version: '3.13'
+          architecture: x64
+      - uses: actions/setup-go@v5
+        if: matrix.platform == 'win'
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Download this run's source-built encoder
+        if: matrix.platform == 'win'
+        uses: actions/download-artifact@v4
+        with:
+          name: release-ffmpeg-win-x64
+          path: screen-bridge/resources/ffmpeg
+      - name: Verify the encoder source bundle
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path 'screen-bridge/resources/ffmpeg').Path
+          foreach ($line in Get-Content (Join-Path $root 'SHA256SUMS.txt')) {
+            if ($line -notmatch '^([a-f0-9]{64})  (.+)$') { throw 'Invalid encoder checksum entry' }
+            $expected, $relative = $Matches[1], $Matches[2]
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $root $relative)).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) { throw "Encoder checksum mismatch: $relative" }
+          }
+      - name: Build the Windows screen bridge
+        if: matrix.platform == 'win'
+        run: npm run build:screen-bridge
+      - name: Test bridge protocol and real encoding without USB
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          Push-Location screen-bridge
+          ../.local/screen-bridge-venv/Scripts/python.exe -m unittest discover -s tests -p 'test_*.py'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+          Push-Location screen-bridge/tools/streamd
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+          python screen-bridge/tests/smoke_panel_stream_bridge.py --bridge .local/screen-bridge/XANALI-Panel-Bridge/XANALI-Panel-Bridge.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-screen-encoder.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package macOS DMG and ZIP
         if: matrix.platform == 'mac'
         run: npx --no-install electron-builder --mac dmg zip --${{ matrix.arch }} --publish never
@@ -63,6 +133,10 @@ jobs:
           hdiutil verify release/*.dmg
       - name: Smoke test packaged application
         run: npm run test:release -- "${{ matrix.executable }}"
+      - name: Verify the packaged Windows bridge and source
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: ./scripts/verify-release-screen-bridge.ps1 -BridgeRoot release/win-unpacked/resources/screen-bridge
       - name: Install Windows package
         if: matrix.platform == 'win'
         shell: pwsh
@@ -73,6 +147,7 @@ jobs:
           if ($process.ExitCode -ne 0) { throw "NSIS failed: $($process.ExitCode)" }
           npm run test:release -- "$installDir/AI Watch.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/verify-release-screen-bridge.ps1 -BridgeRoot "$installDir/resources/screen-bridge"
       - name: Upload verified installers
         uses: actions/upload-artifact@v4
         with:

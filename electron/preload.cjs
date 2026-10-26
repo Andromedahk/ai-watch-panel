@@ -3,6 +3,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('panel', {
   getState: () => ipcRenderer.invoke('panel:state'),
   getStatus: () => ipcRenderer.invoke('panel:status'),
+  setStreamConfig: config => ipcRenderer.invoke('panel:stream-config', config),
+  startStream: () => ipcRenderer.invoke('panel:stream-start'),
+  stopStream: () => ipcRenderer.invoke('panel:stream-stop'),
+  minimize: () => ipcRenderer.invoke('panel:minimize'),
   refreshStatus: () => ipcRenderer.invoke('panel:refresh'),
   onStatus: (callback) => {
     const listener = (_event, status) => callback(status);

@@ -4,9 +4,9 @@ const { createI18n } = require('./i18n.cjs');
 // Widget background mode has an explicit app-activation recovery route on macOS.
 class PanelTray {
   constructor({ app, window, Tray, Menu, nativeImage, platform = process.platform,
-    onChange = () => {}, onRefresh = () => {}, getSummary = () => ({ rows: [], isTestData: false }), getLanguage = () => 'zh-CN', now = Date.now,
+    onChange = () => {}, onRefresh = () => {}, canRefresh = () => true, getSummary = () => ({ rows: [], isTestData: false }), getLanguage = () => 'zh-CN', now = Date.now,
     schedule = setTimeout, cancel = clearTimeout }) {
-    Object.assign(this, { app, window, platform, onChange, now, schedule, cancel, getSummary, getLanguage, Menu, onRefresh, Tray, nativeImage });
+    Object.assign(this, { app, window, platform, onChange, now, schedule, cancel, getSummary, getLanguage, Menu, onRefresh, canRefresh, Tray, nativeImage });
     this.stored = false;
     this.widgetBackground = false;
     this.quitting = false;
@@ -49,7 +49,7 @@ class PanelTray {
     const i18n = createI18n(this.getLanguage());
     const { t } = i18n;
     const nativeLabel = value => i18n.dir === 'rtl' ? '\u200f' + value : value;
-    const signature = JSON.stringify({ language: i18n.language, rows, isTestData, stored: this.stored });
+    const signature = JSON.stringify({ language: i18n.language, rows, isTestData, stored: this.stored, canRefresh: this.canRefresh() });
     if (signature !== this.menuSignature) {
       this.menu = this.Menu.buildFromTemplate([
         { label: nativeLabel(t('额度速览') + ' · ' + t(isTestData ? '测试数据' : '每个模块一项')), enabled: false },
@@ -58,7 +58,7 @@ class PanelTray {
         { type: 'separator' },
         { id: 'show-panel', label: nativeLabel(t('显示面板')), click: () => { void this.restore(); } },
         { id: 'store-panel', label: this.platform === 'darwin' ? nativeLabel(t('收纳到菜单栏')) : nativeLabel(t('收纳到托盘')), enabled: !this.stored, click: () => this.store() },
-        { label: nativeLabel(t('刷新本地状态')), click: () => { void Promise.resolve().then(this.onRefresh).catch(() => {}); } },
+        ...(this.canRefresh() ? [{ label: nativeLabel(t('刷新本地状态')), click: () => { void Promise.resolve().then(this.onRefresh).catch(() => {}); } }] : []),
         { type: 'separator' },
         { label: nativeLabel(t('退出 AI Watch')), click: () => this.app.quit() },
       ]);

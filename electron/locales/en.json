@@ -582,5 +582,7 @@
   "连接": "Connect",
   "子客户端不能打开主客户端上的应用": "A client cannot open apps on the host",
   "同步": "Synced",
-  "未同步": "Not synced"
+  "未同步": "Not synced",
+  "最小化": "Minimize",
+  "自动轮播": "Automatic rotation"
 }

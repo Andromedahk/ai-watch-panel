@@ -13,7 +13,10 @@ export type SyncRole = 'off' | 'host' | 'client';
 export type SyncSummary = { role: SyncRole; state: string; error?: string | null; code?: string; port?: number | null; addresses?: string[];
   paired?: number | boolean; connected?: number; name?: string; hostName?: string | null; address?: string | null };
 export type SyncHost = { address: string; port: number; name: string };
+export type ScreenStreamConfig = { device: 'zhanyu'; width: number; height: number; fps: number; bitrateMbps: number; pageSeconds: number; showMascot: boolean };
+export type ScreenStreamState = ScreenStreamConfig & { enabled: boolean; status: 'stopped' | 'starting' | 'running' | 'stopping' | 'error'; error: string | null; frames: number; droppedFrames: number; preview: boolean; available?: boolean; unavailableReason?: string | null };
 export type PanelState = Preferences & {
+  stream?: ScreenStreamState; surface?: 'screen' | 'desktop';
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
   trayAvailable: boolean; stored: boolean;
   widgetsEnabled: boolean; widgetsAvailable: boolean; widgetSyncError: boolean;
@@ -69,6 +72,10 @@ declare global {
       setLocked(locked: boolean): Promise<PanelState>;
       setCollapsed(collapsed: boolean): Promise<PanelState>;
       store(): Promise<PanelState>;
+      minimize(): Promise<PanelState>;
+      setStreamConfig(config: Partial<ScreenStreamConfig>): Promise<PanelState>;
+      startStream(): Promise<PanelState>;
+      stopStream(): Promise<PanelState>;
       setWidgetsEnabled(enabled: boolean): Promise<PanelState>;
       widgetBackground(): Promise<PanelState>;
       configure(preferences: Preferences): Promise<PanelState>;

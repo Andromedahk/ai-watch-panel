@@ -1,4 +1,4 @@
-<!-- agent-spec/1 · tgt=ai-watch-panel@0.19.1 · ref=main · enc=utf8 · lang=en+zh-tokens -->
+<!-- agent-spec/1 · tgt=ai-watch-panel@0.20.0 · ref=main · enc=utf8 · lang=en+zh-tokens -->
 # AGENT-README
 
 ```
@@ -11,7 +11,7 @@
 
 ```
 §1 ID
-  pkg: ai-watch-panel  ver: 0.19.1  prod: "AI Watch"  appId: app.aiwatch.panel
+  pkg: ai-watch-panel  ver: 0.20.0  prod: "AI Watch"  appId: app.aiwatch.panel
   kind: desktop-panel(vertical) · aggregates {activity, wait-attention, quota|credit|balance} of local AI clients
   stack: electron@44.5.1 + react@19 + ts@5.9 + vite@8 (+ swift/WidgetKit ⌁)
   module: type=module; main=electron/main.cjs (CJS in electron/, ESM in scripts/)
@@ -35,6 +35,9 @@
   electron/i18n.cjs + locales/*.json                   [M+R] 17 langs (incl RTL ar/he)
   electron/native/*.c            [N] darwin helpers ⇒ electron/native/bin/ (gitignored, built by build-native)
   native/macos/*.swift           [N] ⌁ WidgetKit ext + Node-API bridge (macOS14+)
+  electron/screen-stream.cjs + screen-stream-policy.cjs [M] optional Windows screen output; screen-preload.cjs read-only
+  screen-bridge/                 Python USB/encoder bridge + Go ARM64 device daemon; runtime build resources gitignored
+  src/ScreenSurface.tsx          [R] read-only offscreen curved layout, mascot, quota history, attention rotation
   src/main.tsx, App.tsx          [R] root
   src/view/{insights,parts,model,skins}.tsx|.ts|.css   [R] shared view ×3 skins
   src/view/quips.json            [R] mascot lines 8×150 (zh+en)
@@ -75,6 +78,7 @@
   app   : openProvider→open-provider · chooseProviderApp→choose-provider-app · chooseImage→image · openRepository→open-repository
   sync  : setSyncRole→sync-role · setSyncPort→sync-port · pairSync(addr,code)→sync-pair · forgetSync→sync-forget
           regenerateSync→sync-regenerate · discoverSync→sync-discover · shareJournal→journal
+  stream: setStreamConfig→stream-config · startStream→stream-start · stopStream→stream-stop (Windows only; sandboxed read-only offscreen surface)
   misc  : setWidgetsEnabled→widgets-enabled · clearCache→clear-cache
   ⊢ new channel ⇒ add in preload.cjs + ipcMain.handle in main.cjs + validator in window-policy.cjs
 ```
@@ -123,7 +127,7 @@
 ```
 §8 DEPLOY.local
   req: node ≥22.16 (CI pins 22.22.2) + npm ; git
-       darwin: Xcode CLT (clang; swift ⌁ for widgets) ; win: none extra ; linux ~
+       darwin: Xcode CLT (clang; swift ⌁ for widgets) ; win: Python x64 + Go + FFmpeg/libx264 resources for screen bridge ; linux ~
   net: npm registry + electron binary download (or reuse §8.alt)
 
   S1 git clone https://github.com/Andromedahk/ai-watch-panel && cd ai-watch-panel
@@ -142,7 +146,7 @@
     ⊬ overwrite running app ; re-sign ⇒ may need re-grant Accessibility on final copy
   post: user installs+logs in target AI clients first ; opt-ins in 配置→数据来源 (claude net/hooks/AX, qwen keychain)
   gatekeeper/smartscreen: unsigned/un-notarized ⇒ OS prompt ; ⊬ advise disabling OS protection globally
-  release(CI): Actions "Release installers" on main ; publish≔false ⇒ artifacts only ; publish=true ⇒ draft→verify sha256→public ; notes=docs/releases/v<ver>.md
+  release(CI): pinned official FFmpeg/x264 sources → mingw Windows encoder + complete corresponding sources; Windows Python/Go bridge + no-USB encoding smoke; Actions "Release installers" on main ; publish≔false ⇒ artifacts only ; publish=true ⇒ draft→verify sha256→public ; notes=docs/releases/v<ver>.md
 ```
 
 ```

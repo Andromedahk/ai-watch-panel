@@ -194,7 +194,13 @@ function nextQuip(views: ProviderView[], speaker: ProviderId | undefined, recent
   return { id: view.id, index: choices[Math.floor(Math.random() * choices.length)] };
 }
 
-function Mascot({ views, anime, image, onOpen, sortHandle, sortProps, interval, paused }: PanelProps) {
+export type MascotProps = Omit<PanelProps, 'journal' | 'onOpen'> & {
+  onOpen?: (view: ProviderView) => void;
+  /** A passive display preserves speech and cadence without unreachable controls. */
+  readOnly?: boolean;
+};
+
+export function Mascot({ views, anime, image, onOpen, sortHandle, sortProps, interval, paused, readOnly = false }: MascotProps) {
   const { t, number, percent, language } = useI18n();
   const [quip, setQuip] = useState<Quip | null>(null);
   const [spins, setSpins] = useState(0);
@@ -261,16 +267,18 @@ function Mascot({ views, anime, image, onOpen, sortHandle, sortProps, interval, 
     const timer = setTimeout(() => latest.current(), interval * 1000);
     return () => clearTimeout(timer);
   }, [live, paused, interval, cycle]);
-  return <section {...sortProps} className="insight insight-mascot" data-insight="mascot" data-mood={mood} data-auto-refresh={live || undefined} aria-label={t('看板娘')}
+  const figure = focus && <>
+    <span key={cycle} className="mascot-entrance"><Portrait provider={focus.provider} image={image(focus)} anime={anime} crop="bust" /></span>
+    {mood === 'rest' && <span className="mascot-zzz" aria-hidden="true">z<i>z</i><b>z</b></span>}
+  </>;
+  return <section {...(readOnly ? undefined : sortProps)} className="insight insight-mascot" data-insight="mascot" data-mood={mood} data-read-only={readOnly || undefined} data-auto-refresh={live || undefined} aria-label={t('看板娘')}
     style={{ ...sortProps?.style, ...(focus ? { '--accent': focus.color } : {}), '--mascot-interval': `${interval}s` } as CSSProperties}>
-    {sortHandle}
-    {views.length > 0 && <button type="button" className="mascot-refresh" data-spin={spins > 0 || undefined} title={t('换一句')} aria-label={t('换一句')} onClick={refresh}>
+    {!readOnly && sortHandle}
+    {!readOnly && views.length > 0 && <button type="button" className="mascot-refresh" data-spin={spins > 0 || undefined} title={t('换一句')} aria-label={t('换一句')} onClick={refresh}>
       <RefreshCw key={spins} aria-hidden="true" />
     </button>}
-    {focus && <button type="button" className="mascot-figure" data-cycle={cycle} title={t('打开 {p0}', { p0: focus.name })} aria-label={t('打开 {p0}', { p0: focus.name })} onClick={() => onOpen(focus!)}>
-      <span key={cycle} className="mascot-entrance"><Portrait provider={focus.provider} image={image(focus)} anime={anime} crop="bust" /></span>
-      {mood === 'rest' && <span className="mascot-zzz" aria-hidden="true">z<i>z</i><b>z</b></span>}
-    </button>}
+    {focus && (readOnly ? <div className="mascot-figure" data-cycle={cycle}>{figure}</div>
+      : <button type="button" className="mascot-figure" data-cycle={cycle} title={t('打开 {p0}', { p0: focus.name })} aria-label={t('打开 {p0}', { p0: focus.name })} onClick={() => onOpen?.(focus!)}>{figure}</button>)}
     <p className="mascot-bubble" role="status" data-beat={cycle % 2}><span key={`${cycle}:${line}`} lang={english ? 'en' : undefined} dir={english ? 'ltr' : undefined}>{line}</span></p>
     {live && <span key={`${cycle}:${paused}`} className="mascot-timer" data-paused={paused || undefined} aria-hidden="true" />}
   </section>;

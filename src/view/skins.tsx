@@ -1,4 +1,4 @@
-import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
 import { useI18n } from '../i18n';
 import type { Skin } from '../types';
 import type { ProviderView } from './model';
@@ -7,10 +7,41 @@ import { Balance, CardShell, Credits, EmptyMetric, LaunchAvatar, PlanBadge, Quot
 export type CardProps = {
   view: ProviderView; skin: Skin; index: number; anime: boolean; image?: string; busy: boolean; onOpen: () => void;
   sortProps?: HTMLAttributes<HTMLElement>; dragging: boolean; animationPaused: boolean; fullscreen: boolean; details?: ReactNode;
+  /** The screen has no pointer: preserve the card, but replace controls with automatic pages. */
+  readOnly?: boolean; cycleSeconds?: number;
 };
 
-function Metrics({ view, layout, limit = 99 }: { view: ProviderView; layout: 'grid' | 'rows' | 'rings'; limit?: number }) {
+function Metrics({ view, layout, limit = 99, readOnly = false, cycleSeconds = 4, animationPaused = false }: {
+  view: ProviderView; layout: 'grid' | 'rows' | 'rings'; limit?: number; readOnly?: boolean; cycleSeconds?: number; animationPaused?: boolean;
+}) {
   const { t, number } = useI18n();
+  const [page, setPage] = useState(0);
+  const metrics = view.metrics;
+  const length = metrics.kind === 'quota' ? metrics.rows.length : metrics.kind === 'credits' ? metrics.items.length : metrics.kind === 'balance' ? metrics.wallets.length : 0;
+  const pageSize = metrics.kind === 'balance' ? 1 : 2;
+  const pages = Math.max(1, Math.ceil(length / pageSize));
+  // Keep this clock separate from motion preferences: these are data pages, not effects.
+  // Off-screen cards retain their page and resume when the module rotation brings them back.
+  useEffect(() => {
+    if (!readOnly || animationPaused || pages < 2) return;
+    const timer = window.setInterval(() => setPage(current => (current + 1) % pages), Math.max(3, cycleSeconds) * 1000);
+    return () => clearInterval(timer);
+  }, [readOnly, animationPaused, cycleSeconds, pages]);
+  const currentPage = page % pages;
+  if (readOnly) {
+    const start = currentPage * pageSize;
+    let content: ReactNode;
+    if (metrics.kind === 'balance') content = <Balance view={{ ...view, metrics: { ...metrics, wallets: metrics.wallets.slice(start, start + 1) } }} readOnly />;
+    else if (metrics.kind === 'credits') content = <Credits view={{ ...view, metrics: { ...metrics, items: metrics.items.slice(start, start + pageSize) } }} />;
+    else if (metrics.kind === 'empty') content = <EmptyMetric view={view} />;
+    else content = <div className={`quota-list quota-${layout}`}>
+      {metrics.rows.slice(start, start + pageSize).map(row => layout === 'rings' ? <QuotaRing key={row.key} row={row} /> : <QuotaMeter key={row.key} row={row} view={view} />)}
+    </div>;
+    return <div className="screen-metrics" data-metric-page={currentPage + 1} data-metric-pages={pages}>
+      {content}
+      {pages > 1 && <span className="screen-metric-page">{number(currentPage + 1)} / {number(pages)}</span>}
+    </div>;
+  }
   if (view.metrics.kind === 'balance') return <Balance view={view} />;
   if (view.metrics.kind === 'credits') return <Credits view={view} limit={Math.min(limit, 2)} />;
   if (view.metrics.kind === 'empty') return <EmptyMetric view={view} />;
@@ -25,12 +56,12 @@ function WatchCard(props: CardProps) {
   const { view, anime } = props;
   return <CardShell {...props}>
     <div className="card-heading">
-      <LaunchAvatar view={view} image={props.image} anime={anime} busy={props.busy} onOpen={props.onOpen}><span className={`avatar-dot status-dot ${dotClass(view)}`} aria-hidden="true" /></LaunchAvatar>
+      <LaunchAvatar view={view} image={props.image} anime={anime} busy={props.busy} onOpen={props.onOpen} readOnly={props.readOnly}><span className={`avatar-dot status-dot ${dotClass(view)}`} aria-hidden="true" /></LaunchAvatar>
       <div className="identity"><h2><bdi>{view.name}</bdi></h2><div className="identity-meta"><span className="eyebrow">{view.eyebrow}</span><PlanBadge view={view} /></div></div>
       <StatePill view={view} />
     </div>
-    <div className="quota-area"><Metrics view={view} layout="grid" /></div>
-    <TaskLine view={view}><SourceTag view={view} /></TaskLine>
+    <div className="quota-area"><Metrics {...props} layout="grid" /></div>
+    <TaskLine view={view} readOnly={props.readOnly}><SourceTag view={view} /></TaskLine>
     {props.details}
   </CardShell>;
 }
@@ -45,21 +76,21 @@ function DialCard(props: CardProps) {
     {anime ? <div className="dial-hero">
       <div className={`dial-frame ${isLow(view.tightest) ? 'is-low' : ''}`} title={t('外圈为最紧额度')}>
         <svg viewBox="0 0 84 84" aria-hidden="true"><circle className="ring-track" cx="42" cy="42" r={r} /><circle className={`ring-fill ${view.tightest === null ? 'is-neutral' : ''}`} cx="42" cy="42" r={r} strokeDasharray={`${(c * fill / 100).toFixed(2)} ${c.toFixed(2)}`} /></svg>
-        <LaunchAvatar view={view} image={props.image} anime busy={props.busy} onOpen={props.onOpen} />
+        <LaunchAvatar view={view} image={props.image} anime busy={props.busy} onOpen={props.onOpen} readOnly={props.readOnly} />
         <span className="dial-figure"><bdi dir="ltr">{headline(view, number)}</bdi></span>
       </div>
       <div className="dial-body">
         <div className="card-heading"><div className="identity"><h2><bdi>{view.name}</bdi></h2><PlanBadge view={view} /></div><StatePill view={view} /></div>
-        <TaskLine view={view} />
-        <div className="quota-area"><Metrics view={view} layout="rows" limit={3} /></div>
+        <TaskLine view={view} readOnly={props.readOnly} />
+        <div className="quota-area"><Metrics {...props} layout="rows" limit={3} /></div>
       </div>
     </div> : <>
       <div className="card-heading">
-        <LaunchAvatar view={view} image={props.image} anime={false} busy={props.busy} onOpen={props.onOpen} />
-        <div className="identity"><h2><bdi>{view.name}</bdi><PlanBadge view={view} /></h2><TaskLine view={view} /></div>
+        <LaunchAvatar view={view} image={props.image} anime={false} busy={props.busy} onOpen={props.onOpen} readOnly={props.readOnly} />
+        <div className="identity"><h2><bdi>{view.name}</bdi><PlanBadge view={view} /></h2><TaskLine view={view} readOnly={props.readOnly} /></div>
         <StatePill view={view} />
       </div>
-      <div className="quota-area"><Metrics view={view} layout="rings" limit={3} /></div>
+      <div className="quota-area"><Metrics {...props} layout="rings" limit={3} /></div>
     </>}
     <div className="card-foot"><SourceTag view={view} />{view.observed && <span className="quota-time">{t('记录 {p0}', { p0: view.observed })}</span>}</div>
     {props.details}
@@ -71,17 +102,47 @@ function PartyCard(props: CardProps) {
   const { view, anime } = props;
   return <CardShell {...props}>
     <div className="party-stage">
-      <LaunchAvatar view={view} image={props.image} anime={anime} crop="bust" busy={props.busy} onOpen={props.onOpen} />
+      <LaunchAvatar view={view} image={props.image} anime={anime} crop={props.readOnly ? 'face' : 'bust'} busy={props.busy} onOpen={props.onOpen} readOnly={props.readOnly} />
       <span className="party-badge"><StatePill view={view} /></span>
       <div className="card-heading"><div className="identity"><h2><bdi>{view.name}</bdi></h2><PlanBadge view={view} /></div></div>
     </div>
-    <div className="quota-area"><Metrics view={view} layout="rows" limit={3} /></div>
-    <TaskLine view={view}><SourceTag view={view} /></TaskLine>
+    <div className="quota-area"><Metrics {...props} layout="rows" limit={3} /></div>
+    <TaskLine view={view} readOnly={props.readOnly}><SourceTag view={view} /></TaskLine>
     {props.details}
   </CardShell>;
 }
 
+/** The curved display dedicates the upper half to a large identity portrait.
+ * Keep the same skin components and metric animations below it, without
+ * changing the desktop cards' compact arrangement. */
+function ScreenCard(props: CardProps) {
+  const { view, skin, anime } = props;
+  const { number, t } = useI18n();
+  const r = 38, c = 2 * Math.PI * r;
+  const fill = view.tightest === null ? 100 : view.tightest;
+  const portrait = <LaunchAvatar view={view} image={props.image} anime={anime} crop="face" onOpen={props.onOpen} readOnly />;
+  return <CardShell {...props}>
+    <div className="screen-card-top">
+      <div className="screen-card-portrait">
+        {skin === 'dial' ? <div className={`dial-frame ${isLow(view.tightest) ? 'is-low' : ''}`} title={t('外圈为最紧额度')}>
+          <svg viewBox="0 0 84 84" aria-hidden="true"><circle className="ring-track" cx="42" cy="42" r={r} /><circle className={`ring-fill ${view.tightest === null ? 'is-neutral' : ''}`} cx="42" cy="42" r={r} strokeDasharray={`${(c * fill / 100).toFixed(2)} ${c.toFixed(2)}`} /></svg>
+          {portrait}
+          <span className="dial-figure"><bdi dir="ltr">{headline(view, number)}</bdi></span>
+        </div> : portrait}
+      </div>
+      <div className="screen-card-identity identity">
+        <h2><bdi>{view.name}</bdi></h2>
+        <PlanBadge view={view} />
+        <StatePill view={view} />
+        <TaskLine view={view} readOnly />
+      </div>
+    </div>
+    <div className="quota-area screen-card-bottom"><Metrics {...props} layout={skin === 'watch' ? 'grid' : 'rows'} /></div>
+  </CardShell>;
+}
+
 export function ProviderCard(props: CardProps) {
+  if (props.readOnly) return <ScreenCard {...props} />;
   return props.skin === 'dial' ? <DialCard {...props} /> : props.skin === 'party' ? <PartyCard {...props} /> : <WatchCard {...props} />;
 }
 
