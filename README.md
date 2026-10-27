@@ -207,6 +207,12 @@ npm run test:lan-sync # 两个独立测试配置在本机配对、同步、重�
 
 ## 更新记录
 
+### 维护 · 2026-10-27 · 清理已合并的旧分支 · 署名：Codex（GPT-6 / Codex 桌面本地执行环境）
+
+- 按用户确认，同时删除本地与 `origin` 上最后提交超过 7 天的三个分支：`NewUI`（`fe79e77`）、`codex/multilingual-support`（`bf8da12`）、`codex/layout-modes`（`f8fc5f3`）。
+- 删除前复核本地与远程分支头一致、全部提交已包含在 `main`、无工作区占用；远程删除采用预期提交校验和原子操作，本地使用已合并检查删除。
+- 删除后刷新远程引用，核实三个本地分支和三个远程分支均已移除。此次为 Git 分支维护与文档记录，未运行应用构建或产品测试。
+
 ### 未发布 · 2026-10-27 · macOS 15+ USB 小屏移植 · 署名：Codex（GPT-6 / Codex 桌面本地执行环境）
 
 - 从拉取后的最新 `main`（`2a9f856`）创建 `codex/macos-usb-streaming`，为 Apple Silicon 和 Intel 增加原生 USB 传输，串流继续作为 AI Watch 内置功能。保留原小屏布局、动效、看板娘、曲线和全屏等待提醒。

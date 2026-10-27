@@ -20,6 +20,18 @@
 
 ---
 
+## 2026-10-27 · Codex（GPT-6 / Codex 桌面本地执行环境；复核 inspect_local_docs）· 清理已确认的三个旧分支
+
+- 分支：`main`，操作基线 `91b4e76`。
+- 目的：用户先要求列出最后提交超过 7 天的本地和远程分支，审阅清单后明确确认清理三个候选。
+- 删除对象：`NewUI`（`fe79e772a4798f242b5c0a50ffca07babd6d8fc6`）、`codex/multilingual-support`（`bf8da1201cc214ec8b8eae3e830781c978abdcf1`）、`codex/layout-modes`（`f8fc5f3c74afb4700d049629771aff14e48f9201`），各含本地和 `origin` 同名分支。
+- 操作：先 fetch/prune 并核对工作区干净、当前为 main、三个分支本地/远程头均未变化、提交均为 main 祖先且无 worktree 占用；远程使用带预期提交校验的原子删除，本地使用 `git branch -d`；随后刷新并复查分支列表。同步 README 更新记录。
+- 验证：远程删除与三个本地删除均成功；本地分支及远程跟踪引用查询为空，远程 heads 查询也为空。全部历史提交仍由 main 保留，其他工作区和 stash 未改动。
+- 测试范围：仅 Git 状态/引用及文档差异检查；此次没有产品代码变化，未运行应用构建或产品测试。
+- 未完成 / 需要人类决定：无。
+
+---
+
 ## 2026-10-27 · Codex（GPT-6 / Codex 桌面本地执行环境；协作 mac_usb_transport、mac_bridge_build、mac_port_review）· macOS 15+ USB 小屏移植
 
 - 分支：`codex/macos-usb-streaming`，先 fetch 最新远端，再从 `origin/main` 的 `2a9f856` 创建分支并执行 `git pull --ff-only origin main`，结果 Already up to date；未在 main 上开发。
