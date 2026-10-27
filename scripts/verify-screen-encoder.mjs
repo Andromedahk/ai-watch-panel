@@ -42,6 +42,20 @@ try {
   assert.equal(ready.dryRun, true);
   assert.equal(ready.pixelFormat, 'bgra');
   assert.equal(ready.frameBytes, 2240 * 1080 * 4);
+  // A static surface sends no further bitmaps. The bridge must keep producing
+  // H.264 from its latest frame without needing a parent-side frame timer.
+  const staticStart = await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes('surface=screen')).webContents.stopPainting();
+    return global.aiWatchEncoderQA.calls[0].events.filter(event => event.type === 'stats').at(-1).data;
+  });
+  await expect.poll(() => app.evaluate((_electron, { elapsed, frames }) => {
+    const stats = global.aiWatchEncoderQA.calls[0].events.filter(event => event.type === 'stats').at(-1)?.data;
+    return stats && stats.elapsed >= elapsed + 2 && stats.frames > frames + 10;
+  }, staticStart), { timeout: 7000 }).toBe(true);
+  await app.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes('surface=screen')).webContents;
+    contents.startPainting(); contents.invalidate();
+  });
   const screenshot = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()
     .find(window => window.webContents.getURL().includes('surface=screen')).webContents.capturePage()).toPNG().toString('base64'));
   await writeFile(path.join(output, 'encoder-input.png'), Buffer.from(screenshot, 'base64'));

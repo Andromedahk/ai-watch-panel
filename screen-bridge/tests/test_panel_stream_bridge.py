@@ -53,6 +53,7 @@ class PanelBridgeTests(unittest.TestCase):
         self.assertEqual(args[args.index("-video_size") + 1], "1120x540")
         self.assertEqual(args[args.index("-i") + 1], "pipe:0")
         self.assertIn("zerolatency", args)
+        self.assertEqual(args[args.index("-flush_packets") + 1], "1")
         self.assertNotIn("gdigrab", args)
         self.assertNotIn("desktop", args)
 
@@ -257,36 +258,79 @@ class PanelBridgeTests(unittest.TestCase):
         self.assertNotIn("serial", payload["data"]["info"])
 
     def test_slow_usb_applies_backpressure_without_dropping_h264_frames(self):
-        stop, sixth_packet = threading.Event(), threading.Event()
+        stop, third_packet = threading.Event(), threading.Event()
         produced, consumed = [], []
         process = FakeEncoder()
         def encoded_frames(_):
-            for index in range(100):
+            for index in range(8):
                 produced.append(index)
-                if index == 5:
-                    sixth_packet.set()
+                if index == 2:
+                    third_packet.set()
                 yield bytes([index])
         class Screen:
             def push_begin(self, *args): return 1
             def push_frame(self, track, packet):
                 consumed.append(packet)
-                if not sixth_packet.wait(2):
-                    raise AssertionError("encoder did not fill bounded queue")
-                # The USB consumer is stalled while encoder output has filled up.
-                time.sleep(0.05)
-                stop.set()
+                if len(consumed) == 1:
+                    if not third_packet.wait(2):
+                        raise AssertionError("encoder did not fill bounded queue")
+                    # One active USB write, one queued AU, one blocked producer.
+                    # Further frames must stay behind the encoder's backpressure.
+                    time.sleep(0.05)
+                    self.assert_stalled()
+                if len(consumed) == 8:
+                    stop.set()
             def read_frames(self, **kwargs): return []
+        screen = Screen()
+        screen.assert_stalled = lambda: self.assertEqual(produced, [0, 1, 2])
         config = StreamConfig(width=64, height=64)
         session = bridge.PanelStreamSession(config, Path("."), lambda *_: None, io.BytesIO())
-        session.sc = Screen()
+        session.sc = screen
         session.started = session.last_stats = time.monotonic()
         incoming = bridge.LatestFrameInput(io.BytesIO(), 64 * 64 * 4, stop)
         with patch.object(bridge.subprocess, "Popen", return_value=process), \
              patch.object(bridge.streaming, "iter_h264_aus", side_effect=encoded_frames):
             session._raw(stop, incoming)
-        self.assertEqual(consumed, [b"\x00"])
-        self.assertLessEqual(len(produced), 6, "slow USB must backpressure the encoder")
+        self.assertEqual(consumed, [bytes([index]) for index in range(8)],
+                         "backpressure must retain every encoded H.264 reference in order")
         self.assertTrue(process.terminated)
+
+    def test_encoder_samples_latest_frame_after_pacing_wait(self):
+        stop, local_stop = threading.Event(), threading.Event()
+        config = StreamConfig(width=64, height=64, fps=1)
+        incoming = bridge.LatestFrameInput(io.BytesIO(), 64 * 64 * 4, stop)
+        old_frame, new_frame = b"a" * incoming.frame_bytes, b"b" * incoming.frame_bytes
+        incoming.latest = old_frame
+        incoming.available.set()
+        written, waits = [], []
+
+        class EncoderInput(io.BytesIO):
+            def write(self, data):
+                written.append(bytes(data))
+                if len(written) == 2:
+                    stop.set()
+                return len(data)
+
+        class EncoderOutput(io.BytesIO):
+            def read(self, size):
+                stop.wait(2)
+                return b""
+
+        def pacing_wait(delay):
+            waits.append(delay)
+            # A fresh paint arrives during the encoder's FPS wait, without any
+            # scheduler timing assumption in the regression test.
+            incoming.latest = new_frame
+            return False
+
+        pacing = SimpleNamespace(set=local_stop.set, is_set=local_stop.is_set, wait=pacing_wait)
+        process = FakeEncoder(stdin=EncoderInput(), stdout=EncoderOutput())
+        session = bridge.PanelStreamSession(config, Path("."), lambda *_: None, io.BytesIO(), dry_run=True)
+        with patch.object(bridge.subprocess, "Popen", return_value=process), \
+             patch.object(bridge, "threading", SimpleNamespace(Event=lambda: pacing, Thread=threading.Thread)):
+            session._raw(stop, incoming)
+        self.assertTrue(waits)
+        self.assertEqual(written, [old_frame, new_frame])
 
     def test_cancel_unblocks_a_blocked_encoder_input_and_joins_workers(self):
         stop, writing, terminated = threading.Event(), threading.Event(), threading.Event()

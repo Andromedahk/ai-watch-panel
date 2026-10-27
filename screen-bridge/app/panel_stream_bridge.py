@@ -93,7 +93,7 @@ def raw_ffmpeg_command(binary, config):
             "-b:v", f"{config.bitrate_mbps}M", "-maxrate", f"{config.bitrate_mbps}M",
             "-bufsize", f"{config.bitrate_mbps}M", "-x264-params",
             f"aud=1:repeat-headers=1:annexb=1:keyint={config.fps}:min-keyint={config.fps}:scenecut=0:bframes=0",
-            "-f", "h264", "pipe:1"]
+            "-flush_packets", "1", "-f", "h264", "pipe:1"]
 
 
 class LatestFrameInput:
@@ -150,7 +150,10 @@ class PanelStreamSession(streaming.StreamSession):
         proc = subprocess.Popen(raw_ffmpeg_command(binary, config), stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        packets = queue.Queue(maxsize=4)
+        # Backpressure must preserve H.264 references; never discard encoded P
+        # frames. Keep just one waiting access unit so a slow USB write does not
+        # turn the four-frame queue into another ~100 ms of lag at 30 FPS.
+        packets = queue.Queue(maxsize=1)
         errors = deque(maxlen=12)
         local_stop = threading.Event()
 
@@ -185,14 +188,17 @@ class PanelStreamSession(streaming.StreamSession):
                 while not local_stop.is_set() and not stop.is_set():
                     if not incoming.available.wait(0.1):
                         continue
-                    frame, _ = incoming.snapshot()
-                    if frame is None:
-                        continue
                     delay = next_frame - time.monotonic()
                     if delay > 0 and local_stop.wait(delay):
                         return
                     if stop.is_set():
                         return
+                    # Paint may advance while pacing the encoder. Sample after
+                    # the wait so the next write contains the newest full frame,
+                    # rather than an image saved up to one frame period earlier.
+                    frame, _ = incoming.snapshot()
+                    if frame is None:
+                        continue
                     # FileIO.write may be short on a pipe. Never mix frame edges.
                     remaining = memoryview(frame)
                     while remaining and not local_stop.is_set() and not stop.is_set():

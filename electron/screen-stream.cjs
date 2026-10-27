@@ -54,23 +54,38 @@ function bridgeCommand({ packaged = false, resourcesPath = process.resourcesPath
   return { executable: env.XANALI_PYTHON || (platform === 'darwin' ? 'python3' : 'python'), args: ['-u', path.join(bridgeRoot, 'app', 'panel_stream_bridge.py')], cwd: bridgeRoot };
 }
 
-// A single queued write and one latest bitmap bound memory when USB is slower than paint.
+// Send each new paint immediately, keeping one write and one latest bitmap. The
+// bridge repeats a static bitmap at the configured FPS, so the parent need not
+// copy the same multi-megabyte image on a second, unsynchronised frame timer.
 class FramePump {
-  constructor({ write, onError = () => {} }) { this.write = write; this.onError = onError; this.frames = 0; this.droppedFrames = 0; this.pending = false; this.latest = null; this.closed = false; }
-  update(frame) { if (!this.closed) this.latest = frame; }
+  constructor({ write, onError = () => {} }) {
+    this.write = write; this.onError = onError; this.frames = 0; this.droppedFrames = 0;
+    this.pending = false; this.latest = null; this.closed = false; this.started = false;
+    this.revision = 0; this.sentRevision = 0;
+  }
+  start() { if (!this.closed) { this.started = true; this.tick(); } }
+  update(frame) {
+    if (this.closed) return;
+    if (this.revision > this.sentRevision) this.droppedFrames++;
+    this.latest = frame; this.revision++;
+    this.tick();
+  }
   tick() {
-    if (this.closed || !this.latest) return;
-    if (this.pending) { this.droppedFrames++; return; }
+    if (this.closed || !this.started || !this.latest || this.pending || this.sentRevision === this.revision) return;
     this.pending = true;
+    this.sentRevision = this.revision;
     try {
       this.write(this.latest, error => {
         this.pending = false;
-        if (error) { if (!this.closed) this.onError(error); }
-        else this.frames++;
+        if (this.closed) return;
+        if (error) { this.close(); this.onError(error); return; }
+        this.frames++;
+        // Drain to the newest paint as soon as the pipe becomes writable.
+        this.tick();
       });
-    } catch (error) { this.pending = false; if (!this.closed) this.onError(error); }
+    } catch (error) { this.pending = false; if (!this.closed) { this.close(); this.onError(error); } }
   }
-  close() { this.closed = true; this.latest = null; }
+  close() { this.closed = true; this.started = false; this.latest = null; }
 }
 
 class ScreenStream {
@@ -117,7 +132,12 @@ class ScreenStream {
       contents.on('render-process-gone', () => this.fail('小屏幕渲染进程已退出', generation));
       contents.setFrameRate(config.fps);
       this.pump = new FramePump({
-        write: (frame, done) => this.preview ? done() : this.child?.stdin?.write(frame, done),
+        write: (frame, done) => {
+          if (this.preview) return done();
+          const input = this.child?.stdin;
+          if (!input || input.destroyed || input.writableEnded) return done(new Error('Stream input is closed'));
+          input.write(frame, done);
+        },
         onError: () => this.fail('串流管道已断开，请检查屏幕连接后重试', generation),
       });
       let firstFrame;
@@ -145,8 +165,8 @@ class ScreenStream {
       });
       if (!this.preview) await this.startBridge(config, generation);
       if (generation !== this.generation) return;
+      this.pump.start();
       contents.startPainting(); contents.invalidate();
-      this.frameTimer = setInterval(() => this.pump?.tick(), Math.max(1, Math.round(1000 / config.fps)));
       this.statsTimer = setInterval(() => this.onChange(), 1000);
       this.status = 'running'; this.onChange();
     } catch (error) {
@@ -213,7 +233,7 @@ class ScreenStream {
   async stopInternal() {
     ++this.generation;
     this.cancelStart = null;
-    clearInterval(this.frameTimer); clearInterval(this.statsTimer);
+    clearInterval(this.statsTimer);
     this.pump?.close();
     if (this.status !== 'stopped') { this.status = 'stopping'; this.onChange(); }
     const output = this.window; this.window = null;
