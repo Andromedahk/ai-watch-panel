@@ -21,6 +21,10 @@ Mac 的桥、编码器和 libusb 随 AI Watch 打包，使用者无需另装 Pyt
 
 模型额度 / 积分每次展示两项，币种逐个展示，轮播不会因关闭动效而停止。默认保留光晕、呼吸、圆环及人物动效。提问 / 授权提醒占满屏幕：左半为待处理 Agent 的角色（支持自选角色图），右半为大号红色状态与处理说明，文字向右额外留出约一个大字的位置。
 
+提问显示“{Agent 名字}有问题想问你”，授权显示“{Agent 名字}需要你的授权”，模块名称使用当前配置中的 Claude / Claude Code、Codex、Antigravity、DeepSeek Harness 等名称。标题与名称组成完整句子；适合的语言将名称单独放在较小的一行，字母语言正文也使用较小字号并换行，兼容长名称及同时提问/授权。完整标题提供 17 种语言，RTL 保留本地语序；原人物区域、文字起点和左右留白保持不变。
+
+在桌面测试模式中，上述四个 Agent 的任务状态都可选择等待回答、等待授权和混合等待，并即时同步到小屏。显示层也接受从现有本机读取器或 LAN 主机收到的结构化等待状态；测试成功不代表新增了真实客户端识别能力。本次按用户确认只处理显示与测试：Antigravity 读取器仍以运行/待机为主，DeepSeek Harness 的真实提问及 Windows 活跃会话识别未扩展。未知等待保持通用处理提醒，登录提示和辅助功能权限不冒充 Agent 请求。
+
 多条提醒每 6 秒自动切换，角色和文字滑入淡入，屏幕底部显示轮换进度。有非过期等待任务明细时，同一 Agent 的任务分别展示；无明细则保留 Agent 汇总提醒，同时待回答/授权分为两行。任务身份不使用采样时间，普通刷新不会反复重启动画或轮播。关闭动效或系统减少动态效果时仍会自动换页；状态解除后恢复监看画面。
 
 ## 数据和渲染
@@ -93,6 +97,7 @@ Mac 在 macOS 15+ 的原生环境执行 `npm run pack:mac` 或 `npm run dist:mac
 npm run build
 npm run test:screen
 node scripts/verify-screen-curved.mjs
+node scripts/verify-screen-attention.mjs # 四 Agent 测试控件、完整标题、多语言和边界
 node scripts/verify-screen-sync.mjs
 node scripts/verify-screen-encoder.mjs  # 先构建内部桥，真实编码但不连接 USB
 ```

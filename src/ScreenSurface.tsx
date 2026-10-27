@@ -34,7 +34,7 @@ function useRotation(seconds: number, key: string, count: number) {
 }
 
 export function ScreenSurface({ providers, views, stream, skin, anime, animate, testing, demo = false, remote = false, sampledAt, renderCard, renderMascot, renderTrend, imageForAttention }: Props) {
-  const { t, date, number } = useI18n();
+  const { t, date, number, language } = useI18n();
   const s = useScreenText();
   const [size, setSize] = useState(() => ({ width: innerWidth, height: innerHeight }));
   useEffect(() => {
@@ -56,8 +56,11 @@ export function ScreenSurface({ providers, views, stream, skin, anime, animate, 
   const attentionPage = useRotation(6, waitingKey, waiting.length);
   const reminder = waiting.length ? waiting[attentionPage % waiting.length] : null;
   const attention = reminder?.provider;
-  const attentionLabels = reminder?.reason === 'both' ? [t('待回答'), t('待授权')]
-    : [reminder?.reason === 'input' ? t('待回答') : reminder?.reason === 'approval' ? t('待授权') : t('待确认')];
+  const attentionName = attention?.name || '';
+  const inputLabel = t('{p0}有问题想问你', { p0: attentionName });
+  const approvalLabel = t('{p0}需要你的授权', { p0: attentionName });
+  const attentionLabels = reminder?.reason === 'both' ? [inputLabel, approvalLabel]
+    : [reminder?.reason === 'input' ? inputLabel : reminder?.reason === 'approval' ? approvalLabel : t('{p0} 在等你处理', { p0: attentionName })];
   return <main className={`screen-surface skin-${skin} ${anime ? 'anime-mode' : ''} ${!animate ? 'no-animation' : ''}`}
     data-surface="screen" data-test-mode={testing} data-page={currentPage + 1} data-attention-count={waiting.length}
     data-portrait={layout.portrait} data-visible-cards={visibleCount} data-screen-profile="curved-dual-face"
@@ -85,10 +88,13 @@ export function ScreenSurface({ providers, views, stream, skin, anime, animate, 
         <div className="screen-attention-orbit" aria-hidden="true" />
         <Portrait provider={attention} image={imageForAttention?.(attention)} anime crop="bust" />
       </div>
-      <div className="screen-attention-content">
+      <div className="screen-attention-content" data-title-script={/^(zh|ja|ko)(-|$)/.test(language) ? 'cjk' : 'prose'}>
         <span className="screen-attention-kicker">{testing ? `${t('测试数据')} · ` : ''}AGENT NEEDS YOU</span>
-        <strong className="screen-attention-provider">{attention.name}</strong>
-        <h1 data-lines={attentionLabels.length}>{attentionLabels.map(label => <span key={label}>{label}</span>)}</h1>
+        <h1 data-lines={attentionLabels.length}>{attentionLabels.map(label => <span key={label}>
+          {label.startsWith(attentionName) && !language.startsWith('ko')
+            ? <><bdi className="screen-attention-agent">{attentionName}</bdi>{label.slice(attentionName.length)}</>
+            : label}
+        </span>)}</h1>
         {reminder.title && <div className="screen-attention-task">{reminder.title}</div>}
         <p>{s(`请在电脑上的 ${attention.name} 中处理`, `Respond in ${attention.name} on your computer`)}</p>
         <span className="screen-attention-note">{s('请求处理完成后自动恢复监看画面', 'Monitoring resumes when the request is resolved')}</span>

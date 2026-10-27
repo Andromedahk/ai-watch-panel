@@ -162,9 +162,15 @@
 .screen-attention-content { grid-column: 2; position: relative; z-index: 1; min-width: 0; min-height: 0; padding: 4vmin 4.8vmin 4vmin calc(4vmin + min(7.4vw, 16vh)); display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2vmin; container-type: size; text-align: start; }
 :root[dir="rtl"] .screen-attention-content { direction: rtl; }
 .screen-attention-kicker { font-size: min(3.2cqw, 3cqh); line-height: 1.3; font-weight: 700; letter-spacing: .12em; color: var(--request-red); overflow-wrap: anywhere; }
-.screen-attention-provider { font-size: min(6.8cqw, 7cqh); line-height: 1.15; overflow-wrap: anywhere; }
-.screen-attention h1 { display: flex; flex-direction: column; gap: .1em; max-width: 100%; margin: .08em 0; font-size: min(7.4vw, 16vh); line-height: 1.08; font-weight: 900; letter-spacing: .02em; color: var(--request-red); overflow-wrap: anywhere; text-wrap: balance; }
-.screen-attention h1[data-lines="2"] { font-size: min(6.8vw, 13vh); }
+/* Full requests include the Agent name. Size them against the existing right
+   face, not the whole viewport, and give alphabetic sentences more room. Keep
+   the face split and its original one-large-character inset unchanged. */
+.screen-attention h1 { display: flex; flex: 0 0 auto; flex-direction: column; gap: .35em; width: 100%; max-width: 100%; margin: .08em 0; font-size: min(14.2cqw, 13cqh); line-height: 1.12; font-weight: 900; letter-spacing: 0; color: var(--request-red); overflow-wrap: anywhere; text-wrap: balance; }
+.screen-attention h1 > span { display: block; min-width: 0; }
+.screen-attention h1 .screen-attention-agent { display: block; max-width: 100%; margin-bottom: .18em; font-size: .66em; line-height: 1.18; font-weight: 750; }
+.screen-attention h1[data-lines="2"] { font-size: min(9.8cqw, 8.2cqh); }
+.screen-attention-content[data-title-script="prose"] h1 { font-size: min(11.2cqw, 10cqh); line-height: 1.16; }
+.screen-attention-content[data-title-script="prose"] h1[data-lines="2"] { font-size: min(8.8cqw, 7.4cqh); }
 .screen-attention-task { max-width: 100%; flex: 0 0 auto; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: min(5.2cqw, 4.5cqh); line-height: 1.35; font-weight: 650; }
 .screen-attention p { margin: 0; max-width: 100%; font-size: min(4.8cqw, 4.5cqh); line-height: 1.4; color: var(--request-secondary); overflow-wrap: anywhere; }
 .screen-attention-note, .screen-attention-queue { font-size: min(3.4cqw, 3.1cqh); line-height: 1.4; color: var(--request-secondary); overflow-wrap: anywhere; }
