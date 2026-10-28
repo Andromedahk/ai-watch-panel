@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('panel', {
   getState: () => ipcRenderer.invoke('panel:state'),
   getStatus: () => ipcRenderer.invoke('panel:status'),
+  configureCloud: config => ipcRenderer.invoke('panel:cloud-configure', config),
+  forgetCloud: () => ipcRenderer.invoke('panel:cloud-forget'),
   setStreamConfig: config => ipcRenderer.invoke('panel:stream-config', config),
   startStream: () => ipcRenderer.invoke('panel:stream-start'),
   stopStream: () => ipcRenderer.invoke('panel:stream-stop'),

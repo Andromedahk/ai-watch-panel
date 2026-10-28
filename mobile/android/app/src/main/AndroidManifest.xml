@@ -1,0 +1,23 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <application android:label="AI Watch" android:theme="@style/AppTheme" android:allowBackup="false"
+        android:usesCleartextTraffic="false" android:supportsRtl="true" android:icon="@android:drawable/ic_menu_view">
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="aiwatch" android:host="attention" />
+            </intent-filter>
+        </activity>
+        <service android:name=".PushService" android:exported="false">
+            <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
+        </service>
+        <receiver android:name=".AttentionUnpinReceiver" android:exported="false" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="@string/ai_watch_channel_id" />
+        <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />
+    </application>
+</manifest>

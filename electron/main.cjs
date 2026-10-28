@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, shell, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, shell, systemPreferences, safeStorage } = require('electron');
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
 const { ScreenStream, streamAvailability } = require('./screen-stream.cjs');
@@ -24,6 +24,8 @@ const { ProviderLauncher } = require('./provider-launcher.cjs');
 const { cleanupOrphanedHelpers } = require('./orphan-helpers.cjs');
 const { clearStartupDiskCaches, clearSessionCaches } = require('./app-cache.cjs');
 const { LanSyncController } = require('./lan-sync-controller.cjs');
+const { CloudStatusController, projectStatus } = require('./cloud-status.cjs');
+const { CloudActionAdapter } = require('./cloud-actions.cjs');
 const statusReader = new LocalStatusReader({ onCodexActivity: snapshot => {
   if (fixtureMode || preferences?.syncRole === 'client') return;
   statusSnapshot = { ...statusSnapshot, sampledAt: snapshot.sampledAt, codex: snapshot.codex };
@@ -62,6 +64,7 @@ async function applyClaudeHooks(enabled) {
 // A sync client shows the host's data and pauses its own readers.
 const isSyncClient = () => preferences?.syncRole === 'client';
 let lanSync = null, remoteJournal = null;
+let cloudSync = null, cloudActions = null;
 function acceptRemote(snapshot) {
   if (!isSyncClient()) return;
   if (snapshot.status && typeof snapshot.status === 'object') {
@@ -186,6 +189,7 @@ function currentState() {
     widgetLastPublishedAt: widgetPublisher?.lastPublishedAt || null,
     claudeHooksStatus,
     lanSync: lanSync?.summary() ?? { role: 'off', state: 'off' },
+    cloudSync: cloudSync?.summary(),
     resolvedLanguage: currentLanguage().language,
     resolvedTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
     scaleFactor: display.scaleFactor, bounds: window.getBounds() };
@@ -373,6 +377,19 @@ else {
     statusReader.claudeReader.setDesktopPlanCacheFile(path.join(app.getPath('userData'), 'claude-desktop-plan.json'));
     createClaudeHooks();
     lanSync = new LanSyncController({ userData: app.getPath('userData'), onRemote: acceptRemote, onChange: () => emitState() });
+    cloudActions = new CloudActionAdapter({ statusReader });
+    cloudSync = new CloudStatusController({ userData: app.getPath('userData'), safeStorage,
+      fetch: (...args) => net.fetch(...args), onChange: () => { if (window && !window.isDestroyed()) emitState(); },
+      actions: { dispose: () => cloudActions.suspend(), execute: command => !fixtureMode && !isSyncClient() && preferences.enabledProviders.includes('codex')
+        && Number.isFinite(Date.parse(statusSnapshot?.sampledAt)) && Date.now() - Date.parse(statusSnapshot.sampledAt) <= 30000
+        ? cloudActions.execute(command) : Promise.resolve({ id: command.id, status: 'failed', error: 'local-actions-unavailable' }) },
+      getSnapshot: async (allowActions, uploadFullContent) => {
+        const localActions = allowActions && !fixtureMode && !isSyncClient() && preferences.enabledProviders.includes('codex');
+        const requests = localActions ? await cloudActions.pending({ uploadFullContent }) : [];
+        if (!localActions) cloudActions.suspend();
+        return projectStatus(statusSnapshot, { enabledProviders: preferences.enabledProviders,
+          requests: requests.filter(request => preferences.enabledProviders.includes(request.provider)), sample: fixtureMode });
+      } });
     // Refresh the script on start so a moved or updated app keeps reporting; failures stay visible in settings.
     if (preferences.claudeHooksEnabled) await applyClaudeHooks(true).catch(() => {});
     widgetPublisher = new WidgetPublisher({ bridge: loadWidgetBridge({ app, fixtureMode,
@@ -446,6 +463,8 @@ else {
     screen.on('display-removed', (_event, display) => { displayLayouts.delete(display.id); dock(); });
     handle('panel:state', currentState);
     handle('panel:status', () => statusSnapshot);
+    handle('panel:cloud-configure', value => { cloudSync.configure(value); emitState(); return currentState(); });
+    handle('panel:cloud-forget', () => { cloudSync.forget(); emitState(); return currentState(); });
     ipcMain.handle('screen:state', event => { if (!screenStream.accepts(event)) throw new Error('Invalid screen sender'); return screenStream.screenState(); });
     ipcMain.handle('screen:status', event => { if (!screenStream.accepts(event)) throw new Error('Invalid screen sender'); return statusSnapshot; });
     handle('panel:stream-config', value => {
@@ -752,6 +771,7 @@ else {
     await applySync().catch(() => {});
     void refreshLocalStatus().catch(() => {});
     statusTimer = setInterval(() => { void refreshLocalStatus().catch(() => {}); }, 5000);
+    cloudSync.start();
     app.on('activate', () => { void panelTray.restore(); });
   });
   app.on('window-all-closed', () => app.quit());
@@ -767,6 +787,8 @@ else {
     panelTray?.dispose(); clearInterval(statusTimer); nativeTheme.removeListener('updated', updateAppearance);
     statusReader.codexAttention.close(); statusReader.codexQuotaReader.close();
     void lanSync?.close();
+    cloudSync?.stop();
+    cloudActions?.dispose();
     // Tear down Chromium's window/IPC while the host is still alive.
     if (window && !window.isDestroyed()) window.destroy();
   });

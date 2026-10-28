@@ -1,0 +1,18 @@
+<resources>
+    <string name="ai_watch_input_title">AI Watch · 等待回答</string>
+    <string name="ai_watch_approval_title">AI Watch · 等待授权</string>
+    <string name="ai_watch_low_quota_title">AI Watch · 额度偏低</string>
+    <string name="ai_watch_status_title">AI Watch · 状态提醒</string>
+    <string name="ai_watch_notice_body">打开 AI Watch 查看当前状态。</string>
+    <string name="ai_watch_live_channel">正在关注的任务</string>
+    <string name="ai_watch_live_title">%1$s · %2$d 项待处理</string>
+    <string name="ai_watch_live_body">%1$d 项待回答 · %2$d 项待授权。打开 AI Watch 查看。</string>
+    <string name="ai_watch_live_unpin">停止关注</string>
+    <string name="ai_watch_live_disabled">实时任务关注已关闭</string>
+    <string name="ai_watch_live_notifications_blocked">已开启关注；系统通知被关闭</string>
+    <string name="ai_watch_live_system_eligible">已开启关注；由 Android 决定是否提升通知展示</string>
+    <string name="ai_watch_live_fallback">已开启关注；使用普通持续通知回退</string>
+    <string name="ai_watch_push_consent_title">启用厂商推送通知？</string>
+    <string name="ai_watch_push_consent_body">将初始化厂商官方推送 SDK，并登记其设备推送标识以送达通知。AI Watch 只发送通用状态和计数，不发送任务正文、命令或回答。</string>
+    <string name="ai_watch_push_consent_accept">同意并启用</string>
+</resources>

@@ -1,0 +1,19 @@
+<resources>
+    <string name="ai_watch_channel_id" translatable="false">ai_watch_alerts</string>
+    <string name="ai_watch_input_title">AI Watch · Answer requested</string>
+    <string name="ai_watch_approval_title">AI Watch · Approval requested</string>
+    <string name="ai_watch_low_quota_title">AI Watch · Low quota</string>
+    <string name="ai_watch_status_title">AI Watch · Status alert</string>
+    <string name="ai_watch_notice_body">Open AI Watch to review the current status.</string>
+    <string name="ai_watch_live_channel">Active task monitoring</string>
+    <string name="ai_watch_live_title">%1$s · %2$d pending</string>
+    <string name="ai_watch_live_body">%1$d answers · %2$d approvals. Open AI Watch to review.</string>
+    <string name="ai_watch_live_unpin">Stop following</string>
+    <string name="ai_watch_live_disabled">Live task monitoring is off</string>
+    <string name="ai_watch_live_notifications_blocked">Monitoring is enabled; system notifications are blocked</string>
+    <string name="ai_watch_live_system_eligible">Monitoring is enabled; Android decides whether to promote the notification</string>
+    <string name="ai_watch_live_fallback">Monitoring is enabled; standard ongoing notification fallback</string>
+    <string name="ai_watch_push_consent_title">Enable manufacturer push notifications?</string>
+    <string name="ai_watch_push_consent_body">This initializes the manufacturer’s official push SDK and registers its device push identifier to deliver notifications. AI Watch sends only generic status and counts, never task text, commands or answers.</string>
+    <string name="ai_watch_push_consent_accept">Agree and enable</string>
+</resources>

@@ -10,6 +10,9 @@ export type InsightId = 'timeline' | 'resets' | 'trend' | 'mascot';
 export type Insights = Record<InsightId, boolean>;
 export type Preferences = { side: 'left' | 'right'; locked: boolean; animate: boolean };
 export type SyncRole = 'off' | 'host' | 'client';
+export type CloudConfig = { enabled: boolean; endpoint: string; token?: string; allowActions: boolean; uploadFullContent?: boolean };
+export type CloudSummary = Omit<CloudConfig, 'token'> & { configured: boolean; state: string; error: string | null;
+  lastSyncedAt: number | null; lastBytes: number; totalBytes: number; intervalMs: number; secureStorageAvailable: boolean };
 export type SyncSummary = { role: SyncRole; state: string; error?: string | null; code?: string; port?: number | null; addresses?: string[];
   paired?: number | boolean; connected?: number; name?: string; hostName?: string | null; address?: string | null };
 export type SyncHost = { address: string; port: number; name: string };
@@ -30,6 +33,7 @@ export type PanelState = Preferences & {
   claudeNetworkAllowed: boolean;
   claudeHooksEnabled: boolean;
   syncRole: SyncRole; syncPort: number; lanSync?: SyncSummary;
+  cloudSync?: CloudSummary;
   animeMode: boolean; insights: Insights; insightOrder: InsightId[]; mascotInterval: number; skin: Skin; layout: Layout; windowLayout: 'single' | 'double';
   language: Language; resolvedLanguage?: Exclude<Language, 'system'>;
   theme: Theme; resolvedTheme: 'light' | 'dark';
@@ -67,6 +71,8 @@ declare global {
     panel?: {
       getState(): Promise<PanelState>;
       getStatus(): Promise<LocalStatus>;
+      configureCloud(config: CloudConfig): Promise<PanelState>;
+      forgetCloud(): Promise<PanelState>;
       refreshStatus(): Promise<LocalStatus>;
       onStatus(callback: (status: LocalStatus) => void): () => void;
       setLocked(locked: boolean): Promise<PanelState>;

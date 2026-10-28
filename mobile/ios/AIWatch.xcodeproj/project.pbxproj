@@ -1,0 +1,103 @@
+// !$*UTF8*$!
+{ archiveVersion = 1; classes = {}; objectVersion = 56;
+objects = {
+
+000000000000000000000501 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttentionState.swift; sourceTree = "<group>"; };
+000000000000000000000502 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIWatchAttentionAttributes.swift; sourceTree = "<group>"; };
+000000000000000000000503 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttentionActivityCoordinator.swift; sourceTree = "<group>"; };
+000000000000000000000504 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIWatchLiveActivity.swift; sourceTree = "<group>"; };
+000000000000000000000505 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+000000000000000000000506 = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = AIWatchLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+000000000000000000000507 = {isa = PBXBuildFile; fileRef = 000000000000000000000501; };
+000000000000000000000508 = {isa = PBXBuildFile; fileRef = 000000000000000000000502; };
+000000000000000000000509 = {isa = PBXBuildFile; fileRef = 000000000000000000000503; };
+000000000000000000000510 = {isa = PBXBuildFile; fileRef = 000000000000000000000501; };
+000000000000000000000511 = {isa = PBXBuildFile; fileRef = 000000000000000000000502; };
+000000000000000000000512 = {isa = PBXBuildFile; fileRef = 000000000000000000000504; };
+000000000000000000000513 = {isa = PBXBuildFile; fileRef = 000000000000000000000506; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy); }; };
+000000000000000000000514 = {isa = PBXGroup; path = AIWatchShared; sourceTree = "<group>"; children = (000000000000000000000501,000000000000000000000502); };
+000000000000000000000515 = {isa = PBXGroup; path = AIWatchLiveActivity; sourceTree = "<group>"; children = (000000000000000000000504,000000000000000000000505); };
+000000000000000000000516 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000510,000000000000000000000511,000000000000000000000512); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000517 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000518 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000519 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (000000000000000000000513); name = "Embed Live Activity Extension"; runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000520 = {isa = PBXNativeTarget; buildConfigurationList = 000000000000000000000521; buildPhases = (000000000000000000000516,000000000000000000000517,000000000000000000000518); buildRules = (); dependencies = (); name = AIWatchLiveActivity; productName = AIWatchLiveActivity; productReference = 000000000000000000000506; productType = "com.apple.product-type.app-extension"; };
+000000000000000000000521 = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000522,000000000000000000000523); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+000000000000000000000522 = {isa = XCBuildConfiguration; name = Debug; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = app.aiwatch.mobile.liveactivity; PRODUCT_NAME = "$(TARGET_NAME)"; INFOPLIST_FILE = AIWatchLiveActivity/Info.plist; GENERATE_INFOPLIST_FILE = NO; CODE_SIGN_STYLE = Automatic; SKIP_INSTALL = YES; APPLICATION_EXTENSION_API_ONLY = YES; MARKETING_VERSION = 0.1.0; CURRENT_PROJECT_VERSION = 1; IPHONEOS_DEPLOYMENT_TARGET = 16.1; TARGETED_DEVICE_FAMILY = "1,2"; SWIFT_VERSION = 5.0; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"; }; };
+000000000000000000000523 = {isa = XCBuildConfiguration; name = Release; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = app.aiwatch.mobile.liveactivity; PRODUCT_NAME = "$(TARGET_NAME)"; INFOPLIST_FILE = AIWatchLiveActivity/Info.plist; GENERATE_INFOPLIST_FILE = NO; CODE_SIGN_STYLE = Automatic; SKIP_INSTALL = YES; APPLICATION_EXTENSION_API_ONLY = YES; MARKETING_VERSION = 0.1.0; CURRENT_PROJECT_VERSION = 1; IPHONEOS_DEPLOYMENT_TARGET = 16.1; TARGETED_DEVICE_FAMILY = "1,2"; SWIFT_VERSION = 5.0; SWIFT_OPTIMIZATION_LEVEL = "-O"; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"; }; };
+000000000000000000000524 = {isa = PBXContainerItemProxy; containerPortal = 000000000000000000000208; proxyType = 1; remoteGlobalIDString = 000000000000000000000520; remoteInfo = AIWatchLiveActivity; };
+000000000000000000000525 = {isa = PBXTargetDependency; target = 000000000000000000000520; targetProxy = 000000000000000000000524; };
+000000000000000000000526 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+
+000000000000000000000401 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAcceptanceTests.swift; sourceTree = "<group>"; };
+000000000000000000000402 = {isa = PBXBuildFile; fileRef = 000000000000000000000401; };
+000000000000000000000403 = {isa = PBXGroup; path = UITests; sourceTree = "<group>"; children = (000000000000000000000401); };
+000000000000000000000404 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = AIWatchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+000000000000000000000405 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000402); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000406 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000407 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000408 = {isa = PBXShellScriptBuildPhase; buildActionMask = 2147483647; files = (); inputPaths = ("$(AI_WATCH_QA_CONFIG)"); name = "Copy isolated QA configuration"; outputPaths = ("$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/qa-config.json"); runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/sh; shellScript = "set -eu\nif [ -z \"${AI_WATCH_QA_CONFIG:-}\" ] || [ ! -f \"$AI_WATCH_QA_CONFIG\" ]; then echo 'Supply an ignored synthetic QA configuration file' >&2; exit 1; fi\ninstall -m 600 \"$AI_WATCH_QA_CONFIG\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/qa-config.json\"\n"; };
+000000000000000000000409 = {isa = PBXContainerItemProxy; containerPortal = 000000000000000000000208; proxyType = 1; remoteGlobalIDString = 000000000000000000000207; remoteInfo = AIWatch; };
+000000000000000000000410 = {isa = PBXTargetDependency; target = 000000000000000000000207; targetProxy = 000000000000000000000409; };
+000000000000000000000411 = {isa = PBXNativeTarget; buildConfigurationList = 000000000000000000000412; buildPhases = (000000000000000000000405,000000000000000000000406,000000000000000000000407,000000000000000000000408); buildRules = (); dependencies = (000000000000000000000410); name = AIWatchUITests; productName = AIWatchUITests; productReference = 000000000000000000000404; productType = "com.apple.product-type.bundle.ui-testing"; };
+000000000000000000000412 = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000413,000000000000000000000414); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+000000000000000000000413 = {isa = XCBuildConfiguration; name = Debug; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = app.aiwatch.mobile.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; CODE_SIGN_STYLE = Automatic; TEST_TARGET_NAME = AIWatch; SWIFT_VERSION = 5.0; IPHONEOS_DEPLOYMENT_TARGET = 16.0; TARGETED_DEVICE_FAMILY = "1,2"; ENABLE_USER_SCRIPT_SANDBOXING = NO; }; };
+000000000000000000000414 = {isa = XCBuildConfiguration; name = Release; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = app.aiwatch.mobile.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; CODE_SIGN_STYLE = Automatic; TEST_TARGET_NAME = AIWatch; SWIFT_VERSION = 5.0; IPHONEOS_DEPLOYMENT_TARGET = 16.0; TARGETED_DEVICE_FAMILY = "1,2"; ENABLE_USER_SCRIPT_SANDBOXING = NO; }; };
+
+
+000000000000000000000301 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Strings.swift; sourceTree = "<group>"; };
+000000000000000000000302 = {isa = PBXBuildFile; fileRef = 000000000000000000000301; };
+000000000000000000000303 = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+000000000000000000000304 = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+000000000000000000000305 = {isa = PBXVariantGroup; children = (000000000000000000000303,000000000000000000000304); name = Localizable.strings; sourceTree = "<group>"; };
+000000000000000000000306 = {isa = PBXBuildFile; fileRef = 000000000000000000000305; };
+
+000000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocol.swift; sourceTree = "<group>"; };
+000000000000000000000065 = {isa = PBXBuildFile; fileRef = 000000000000000000000001; };
+000000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+000000000000000000000066 = {isa = PBXBuildFile; fileRef = 000000000000000000000002; };
+000000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAPI.swift; sourceTree = "<group>"; };
+000000000000000000000067 = {isa = PBXBuildFile; fileRef = 000000000000000000000003; };
+000000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudStore.swift; sourceTree = "<group>"; };
+000000000000000000000068 = {isa = PBXBuildFile; fileRef = 000000000000000000000004; };
+000000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIWatchApp.swift; sourceTree = "<group>"; };
+000000000000000000000069 = {isa = PBXBuildFile; fileRef = 000000000000000000000005; };
+000000000000000000000200 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = AIWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+000000000000000000000201 = {isa = PBXGroup; children = (000000000000000000000202,000000000000000000000514,000000000000000000000515,000000000000000000000403,000000000000000000000203); sourceTree = "<group>"; };
+000000000000000000000202 = {isa = PBXGroup; path = AIWatch; sourceTree = "<group>"; children = (000000000000000000000503,000000000000000000000526,000000000000000000000301,000000000000000000000305,000000000000000000000001,000000000000000000000002,000000000000000000000003,000000000000000000000004,000000000000000000000005); };
+000000000000000000000203 = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (000000000000000000000506,000000000000000000000200,000000000000000000000404); };
+000000000000000000000204 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000507,000000000000000000000508,000000000000000000000509,000000000000000000000302,000000000000000000000065,000000000000000000000066,000000000000000000000067,000000000000000000000068,000000000000000000000069); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000205 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000206 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000306); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000215 = {isa = PBXShellScriptBuildPhase; buildActionMask = 2147483647; files = (); inputPaths = ("$(SRCROOT)/../../dist-mobile/index.html"); name = "Bundle shared desktop renderer"; outputPaths = ("$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/mobile/index.html"); alwaysOutOfDate = 1; runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/sh; shellScript = "set -eu\nsource_dir=\"$SRCROOT/../../dist-mobile\"\ndestination_dir=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/mobile\"\nif [ ! -f \"$source_dir/index.html\" ]; then echo 'Run npm run build:mobile-web at the repository root first' >&2; exit 1; fi\nmkdir -p \"$destination_dir\"\n/usr/bin/rsync -a --delete \"$source_dir/\" \"$destination_dir/\"\n"; };
+000000000000000000000207 = {isa = PBXNativeTarget; buildConfigurationList = 000000000000000000000210; buildPhases = (000000000000000000000204,000000000000000000000205,000000000000000000000206,000000000000000000000519,000000000000000000000215); buildRules = (); dependencies = (000000000000000000000525); name = AIWatch; productName = AIWatch; productReference = 000000000000000000000200; productType = "com.apple.product-type.application"; };
+000000000000000000000208 = {isa = PBXProject; attributes = { LastUpgradeCheck = 1600; TargetAttributes = {000000000000000000000207 = { CreatedOnToolsVersion = 16.0; SystemCapabilities = { com.apple.Push = {enabled = 1; }; }; }; }; }; buildConfigurationList = 000000000000000000000209; compatibilityVersion = "Xcode 14.0"; developmentRegion = "zh-Hans"; hasScannedForEncodings = 0; knownRegions = (en, "zh-Hans", Base); mainGroup = 000000000000000000000201; productRefGroup = 000000000000000000000203; projectDirPath = ""; projectRoot = ""; targets = (000000000000000000000207,000000000000000000000411,000000000000000000000520); };
+000000000000000000000209 = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000211,000000000000000000000212); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+000000000000000000000210 = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000213,000000000000000000000214); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+000000000000000000000211 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 16.0; SWIFT_VERSION = 5.0; }; };
+000000000000000000000212 = {isa = XCBuildConfiguration; name = Release; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 16.0; SWIFT_VERSION = 5.0; }; };
+000000000000000000000213 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {
+CODE_SIGN_STYLE = Automatic; CODE_SIGN_ENTITLEMENTS = AIWatch/AIWatch.entitlements;
+APS_ENVIRONMENT = development;
+PRODUCT_BUNDLE_IDENTIFIER = app.aiwatch.mobile; PRODUCT_NAME = "$(TARGET_NAME)";
+MARKETING_VERSION = 0.1.0; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = AIWatch/Info.plist;
+INFOPLIST_KEY_CFBundleDisplayName = "AI Watch"; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+TARGETED_DEVICE_FAMILY = "1,2"; SWIFT_EMIT_LOC_STRINGS = YES; ENABLE_USER_SCRIPT_SANDBOXING = NO;
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+}; };
+000000000000000000000214 = {isa = XCBuildConfiguration; name = Release; buildSettings = {
+CODE_SIGN_STYLE = Automatic; CODE_SIGN_ENTITLEMENTS = AIWatch/AIWatch.entitlements;
+APS_ENVIRONMENT = production;
+PRODUCT_BUNDLE_IDENTIFIER = app.aiwatch.mobile; PRODUCT_NAME = "$(TARGET_NAME)";
+MARKETING_VERSION = 0.1.0; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = AIWatch/Info.plist;
+INFOPLIST_KEY_CFBundleDisplayName = "AI Watch"; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+TARGETED_DEVICE_FAMILY = "1,2"; SWIFT_EMIT_LOC_STRINGS = YES; ENABLE_USER_SCRIPT_SANDBOXING = NO;
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+SWIFT_OPTIMIZATION_LEVEL = "-O";
+}; };
+}; rootObject = 000000000000000000000208; }

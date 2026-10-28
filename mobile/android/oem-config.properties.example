@@ -1,0 +1,18 @@
+# Client application identifiers and approved scenes only. Server secrets do not belong here.
+# Copy to oem-config.properties after vendor approval; that local file must not be committed.
+xiaomi.appId=
+xiaomi.appKey=
+xiaomi.xmsAppId=
+xiaomi.business=
+vivo.appId=
+vivo.apiKey=
+vivo.scene=
+# Values and field names below must match the OPPO-assigned service and approved UPK.
+oppo.serviceId=
+oppo.eventCode=
+oppo.updateEvent=
+oppo.endEvent=
+oppo.inputCountKey=
+oppo.approvalCountKey=
+oppo.providerKey=
+oppo.expiresAtKey=
