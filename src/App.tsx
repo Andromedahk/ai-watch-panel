@@ -1,11 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { Activity, ArrowLeftToLine, ArrowRightToLine, Check, LockKeyhole, MapPin, Minimize, PanelTopClose, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Bell, Activity, ArrowLeftToLine, ArrowRightToLine, Check, LockKeyhole, MapPin, Minimize, PanelTopClose, RefreshCw, Settings2, UnlockKeyhole, X } from 'lucide-react';
 import packageInfo from '../package.json';
 import { providers as baseProviders, providerIds } from './data';
 import { useVisibleCards } from './useVisibleCards';
 import { replayEntrance } from './motion';
 import { demoJournal, emptyJournal, loadJournal, parseJournal, record, saveJournal, type Journal } from './journal';
 import { SyncSettings, syncStatusText } from './SyncSettings';
+import { CloudSettings } from './CloudSettings';
 import { ScreenSurface } from './ScreenSurface';
 import { ScreenQuotaTrend } from './ScreenQuotaTrend';
 import { useScreenHistory } from './screen-history';
@@ -118,7 +119,7 @@ function TaskDetails({ provider, testing }: { provider: Provider; testing: boole
     </div>
   </div>;
 }
-export default function App() {
+export default function App({ mobile }: { mobile?: { onOpen: (provider?: string) => void; settings: ReactNode; label: string } } = {}) {
   const [state, setState] = useState(() => ({ ...previewState, desktop: Boolean(window.panel) }));
   const [stateLoaded, setStateLoaded] = useState(!window.panel);
   const [statusLoaded, setStatusLoaded] = useState(!window.panel);
@@ -305,6 +306,7 @@ export default function App() {
     catch { setNotice(t('保存失败，请重试')); }
   }
   async function openProvider(provider: Provider) {
+    if (mobile) { mobile.onOpen(provider.id); return; }
     if (screenSurface || streamController) return;
     if (syncClient && !testMode) { setNotice(t('子客户端不能打开主客户端上的应用')); return; }
     if (testMode) { if (state.collapsed) await collapse(false); setNotice(t("测试模式：已模拟打开 {p0}", { p0: provider.name })); return; }
@@ -422,7 +424,7 @@ export default function App() {
     const bridge = window.panel;
     if (!bridge) return;
     const acceptStatus = (next: LocalStatus) => setLocalStatus((current) =>
-      current?.sampledAt && Boolean(current.remote) === Boolean(next.remote) && current.remote?.host === next.remote?.host
+      current?.sampledAt && (!mobile || Boolean(next.sampledAt)) && Boolean(current.remote) === Boolean(next.remote) && current.remote?.host === next.remote?.host
         && (!next.sampledAt || Date.parse(next.sampledAt) < Date.parse(current.sampledAt)) ? current : next);
     bridge.getState().then(setState).catch(() => setNotice(t("无法读取窗口状态"))).finally(() => setStateLoaded(true));
     bridge.getStatus().then(acceptStatus).catch(() => setNotice(t("无法读取本地工具状态"))).finally(() => setStatusLoaded(true));
@@ -602,7 +604,7 @@ export default function App() {
   const badge = testMode ? <button className="demo-tag test-badge" aria-label={t('测试模式设置')} onClick={openSettings}>{t('测试模式')}</button>
     : syncClient ? <span className="demo-tag sync-tag" data-sync-state={state.lanSync?.state} title={syncStatusText(state, t)}>{state.lanSync?.state === 'connected' ? t('同步') : t('未同步')}</span>
     : <span className="demo-tag">{localStatus?.isTestData ? t('测试') : state.desktop ? t('本地') : t('演示')}</span>;
-  const lockButton = (className = '') => <button className={`${className} ${state.locked && state.layout !== 'fullscreen' ? 'selected' : ''}`} disabled={state.layout === 'fullscreen'} aria-label={t('锁定窗口')} aria-pressed={state.locked && state.layout !== 'fullscreen'}
+  const lockButton = (className = '') => <button className={`${className} ${state.locked && state.layout !== 'fullscreen' ? 'selected' : ''}`} disabled={Boolean(mobile) || state.layout === 'fullscreen'} aria-label={t('锁定窗口')} aria-pressed={state.locked && state.layout !== 'fullscreen'}
     title={state.locked ? t('解除跨桌面锁定') : t('锁定：置顶并显示在所有桌面')} onClick={toggleLock}>{state.locked ? <LockKeyhole /> : <UnlockKeyhole />}</button>;
   const skinOptions: { id: Skin; name: string; hint: string }[] = [
     { id: 'watch', name: t('值守台'), hint: t('先提醒要你处理的，再列出全部') },
@@ -622,7 +624,7 @@ export default function App() {
         testing={Boolean(testMode || displayStatus?.isTestData)} demo={!state.desktop} pageSeconds={stream.pageSeconds} />} />
   </GrantAccessContext.Provider></I18nContext.Provider>;
 
-  return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={state.desktop && !syncClient ? () => void grantClaudeAccess() : null}><main ref={main} data-surface={streamController ? 'controller' : 'desktop'} lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel ${streamController && !state.collapsed ? 'stream-controller' : ''} skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
+  return <I18nContext.Provider value={i18n}><GrantAccessContext.Provider value={state.desktop && !syncClient ? () => void grantClaudeAccess() : null}><main ref={main} data-mobile={Boolean(mobile)} data-surface={streamController ? 'controller' : 'desktop'} lang={i18n.language} dir={i18n.dir} data-language={i18n.language} data-layout={state.layout} data-skin={skin} data-sampled-at={displayStatus?.sampledAt || ''} data-test-mode={testMode} className={`panel ${streamController && !state.collapsed ? 'stream-controller' : ''} skin-${skin} layout-${state.layout} ${state.animeMode ? 'anime-mode' : ''} ${state.collapsed ? 'collapsed' : ''} ${settingsOpen ? 'settings-open' : ''} ${pageHidden || state.stored ? 'animations-paused' : ''} ${!state.animate ? 'no-animation' : ''}`}>
     {(!streamController || state.collapsed) && (state.collapsed ? <aside className="collapsed-rail" aria-label={t('收起的监看面板')}>
       <button className="rail-expand" title={t('展开面板')} aria-label={t('展开面板')} onClick={() => collapse(false)}>{state.side === 'right' ? <ArrowLeftToLine size={18} /> : <ArrowRightToLine size={18} />}</button>
       <div className="rail-counts" title={t('运行中 {p0} · 等你处理 {p1}', { p0: summary.running, p1: summary.waiting.length })}>
@@ -640,7 +642,7 @@ export default function App() {
         <div className="brand"><Activity size={17} strokeWidth={2} aria-hidden="true" /><h1 dir="ltr">AI WATCH</h1></div>
         <nav className="toolbar" aria-label={t('面板控制')}>
           <button aria-label={t('刷新面板')} title={testMode ? t('刷新测试画面') : t('重新读取本地额度与任务状态')} disabled={refreshing} onClick={refresh}><RefreshCw className={refreshing ? 'spinning' : ''} /></button>
-          {lockButton()}
+          {mobile ? <button aria-label={mobile.label} title={mobile.label} onClick={() => mobile.onOpen()}><Bell /></button> : lockButton()}
           <button aria-label={storeLabel} title={storeHint} disabled={!state.trayAvailable} onClick={storePanel}><PanelTopClose /></button>
           {state.layout === 'fullscreen' && <button aria-label={t('退出全屏')} title={t('退出全屏')} disabled={layoutSaving} onClick={() => void changeLayout(state.windowLayout)}><Minimize /></button>}
           {state.layout !== 'fullscreen' && <button className="primary" aria-label={t('收起面板')} title={t('收起为状态窄条')} onClick={() => collapse(true)}>{state.side === 'right' ? <ArrowRightToLine /> : <ArrowLeftToLine />}</button>}
@@ -689,10 +691,11 @@ export default function App() {
         <button className="icon-button" aria-label={storeLabel} title={storeHint} disabled={!state.trayAvailable} onClick={storePanel}><PanelTopClose size={18} /></button>
       </div> : <button className="icon-button" aria-label={t('关闭配置')} onClick={() => setSettingsOpen(false)}><X size={18} /></button>}</div>
       <nav className="settings-nav" aria-label={t('配置分区')}>
-        {[['stream', i18n.language.startsWith('zh') ? '小屏幕串流' : 'Display streaming'], ['look', t('外观')], ['modules', t('模块')], ['data', t('数据来源')], ['window', t('窗口')], ['images', t('图片与应用')], ['sync', t('多端同步')], ['about', t('关于')]].map(([id, label]) =>
+        {[['stream', i18n.language.startsWith('zh') ? '小屏幕串流' : 'Display streaming'], ['look', t('外观')], ['modules', t('模块')], ['data', t('数据来源')], ['window', t('窗口')], ['images', t('图片与应用')], ['sync', t('多端同步')], ['cloud', t('云端同步状态')], ['about', t('关于')], ...(mobile ? [['mobile', mobile.label]] : [])].filter(([id]) => !mobile || !['stream', 'data', 'images', 'sync', 'cloud'].includes(id)).map(([id, label]) =>
           <button key={id} type="button" onClick={() => section(id)}>{label}</button>)}
       </nav>
       <div className="settings-content">
+        {mobile?.settings}
         <section className="settings-group" data-section="stream"><StreamSettings state={state} onState={setState} /></section>
         <section className="settings-group" data-section="look"><h3>{t('外观')}</h3>
           <fieldset className="skin-settings"><legend>{t('界面风格')}</legend>
@@ -811,6 +814,7 @@ export default function App() {
           </div>)}</div>
         </section>
         <SyncSettings state={state} onState={setState} notify={setNotice} />
+        <CloudSettings state={state} onState={setState} notify={setNotice} />
         <section className="settings-group settings-note" data-section="about"><h3>{t('关于')}</h3><span className="note-title">{`AI Watch · v${packageInfo.version}`}</span>
           <p><a className="about-link" href={packageInfo.homepage} target="_blank" rel="noreferrer" onClick={event => { if (window.panel) { event.preventDefault(); void window.panel.openRepository(); } }}><bdi>{packageInfo.homepage}</bdi></a></p>
           <p>{t('作者：{p0}', { p0: 'Claude大小姐 · GPT龙娘' })}</p></section>

@@ -1,0 +1,11 @@
+**/build/
+**/.gradle/
+**/local.properties
+**/google-services.json
+**/DerivedData/
+**/xcuserdata/
+**/*.xcuserstate
+**/*.keystore
+**/*.jks
+**/.DS_Store
+**/.test-build/

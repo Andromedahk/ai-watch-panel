@@ -1,0 +1,7 @@
+.env
+.env.*
+data
+secrets
+*.test.cjs
+node_modules
+.git

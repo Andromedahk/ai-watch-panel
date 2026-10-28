@@ -1,0 +1,40 @@
+import { _electron as electron, expect } from '@playwright/test';
+import assert from 'node:assert/strict';
+import { mkdtemp, writeFile, readFile, mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-cloud-ui-'));
+const output = '.local/qa/cloud-sync';
+await mkdir(output, { recursive: true });
+await writeFile(path.join(profile, 'preferences.json'), JSON.stringify({ locked: false, animate: false, language: 'zh-CN', theme: 'dark', skin: 'watch' }));
+const app = await electron.launch({ args: ['.'], env: { ...process.env, AI_WATCH_TEST_PROFILE: profile, AI_WATCH_TEST_STATUS: 'fixture' } });
+try {
+  const page = await app.firstWindow(); const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await expect(page.locator('.provider-card')).toHaveCount(8);
+  await page.getByRole('button', { name: '打开配置', exact: true }).click();
+  await page.locator('.settings-nav').getByRole('button', { name: '云端同步状态', exact: true }).click();
+  const section = page.locator('[data-section="cloud"]');
+  await expect(section.getByRole('status')).toContainText('未启用');
+  const full = section.getByLabel('上传完整内容', { exact: true });
+  await expect(full).not.toBeChecked(); await expect(full).toBeDisabled();
+  await page.getByLabel('云端服务器', { exact: true }).fill('https://sync.example.test');
+  const credential = 'synthetic-ui-credential-not-a-production-token';
+  await page.getByLabel('桌面端凭据', { exact: true }).fill(credential);
+  await section.getByLabel('允许手机回答和授权', { exact: true }).check(); await full.check();
+  await section.getByRole('button', { name: '保存云端配置', exact: true }).click();
+  await expect(page.locator('.toast')).toContainText('云端配置已保存');
+  await expect(page.getByLabel('桌面端凭据', { exact: true })).toHaveValue('');
+  const state = await page.evaluate(() => window.panel.getState());
+  assert.equal(state.cloudSync.enabled, false); assert.equal(state.cloudSync.configured, true);
+  assert.equal(state.cloudSync.uploadFullContent, true);
+  assert.equal(JSON.stringify(state).includes(credential), false);
+  assert.equal((await readFile(path.join(profile, 'cloud-sync.json'), 'utf8')).includes(credential), false);
+  await section.screenshot({ path: path.join(output, 'settings-dark.png') });
+  await section.getByRole('button', { name: '停用并清除本机凭据', exact: true }).click();
+  await expect.poll(async () => (await page.evaluate(() => window.panel.getState())).cloudSync.configured).toBe(false);
+  assert.equal((await page.evaluate(() => window.panel.getState())).cloudSync.uploadFullContent, false);
+  assert.deepEqual(errors, []);
+  console.log(JSON.stringify({ result: 'passed', source: 'isolated fixture', secureStorage: true, noNetwork: true, screenshot: `${output}/settings-dark.png` }));
+} finally { await app.close(); await rm(profile, { recursive: true, force: true }); }

@@ -1,0 +1,12 @@
+{
+  "name": "ai-watch-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted AI Watch status and mobile notification relay",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node --env-file=.env server.cjs",
+    "test": "node --test *.test.cjs",
+    "provision": "node provision.cjs"
+  }
+}

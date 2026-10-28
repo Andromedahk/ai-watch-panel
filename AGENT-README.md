@@ -30,6 +30,12 @@
   electron/claude-hooks.cjs + claude-hook-logger.cjs   [M] ⌁ Claude Code user-settings hook install/remove
   electron/codex-attention*.cjs + json-*frame-decoder.cjs  [M] Codex IPC stream (unix sock) wait-state parse
   electron/lan-sync.cjs + lan-sync-controller.cjs      [M] LAN host/client sync
+  electron/cloud-status.cjs, cloud-actions.cjs         [M] opt-in cloud projection, encrypted settings, verified Codex action bridge
+  cloud/                         Node.js HTTPS-proxied workspace service; pairing, alerts, command receipts, FCM/APNs
+  cloud/attention.cjs, oem-push.cjs explicit live-attention queue, ActivityKit registry, approved MiPush/VPush transports
+  mobile/{android,ios}/           WebView/WKWebView native hosts; secure storage, network, push
+  mobile/ios/AIWatchLiveActivity/ ActivityKit/WidgetKit lock-screen + Dynamic Island extension
+  src/mobile/ + vite.mobile.config.ts [R] shared desktop App bridge + inbox/request forms → ignored dist-mobile/
   electron/panel-tray.cjs, tray-summary.cjs            [M] menubar/tray + quota glance
   electron/widget-{publisher,snapshot}.cjs             [M] ⌁ WidgetKit snapshot bridge
   electron/i18n.cjs + locales/*.json                   [M+R] 17 langs (incl RTL ar/he)
@@ -76,6 +82,7 @@
   src   : setKimiSource→kimi-source · setClaudeSource→claude-source · setClaudeNetworkAccess→claude-network-access
           setClaudeHooks→claude-hooks · requestClaudeActivityAccess→claude-activity-access · setQwenAccess→qwen-access
   app   : openProvider→open-provider · chooseProviderApp→choose-provider-app · chooseImage→image · openRepository→open-repository
+  cloud : configureCloud→cloud-configure · forgetCloud→cloud-forget ; state.cloudSync omits credentials
   sync  : setSyncRole→sync-role · setSyncPort→sync-port · pairSync(addr,code)→sync-pair · forgetSync→sync-forget
           regenerateSync→sync-regenerate · discoverSync→sync-discover · shareJournal→journal
   stream: setStreamConfig→stream-config · startStream→stream-start · stopStream→stream-stop (Windows only; sandboxed read-only offscreen surface)
@@ -99,7 +106,8 @@
 ```
 
 ```
-§6 PROVIDERS  id : local-source → data  (all read-only; ⊬ login/renew/approve on user's behalf)
+§6 PROVIDERS  id : local-source → data  (read-only by default; ⊬ login/renew/automatic approvals)
+  opt-in cloud-actions: explicit mobile answers or once-only approve/deny for current verified Codex requests; uploadFullContent defaults false, bounded current-request text only; see cloud/protocol.md
   claude      : ~/.claude (sessions/<pid>.json, settings), ~/.config, Claude desktop AppSupport
                 ⌁net(claudeNetworkAllowed, reuse existing login, may prompt keychain) ⌁hooks ⌁AX(darwin accessibility for desktop chat)
   codex       : ~/.codex (CODEX_HOME), ipc/ipc.sock stream(v11, ≤32 sessions, frame≤256MiB) ; quota via official client acct API ; win32 attention ⟂
@@ -153,6 +161,7 @@
 §9 VERIFY
   unit   : npm test                      # node --test tests/*.test.cjs ; runs on linux w/o electron GUI
   types  : npx tsc --noEmit
+  cloud  : npm run test:cloud · test:cloud-ui · test:mobile-web ; mobile build/verification boundaries see mobile/README.md
   core   : npm run build · test:skins · test:layouts · test:insights · test:codex-attention · test:corners · test:i18n · test:lan-sync
   extra  : test:{desktop,tray,motion,sort,theme,modules,ui,anime,credits,plans,quotas,kimi-work,resources}
   widgets: build:widgets -- --check · test:widgets:bundle · test:widgets · preview:widgets (darwin)

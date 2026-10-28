@@ -1,0 +1,20 @@
+/* Mobile hosts supply the safe-area viewport. Panel visuals and animations are
+   imported without overrides from the exact desktop stylesheets. */
+html, body { overscroll-behavior: none; }
+.panel[data-mobile="true"] .settings-group[data-section="stream"],
+.panel[data-mobile="true"] .settings-group[data-section="data"],
+.panel[data-mobile="true"] .settings-group[data-section="sync"],
+.panel[data-mobile="true"] .settings-group[data-section="cloud"],
+.panel[data-mobile="true"] .settings-group[data-section="images"],
+.panel[data-mobile="true"] .layout-settings,
+.panel[data-mobile="true"] .quit-button { display:none; }
+.mobile-dialog textarea { box-sizing:border-box; width:100%; min-height:72px; margin:8px 0; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--text); font:inherit; }
+.mobile-confirm { margin:12px 0; padding:12px; border:1px solid var(--warn); border-radius:10px; background:var(--warn-bg); }
+.mobile-alert { width:100%; text-align:start; white-space:normal; }
+.mobile-full-content { margin:12px 0; }
+.mobile-full-content dt { font-weight:600; }
+.mobile-full-content dd { margin:4px 0 12px; }
+.mobile-full-content pre,.mobile-full-question { white-space:pre-wrap; overflow-wrap:anywhere; }
+.mobile-full-content pre { max-height:240px; overflow:auto; padding:10px; border:1px solid var(--line); border-radius:8px; font:12px/1.5 ui-monospace,monospace; }
+.mobile-request .segmented button { white-space:normal; overflow-wrap:anywhere; }
+.mobile-request .segmented small { display:block; font-weight:400; opacity:.8; }
