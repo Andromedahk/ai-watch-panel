@@ -20,6 +20,13 @@
 
 ---
 
+## 2026-10-28 · Claude（Anthropic / Claude Code，用户 Mac 上的 Remote Control 会话）· 合并 codex/screen-stream-latency 到 main
+
+- 分支：`main`，合并 `codex/screen-stream-latency`（`--no-ff` 合并提交）；按用户批准合并并推送。
+- 合并内容：`ff20526` perf: reduce small-screen streaming latency；`8d7be54` feat: refine small-screen agent request displays。源分支领先 main 两个提交，无冲突，未删除源分支，未触碰其他分支或工作树。
+- 验证（macOS，合并后）：`npm test` 575 项通过、0 失败；`npm run build` 成功（仅既有的大 chunk 体积提示）；`screen-bridge` 的 `test_panel_stream_bridge` 20 项通过；`scripts/verify-screen-attention.mjs` 246 项检查通过，未打开 USB。package-lock 未变化，未运行 `npm ci`。
+- 未完成 / 需要人类决定：未连接实体 USB 小屏，未重跑 Mac 原生打包及延迟基准脚本；实体屏显示效果仍待验收。
+
 ## 2026-10-27 · Codex（GPT-6 / Codex 桌面本地执行环境；协作 installed_upgrade_review、commit_scope_review）· 安装测试版与提交请求显示调整
 
 - 分支：`codex/screen-stream-latency`，基线 `ff20526`；按用户后续明确指示提交并推送本分支。
