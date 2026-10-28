@@ -94,7 +94,7 @@ try {
   await assertClient(client, screen);
   await expect(screen.locator('.screen-attention')).toHaveAttribute('data-provider', 'codex');
   await expect(screen.locator('.screen-attention')).toHaveAttribute('data-reason', 'both');
-  await expect(screen.locator('.screen-attention h1 span')).toHaveText(['待回答', '待授权']);
+  await expect(screen.locator('.screen-attention h1 span')).toHaveText(['Codex有问题想问你', 'Codex需要你的授权']);
   assert.deepEqual(await screen.locator('.screen-attention').evaluate(element => {
     const rect = element.getBoundingClientRect(); return [rect.x, rect.y, rect.width, rect.height, innerWidth, innerHeight];
   }), [0, 0, 2240, 1080, 2240, 1080]);

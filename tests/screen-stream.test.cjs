@@ -108,21 +108,38 @@ test('development availability follows the chosen prebuilt or Python bridge and 
   assert.equal(streamAvailability(options).available, true);
 });
 
-test('frame pump keeps one write in flight and replaces outdated frames under backpressure', () => {
+test('frame pump waits for bridge readiness then sends new paints without a polling interval', () => {
+  const writes = [];
+  const pump = new FramePump({ write: (frame, done) => { writes.push(frame.toString()); done(); } });
+  pump.update(Buffer.from('initial')); pump.tick();
+  assert.deepEqual(writes, [], 'no input before the bridge is ready');
+  pump.update(Buffer.from('ready'));
+  pump.start();
+  assert.deepEqual(writes, ['ready']);
+  pump.update(Buffer.from('paint'));
+  assert.deepEqual(writes, ['ready', 'paint'], 'a paint is sent immediately without waiting for a timer');
+  pump.tick(); pump.start();
+  assert.deepEqual(writes, ['ready', 'paint'], 'the bridge, not the parent pipe, repeats static frames');
+  assert.equal(pump.frames, 2);
+  assert.equal(pump.droppedFrames, 1, 'count only the obsolete bitmap that was replaced');
+  pump.close(); pump.start(); pump.update(Buffer.from('closed'));
+  assert.deepEqual(writes, ['ready', 'paint']);
+});
+
+test('frame pump keeps one write in flight and immediately drains the latest paint under backpressure', () => {
   const writes = [], callbacks = [];
   const pump = new FramePump({ write: (frame, done) => { writes.push(frame); callbacks.push(done); } });
-  pump.update(Buffer.from('first')); pump.tick();
-  pump.update(Buffer.from('superseded')); pump.tick();
-  pump.update(Buffer.from('latest')); pump.tick();
+  pump.start(); pump.update(Buffer.from('first'));
+  pump.update(Buffer.from('superseded'));
+  pump.update(Buffer.from('latest'));
   assert.equal(writes.length, 1);
-  assert.equal(pump.droppedFrames, 2);
-  callbacks.shift()(); pump.tick();
+  assert.equal(pump.droppedFrames, 1);
+  callbacks.shift()();
   assert.equal(writes.length, 2);
   assert.equal(writes[1].toString(), 'latest');
-  callbacks.shift()(); pump.tick();
-  assert.equal(writes[2].toString(), 'latest', 'unchanged frames maintain H.264 timing and device keepalive');
+  pump.update(Buffer.from('pending-at-stop'));
   pump.close(); callbacks.shift()(); pump.tick();
-  assert.equal(writes.length, 3);
+  assert.equal(writes.length, 2, 'a late pipe callback cannot resume a closed stream');
   assert.equal(pump.latest, null);
 });
 
@@ -130,9 +147,9 @@ test('write failures surface once and late callbacks after stop cannot restart w
   const errors = [];
   let callback;
   const pump = new FramePump({ write: (_frame, done) => { callback = done; }, onError: error => errors.push(error.message) });
-  pump.update(Buffer.from('x')); pump.tick(); callback(new Error('broken'));
+  pump.start(); pump.update(Buffer.from('x')); callback(new Error('broken'));
   assert.deepEqual(errors, ['broken']);
-  pump.tick(); pump.close(); callback(new Error('closed')); pump.tick();
+  pump.update(Buffer.from('retry')); pump.tick(); pump.close(); callback(new Error('closed')); pump.tick();
   assert.deepEqual(errors, ['broken']);
 });
 
@@ -193,9 +210,9 @@ test('preview offscreen window is isolated, read-only, independent of desktop st
     const firstFrame = stream.pump.latest;
     output.webContents.emit('paint', {}, {}, { isEmpty: () => false, getSize: () => ({ width: 600, height: 300 }), toBitmap: () => assert.fail('clamped frame must not be stretched') });
     assert.equal(stream.pump.latest, firstFrame);
+    const sent = stream.state().frames;
     output.webContents.emit('paint', {}, {}, { isEmpty: () => false, getSize: () => ({ width: 640, height: 360 }), toBitmap: () => Buffer.alloc(640 * 360 * 4) });
-    stream.pump.tick();
-    assert.equal(stream.state().frames, 1);
+    assert.equal(stream.state().frames, sent + 1, 'the running output sends a new paint immediately');
     stream.broadcast('panel:status-changed', { sample: true });
     assert.deepEqual(output.webContents.sent[0], ['panel:status-changed', { sample: true }]);
     await stream.stop();
