@@ -8,10 +8,10 @@ import type { Provider, Skin } from './types';
 import type { ProviderView } from './view/model';
 
 type Props = {
-  providers: Provider[]; views: ProviderView[]; stream: { device?: 'zhanyu' | 'ryuo4'; pageSeconds: number; showMascot: boolean; agentsPerPage?: 2 | 4 | 6 };
+  providers: Provider[]; views: ProviderView[]; stream: { device?: 'zhanyu' | 'ryuo4'; pageSeconds: number; showMascot: boolean; agentsPerPage?: 2 | 4 | 6; oledGuard?: boolean };
   skin: Skin; anime: boolean; animate: boolean; testing: boolean; demo?: boolean; remote?: boolean; sampledAt?: string | null;
   renderCard: (view: ProviderView, index: number, visible: boolean) => ReactNode;
-  renderMascot?: ReactNode;
+  renderMascot?: (onRefresh: () => void) => ReactNode;
   renderTrend?: ReactNode;
   imageForAttention?: (provider: Provider) => string | undefined;
 };
@@ -44,6 +44,10 @@ export function ScreenSurface({ providers, views, stream, skin, anime, animate, 
   }, []);
   const mascot = Boolean(stream.showMascot && views.length && renderMascot);
   const ryuo = stream.device === 'ryuo4';
+  // OLED guard: each companion refresh replays the sidebar's fade so its border and
+  // panel never hold the same pixels for long. Alternating names restart the animation.
+  const guard = Boolean(stream.oledGuard);
+  const [sweep, setSweep] = useState(0);
   const layout = screenLayout(size.width, size.height, views.length, mascot, stream.device, stream.agentsPerPage);
   const pages = Math.max(1, Math.ceil(views.length / layout.capacity));
   const providerKey = views.map(view => view.id).join(',');
@@ -64,13 +68,13 @@ export function ScreenSurface({ providers, views, stream, skin, anime, animate, 
     : [reminder?.reason === 'input' ? inputLabel : reminder?.reason === 'approval' ? approvalLabel : t('{p0} 在等你处理', { p0: attentionName })];
   return <main className={`screen-surface skin-${skin} ${anime ? 'anime-mode' : ''} ${!animate ? 'no-animation' : ''}`}
     data-surface="screen" data-test-mode={testing} data-page={currentPage + 1} data-attention-count={waiting.length}
-    data-portrait={layout.portrait} data-visible-cards={visibleCount} data-screen-profile={ryuo ? 'ryuo-wide-left' : 'curved-dual-face'} data-device={stream.device || 'zhanyu'}
+    data-portrait={layout.portrait} data-visible-cards={visibleCount} data-screen-profile={ryuo ? 'ryuo-wide-left' : 'curved-dual-face'} data-device={stream.device || 'zhanyu'} data-oled-guard={guard || undefined}
     style={{ '--screen-cols': columns, '--screen-rows': rows } as CSSProperties}>
     <div className="screen-content" data-has-mascot={mascot} aria-hidden={Boolean(attention)}>
       <section className="screen-agent-module" aria-label={s('Agent 监看模块', 'Agent monitoring modules')}>
-        <header className="screen-module-heading"><strong>AI WATCH</strong>
+        <header className="screen-module-heading">{!guard && <strong>AI WATCH</strong>}
           <span>{testing ? t('测试数据') : remote ? t('同步') : demo ? t('演示') : t('本地')} · {number(currentPage + 1)} / {number(pages)}</span>
-          {sampledAt && <time>{date(sampledAt, { hour: '2-digit', minute: '2-digit' })}</time>}
+          {sampledAt && !guard && <time>{date(sampledAt, { hour: '2-digit', minute: '2-digit' })}</time>}
         </header>
         <div className="screen-card-grid">
           {views.map((view, index) => renderCard(view, index, index >= currentPage * layout.capacity && index < (currentPage + 1) * layout.capacity))}
@@ -78,8 +82,8 @@ export function ScreenSurface({ providers, views, stream, skin, anime, animate, 
         </div>
         {pages > 1 && <div className="screen-page-indicator" aria-label={s('模块自动轮播', 'Automatic module rotation')}>{Array.from({ length: pages }, (_, index) => <span key={index} data-current={index === currentPage} />)}</div>}
       </section>
-      <aside className="screen-sidebar" data-has-mascot={mascot}>
-        {mascot && <div className="screen-mascot" aria-label={s('二次元看板娘模块', 'Anime companion module')}>{renderMascot}</div>}
+      <aside className="screen-sidebar" data-has-mascot={mascot} data-oled-refresh={guard && sweep ? (sweep % 2 ? 'a' : 'b') : undefined}>
+        {mascot && <div className="screen-mascot" aria-label={s('二次元看板娘模块', 'Anime companion module')}>{renderMascot!(() => setSweep(count => count + 1))}</div>}
         {!ryuo && <div className="screen-trend" aria-label={s('额度历史曲线', 'Quota history chart')}>{renderTrend}</div>}
       </aside>
     </div>

@@ -42,7 +42,7 @@ try {
   await expect(slider).toHaveValue('85');
   await expect(slider).toHaveAttribute('min', '1');
   await expect(slider).toHaveAttribute('max', '100');
-  await expect(desktop.locator('.stream-brightness-saved')).toContainText('尚未设置亮度');
+  await expect(desktop.locator('.stream-brightness-saved')).toHaveCount(0);
   await expect(apply).toBeEnabled();
   await slider.focus(); await slider.press('Home'); await expect(slider).toHaveValue('1');
   await slider.press('End'); await expect(slider).toHaveValue('100');

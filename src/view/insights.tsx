@@ -198,9 +198,11 @@ export type MascotProps = Omit<PanelProps, 'journal' | 'onOpen'> & {
   onOpen?: (view: ProviderView) => void;
   /** A passive display preserves speech and cadence without unreachable controls. */
   readOnly?: boolean;
+  /** Called after every refresh, manual or automatic (not on first render). */
+  onRefresh?: () => void;
 };
 
-export function Mascot({ views, anime, image, onOpen, sortHandle, sortProps, interval, paused, readOnly = false }: MascotProps) {
+export function Mascot({ views, anime, image, onOpen, sortHandle, sortProps, interval, paused, readOnly = false, onRefresh }: MascotProps) {
   const { t, number, percent, language } = useI18n();
   const [quip, setQuip] = useState<Quip | null>(null);
   const [spins, setSpins] = useState(0);
@@ -261,6 +263,9 @@ export function Mascot({ views, anime, image, onOpen, sortHandle, sortProps, int
   const latest = useRef(auto);
   latest.current = auto;
   const live = interval > 0 && views.length > 0;
+  const refreshed = useRef(onRefresh);
+  refreshed.current = onRefresh;
+  useEffect(() => { if (cycle) refreshed.current?.(); }, [cycle]);
   // One timer per cycle: any refresh, or resuming from a pause, restarts the full interval.
   useEffect(() => {
     if (!live || paused) return;

@@ -606,10 +606,8 @@ export default function App({ mobile }: { mobile?: { onOpen: (provider?: string)
     : <span className="demo-tag">{localStatus?.isTestData ? t('测试') : state.desktop ? t('本地') : t('演示')}</span>;
   const lockButton = (className = '') => <button className={`${className} ${state.locked && state.layout !== 'fullscreen' ? 'selected' : ''}`} disabled={Boolean(mobile) || state.layout === 'fullscreen'} aria-label={t('锁定窗口')} aria-pressed={state.locked && state.layout !== 'fullscreen'}
     title={state.locked ? t('解除跨桌面锁定') : t('锁定：置顶并显示在所有桌面')} onClick={toggleLock}>{state.locked ? <LockKeyhole /> : <UnlockKeyhole />}</button>;
-  const skinOptions: { id: Skin; name: string; hint: string }[] = [
-    { id: 'watch', name: t('值守台'), hint: t('先提醒要你处理的，再列出全部') },
-    { id: 'dial', name: t('表盘'), hint: t('每个助手一圈额度，安静好读') },
-    { id: 'party', name: t('角色栏'), hint: t('像游戏队伍面板，角色当主角') },
+  const skinOptions: { id: Skin; name: string }[] = [
+    { id: 'watch', name: t('值守台') }, { id: 'dial', name: t('表盘') }, { id: 'party', name: t('角色栏') },
   ];
   const section = (id: string) => modal.current?.querySelector<HTMLElement>(`[data-section="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
@@ -619,7 +617,7 @@ export default function App({ mobile }: { mobile?: { onOpen: (provider?: string)
       testing={Boolean(testMode || displayStatus?.isTestData)} demo={!state.desktop} renderCard={(view, index, visible) =>
         <ProviderCard key={view.id} view={view} skin={skin} index={index} anime={state.animeMode} image={imageFor(view.id)} readOnly cycleSeconds={Math.max(3, stream.pageSeconds / 2)} animationPaused={!visible} dragging={false} fullscreen={false} sortProps={{ style: { display: visible ? undefined : 'none' } }} onOpen={() => {}} busy={false} />}
       imageForAttention={provider => animeImages[provider.id]}
-      renderMascot={<Mascot views={views} anime image={view => animeImages[view.id]} interval={mascotInterval} paused={false} readOnly />}
+      renderMascot={onRefresh => <Mascot views={views} anime image={view => animeImages[view.id]} interval={mascotInterval} paused={false} readOnly onRefresh={onRefresh} />}
       renderTrend={<ScreenQuotaTrend views={views} journal={testMode || !state.desktop ? testJournal : screenJournal}
         testing={Boolean(testMode || displayStatus?.isTestData)} demo={!state.desktop} pageSeconds={stream.pageSeconds} />} />
   </GrantAccessContext.Provider></I18nContext.Provider>;
@@ -701,33 +699,31 @@ export default function App({ mobile }: { mobile?: { onOpen: (provider?: string)
           <fieldset className="skin-settings"><legend>{t('界面风格')}</legend>
             <div className="skin-options">{skinOptions.map(option => <button key={option.id} type="button" className={`skin-option ${skin === option.id ? 'selected' : ''}`} data-skin-option={option.id}
               aria-pressed={skin === option.id} disabled={skinSaving} onClick={() => void changeSkin(option.id)}>
-              <span className="skin-preview" aria-hidden="true"><i /><i /><i /></span><strong>{option.name}</strong><small>{option.hint}</small></button>)}</div>
+              <span className="skin-preview" aria-hidden="true"><i /><i /><i /></span><strong>{option.name}</strong></button>)}</div>
           </fieldset>
-          <label className="switch-row"><span>{t('二次元模式')}<small>{t('三种风格都用角色图片替换 LOGO')}</small></span><input aria-label={t('二次元模式')} type="checkbox" checked={state.animeMode} disabled={animeSaving} onChange={event => void changeAnimeMode(event.target.checked)} /></label>
-          <label className="switch-row"><span>{t('跟随系统')}<small>{t('自动切换浅色和深色外观')}</small></span><input aria-label={t('跟随系统')} type="checkbox" checked={state.theme === 'system'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'system' : resolvedTheme)} /></label>
-          <label className="switch-row"><span>{t('暗夜模式')}<small>{state.theme === 'system' ? t('手动切换后停止跟随系统') : t('已手动指定外观')}</small></span><input aria-label={t('暗夜模式')} type="checkbox" checked={resolvedTheme === 'dark'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'dark' : 'light')} /></label>
+          <label className="switch-row"><span>{t('二次元模式')}</span><input aria-label={t('二次元模式')} type="checkbox" checked={state.animeMode} disabled={animeSaving} onChange={event => void changeAnimeMode(event.target.checked)} /></label>
+          <label className="switch-row"><span>{t('跟随系统')}</span><input aria-label={t('跟随系统')} type="checkbox" checked={state.theme === 'system'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'system' : resolvedTheme)} /></label>
+          <label className="switch-row"><span>{t('暗夜模式')}</span><input aria-label={t('暗夜模式')} type="checkbox" checked={resolvedTheme === 'dark'} disabled={themeSaving} onChange={event => void changeTheme(event.target.checked ? 'dark' : 'light')} /></label>
           <fieldset className="layout-settings"><legend>{t('窗口模式')}</legend>
             <select aria-label={t('窗口模式')} value={state.layout} disabled={layoutSaving || streamController} onChange={event => void changeLayout(event.target.value as Layout)}>
               <option value="single">{t('单列模式')}</option><option value="double">{t('双排模式')}</option><option value="fullscreen">{t('全屏模式')}</option>
             </select><p className="appearance-hint">{t('双排宽度加倍；全屏显示任务详情。Escape 退出全屏。')}</p>
           </fieldset>
           <fieldset className="insight-settings"><legend>{t('下半屏')}</legend>
-            {([['timeline', t('动态时间线'), t('各助手开始、等待和完成的记录')], ['resets', t('额度重置日程'), t('按时间排列下一次额度恢复')],
-              ['trend', t('额度趋势'), t('近 24 小时最紧额度的变化')], ['mascot', t('看板娘'), t('仅二次元模式显示，随状态换表情')]] as [InsightId, string, string][]).map(([id, label, hint]) =>
-              <label key={id} className="switch-row"><span>{label}<small>{hint}</small></span><input aria-label={label} type="checkbox" checked={insights[id]} disabled={insightsSaving} onChange={event => void changeInsight(id, event.target.checked)} /></label>)}
-            <label className="switch-row"><span>{t('看板娘自动刷新')}<small>{t('按间隔换一位助手说话；有助手在工作时，每 3 句后播报一次工作状态')}</small></span><input aria-label={t('看板娘自动刷新')} type="checkbox" checked={mascotInterval > 0} disabled={mascotSaving}
+            {([['timeline', t('动态时间线')], ['resets', t('额度重置日程')], ['trend', t('额度趋势')], ['mascot', t('看板娘'), t('仅二次元模式显示，随状态换表情')]] as [InsightId, string, string?][]).map(([id, label, hint]) =>
+              <label key={id} className="switch-row"><span>{label}{hint && <small>{hint}</small>}</span><input aria-label={label} type="checkbox" checked={insights[id]} disabled={insightsSaving} onChange={event => void changeInsight(id, event.target.checked)} /></label>)}
+            <label className="switch-row"><span>{t('看板娘自动刷新')}</span><input aria-label={t('看板娘自动刷新')} type="checkbox" checked={mascotInterval > 0} disabled={mascotSaving}
               onChange={event => { clearTimeout(mascotSave.current); setMascotDraft(null); void changeMascotInterval(event.target.checked ? lastMascotInterval.current : 0); }} /></label>
             <label className="interval-row" data-disabled={mascotInterval === 0 || undefined}><span>{t('刷新间隔')}</span>
               <input type="range" aria-label={t('刷新间隔')} min={MASCOT_INTERVAL_MIN} max={MASCOT_INTERVAL_MAX} step={1} value={mascotSeconds} disabled={mascotInterval === 0}
                 aria-valuetext={t('{p0} 秒', { p0: number(mascotSeconds) })} onChange={event => draftMascotInterval(Number(event.target.value))} />
               <output>{t('{p0} 秒', { p0: number(mascotSeconds) })}</output></label>
-            <p className="appearance-hint">{t('可上下滚动查看所有已开启的下半屏组件。记录只保存在本机，不含任务内容。')}</p>
           </fieldset>
           <fieldset className="language-settings"><legend>{t('语言')}</legend>
             <select aria-label={t('语言')} value={state.language} disabled={languageSaving} onChange={event => void changeLanguage(event.target.value as Language)}>
               <option value="system">{t('跟随系统')}</option>
               {languages.map(language => <option key={language.id} value={language.id} lang={language.id} dir={language.dir}>{language.name}</option>)}
-            </select><p className="appearance-hint">{t('语言说明')}</p>
+            </select>
           </fieldset>
         </section>
         <section className="settings-group" data-section="modules"><h3>{t('模块')}</h3>
@@ -745,8 +741,7 @@ export default function App({ mobile }: { mobile?: { onOpen: (provider?: string)
         <section className="settings-group" data-section="data"><h3>{t('数据来源')}</h3>
           <fieldset><legend>{t('Claude 数据来源')}</legend>
             <div className="segmented" aria-label={t('Claude 数据来源')}>{(['desktop', 'code'] as const).map(source => <button key={source} className={state.claudeSource === source ? 'selected' : ''} aria-pressed={state.claudeSource === source} disabled={claudeSourceSaving} onClick={() => void changeClaudeSource(source)}>{source === 'desktop' ? 'Claude Desktop' : 'Claude Code'}</button>)}</div>
-            <p className="appearance-hint">{t('桌面版与 Code 分开读取，切换后清除上个来源的套餐和状态。')}</p>
-            <label className="switch-row"><span>{t('联网查询 Claude 额度')}<small>{t('复用所选客户端的本地登录')}</small></span><input aria-label={t('联网查询 Claude 额度')} type="checkbox" checked={state.claudeNetworkAllowed} disabled={!state.desktop || claudeNetworkSaving} onChange={event => void changeClaudeNetworkAccess(event.target.checked)} /></label>
+            <label className="switch-row"><span>{t('联网查询 Claude 额度')}</span><input aria-label={t('联网查询 Claude 额度')} type="checkbox" checked={state.claudeNetworkAllowed} disabled={!state.desktop || claudeNetworkSaving} onChange={event => void changeClaudeNetworkAccess(event.target.checked)} /></label>
             <p className="appearance-hint">{t('仅向 Claude 官方服务查询套餐与额度；macOS 可能请求钥匙串授权。凭据不保存到面板，关闭后停止查询。')}</p>
             <label className="switch-row"><span>{t('Claude Code 状态钩子')}<small>{t('即时识别运行、授权和提问，无需辅助功能')}</small></span><input aria-label={t('Claude Code 状态钩子')} type="checkbox" checked={state.claudeHooksEnabled} disabled={!state.desktop || claudeHooksSaving || state.claudeHooksStatus?.supported === false} onChange={event => void changeClaudeHooks(event.target.checked)} /></label>
             <p className="appearance-hint">{t('开启后在 Claude Code 用户设置中登记一个只写本地文件的钩子，终端与桌面版 Code 会话都会上报；只记录事件类型和会话编号，不记录对话内容。关闭即移除，不影响你自己的钩子。')}</p>
@@ -762,13 +757,12 @@ export default function App({ mobile }: { mobile?: { onOpen: (provider?: string)
             <p className="appearance-hint">{t('Work 读取正在运行的桌面客户端账号及会员共享积分，活动状态暂为未知。Code 读取独立 CLI 的额度与本机服务。来源失败时保留所选客户端。')}</p>
           </fieldset>
           <fieldset><legend>{t('千问登录读取')}</legend>
-            <label className="switch-row"><span>{t('读取千问登录状态')}<small>{t('仅查询套餐和积分')}</small></span><input aria-label={t('读取千问登录状态')} type="checkbox" checked={state.qwenKeychainAllowed} disabled={!state.desktop || qwenAccessSaving} onChange={event => void changeQwenAccess(event.target.checked)} /></label>
+            <label className="switch-row"><span>{t('读取千问登录状态')}</span><input aria-label={t('读取千问登录状态')} type="checkbox" checked={state.qwenKeychainAllowed} disabled={!state.desktop || qwenAccessSaving} onChange={event => void changeQwenAccess(event.target.checked)} /></label>
             <p className="appearance-hint">{t('仅访问千问专属的系统钥匙串记录，可能需要系统授权。登录信息不保存到面板；关闭会清除已读取的套餐和积分。拒绝授权后不会自动反复弹窗，可处理授权后手动刷新。')}</p>
           </fieldset>
           {state.platform === 'darwin' && <fieldset><legend>{t('桌面小组件')}</legend>
             <p className="appearance-hint">{t('在桌面右键选择“编辑小组件”，搜索 AI Watch，添加总览或单个工具。')}</p>
-            <p className="appearance-hint">{t('总览跟随“监看模块”的选择和排序。')}</p>
-            <label className="switch-row"><span>{t('同步小组件')}<small>{t('仅共享额度摘要与状态')}</small></span><input type="checkbox" aria-label={t('同步小组件')} checked={state.widgetsEnabled} disabled={!state.widgetsAvailable || widgetsSaving} onChange={async event => {
+            <label className="switch-row"><span>{t('同步小组件')}</span><input type="checkbox" aria-label={t('同步小组件')} checked={state.widgetsEnabled} disabled={!state.widgetsAvailable || widgetsSaving} onChange={async event => {
               const enabled = event.target.checked;
               setWidgetsSaving(true);
               try { if (window.panel) setState(await window.panel.setWidgetsEnabled(enabled)); }
@@ -777,7 +771,6 @@ export default function App({ mobile }: { mobile?: { onOpen: (provider?: string)
             }} /></label>
             {!state.widgetsAvailable && <p className="appearance-hint">{t('此构建未启用已签名的原生小组件；请使用包含小组件扩展的签名版本。')}</p>}
             {state.widgetSyncError && <p className="appearance-hint" role="status">{t('小组件同步失败，请重试')}</p>}
-            <p className="appearance-hint">{t('macOS 决定刷新时间；小组件显示采样时间，过期记录标为历史。')}</p>
             <button className="dock-button" disabled={!state.widgetsEnabled || !state.widgetsAvailable || widgetsSaving} onClick={async () => {
               setWidgetsSaving(true);
               try { if (window.panel) setState(await window.panel.widgetBackground()); }
@@ -789,8 +782,8 @@ export default function App({ mobile }: { mobile?: { onOpen: (provider?: string)
         </section>
         <section className="settings-group" data-section="window"><h3>{t('窗口')}</h3>
           <fieldset><legend>{t('默认停靠位置')}</legend><div className="segmented"><button className={draft.side === 'left' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'left' })}>{t('左侧')}</button><button className={draft.side === 'right' ? 'selected' : ''} onClick={() => setDraft({ ...draft, side: 'right' })}>{t('右侧')}</button></div></fieldset>
-          <label className="switch-row"><span>{t('跨桌面锁定')}<small>{t('置顶并跟随桌面切换')}</small></span><input type="checkbox" checked={draft.locked} onChange={(event) => setDraft({ ...draft, locked: event.target.checked })} /></label>
-          <label className="switch-row"><span>{t('状态灯动画')}<small>{t('运行中的状态灯缓慢呼吸')}</small></span><input type="checkbox" checked={draft.animate} onChange={(event) => setDraft({ ...draft, animate: event.target.checked })} /></label>
+          <label className="switch-row"><span>{t('跨桌面锁定')}</span><input type="checkbox" checked={draft.locked} onChange={(event) => setDraft({ ...draft, locked: event.target.checked })} /></label>
+          <label className="switch-row"><span>{t('状态灯动画')}</span><input type="checkbox" checked={draft.animate} onChange={(event) => setDraft({ ...draft, animate: event.target.checked })} /></label>
           <button className="dock-button" onClick={async () => {
             try { if (window.panel) setState(await window.panel.dock()); setNotice(t('已重新贴边')); }
             catch { setNotice(t('重新贴边失败')); }
@@ -800,16 +793,16 @@ export default function App({ mobile }: { mobile?: { onOpen: (provider?: string)
             try { const result = await window.panel.clearCache(); setNotice(t('已清理缓存 · {p0} MB', { p0: number(result.freedBytes / 1024 / 1024, { maximumFractionDigits: 1 }) })); }
             catch { setNotice(t('缓存清理失败，请重试')); }
             finally { setCacheClearing(false); }
-          }}>{t('清理缓存')}</button><p className="appearance-hint">{t('清理渲染和网络缓存，设置与图片会保留；剩余磁盘缓存下次启动清理。')}</p></fieldset>
+          }}>{t('清理缓存')}</button></fieldset>
         </section>
         <section className="settings-group" data-section="images"><h3>{t('图片与应用')}</h3>
-          <div className="settings-section"><h4>{t('助手图片')}</h4><p>{t('透明图片效果更好')}</p>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
+          <div className="settings-section"><h4>{t('助手图片')}</h4>{providers.map((provider) => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
             <Portrait provider={provider} image={images[provider.id]} anime={false} /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id)} aria-label={t('替换 {p0} 图片', { p0: provider.name })}>{t('替换')}</button>
           </div>)}</div>
-          <div className="settings-section"><h4>{t('二次元图片')}</h4><p>{t('独立保存；推荐正方形透明背景，小头像会自动对准脸部')}</p>{providers.map(provider => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
+          <div className="settings-section"><h4>{t('二次元图片')}</h4>{providers.map(provider => <div className="image-option" key={provider.id} style={{ '--accent': provider.color } as CSSProperties}>
             <Portrait provider={provider} image={animeImages[provider.id]} anime /><span>{provider.name}</span><button onClick={() => chooseImage(provider.id, true)} aria-label={t('替换 {p0} 二次元图片', { p0: provider.name })}>{t('替换')}</button>
           </div>)}</div>
-          <div className="settings-section"><h4>{t('启动应用')}</h4><p>{t('点击卡片或收起栏图标打开应用；未找到时可手动选择安装位置。')}</p>{providers.map(provider => <div className="app-option" key={provider.id}>
+          <div className="settings-section"><h4>{t('启动应用')}</h4>{providers.map(provider => <div className="app-option" key={provider.id}>
             <span>{provider.name}</span><button disabled={choosingApp} onClick={() => void chooseProviderApp(provider)} aria-label={t('选择 {p0} 启动应用', { p0: provider.name })}>{t('选择应用')}</button>
           </div>)}</div>
         </section>

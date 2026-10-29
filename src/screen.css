@@ -208,3 +208,20 @@
 .screen-surface[data-device="ryuo4"] .screen-attention h1[data-lines="2"] { font-size: min(9.5cqw, 10cqh); }
 .screen-surface[data-device="ryuo4"] .screen-attention h1 .screen-attention-agent { font-size: .6em; }
 .screen-surface[data-device="ryuo4"] .screen-attention-orbit { left: 40%; top: 50%; bottom: auto; width: min(70vmin, 112%); height: auto; aspect-ratio: 1; translate: -50% -50%; align-self: auto; justify-self: auto; }
+
+/* OLED guard: the encoded frame stays full size, but the UI is drawn at 95% on
+   pure black and drifts very slowly between the four corner alignments. It is a
+   panel-protection setting, so the animation-off and reduced-motion rules do not
+   stop it; the sidebar fade replays on every companion refresh. */
+html:has(.screen-surface[data-oled-guard]), body:has(.screen-surface[data-oled-guard]) { background: #000; }
+.screen-surface[data-oled-guard] { transform-origin: 0 0; animation: screen-oled-drift 480s linear infinite !important; }
+@keyframes screen-oled-drift {
+  0%, 100% { transform: translate(0, 0) scale(.95); }
+  25% { transform: translate(5vw, 0) scale(.95); }
+  50% { transform: translate(5vw, 5vh) scale(.95); }
+  75% { transform: translate(0, 5vh) scale(.95); }
+}
+.screen-surface[data-oled-guard] .screen-sidebar[data-oled-refresh="a"] { animation: screen-oled-refresh-a 1.6s ease-in-out both !important; }
+.screen-surface[data-oled-guard] .screen-sidebar[data-oled-refresh="b"] { animation: screen-oled-refresh-b 1.6s ease-in-out both !important; }
+@keyframes screen-oled-refresh-a { 0%, 100% { opacity: 1; transform: none; } 40%, 55% { opacity: 0; transform: translateY(1.2vmin) scale(.97); } }
+@keyframes screen-oled-refresh-b { 0%, 100% { opacity: 1; transform: none; } 40%, 55% { opacity: 0; transform: translateY(1.2vmin) scale(.97); } }
