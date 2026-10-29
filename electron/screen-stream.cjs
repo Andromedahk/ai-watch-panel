@@ -2,7 +2,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
-const { DEVICES, validateStreamConfig } = require('./screen-stream-policy.cjs');
+const { DEVICES, validateStreamConfig, validateRyuoBrightness } = require('./screen-stream-policy.cjs');
 
 function isFile(file) {
   try { return fs.statSync(file).isFile(); } catch { return false; }
@@ -129,6 +129,41 @@ class ScreenStream {
   screenState() { return { ...this.getState(), surface: 'screen', collapsed: false, stored: false, layout: 'fullscreen' }; }
   start() { return this.serialize(() => this.startInternal()); }
   stop() { this.cancelStart?.(); return this.serialize(() => this.stopInternal()); }
+  setRyuoBrightness(value) {
+    const brightness = validateRyuoBrightness(value);
+    return this.serialize(() => {
+      if (this.preview) return brightness; // Isolated preview never touches USB.
+      const command = bridgeCommand({ packaged: this.app.isPackaged });
+      return new Promise((resolve, reject) => {
+        const child = this.spawnProcess(command.executable,
+          [...command.args, '--device', 'ryuo4', '--brightness', String(brightness)],
+          { cwd: command.cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+        let output = '', failure = '', applied = false, settled = false;
+        const finish = error => {
+          if (settled) return;
+          settled = true; clearTimeout(timer);
+          if (error) reject(error); else resolve(brightness);
+        };
+        const timer = setTimeout(() => { child.kill(); finish(new Error('龙王 IV 亮度调节超时，请检查 USB 连接及 HID 是否被占用')); }, 30000);
+        child.on('error', () => finish(new Error('无法启动龙王 IV 亮度组件')));
+        child.stderr.on('data', () => {}); // Drain native diagnostics; don't expose device paths.
+        child.stdout.setEncoding('utf8');
+        child.stdout.on('data', chunk => {
+          output += chunk;
+          if (output.length > 8192) { child.kill(); finish(new Error('亮度组件返回异常数据')); return; }
+          let newline;
+          while ((newline = output.indexOf('\n')) >= 0) {
+            const line = output.slice(0, newline); output = output.slice(newline + 1);
+            let message; try { message = JSON.parse(line); } catch { continue; }
+            if (message.type === 'brightness' && message.data?.brightness === brightness && message.data?.applied === true) applied = true;
+            if (message.type === 'error') failure = String(message.data || '亮度调节失败').slice(0, 500);
+          }
+        });
+        child.on('close', code => finish(code === 0 && applied && !failure ? null
+          : new Error(failure || '未确认龙王 IV 亮度已生效，请检查 USB HID 连接后重试')));
+      });
+    });
+  }
   async startInternal() {
     await this.stopInternal();
     const { enabled: _enabled, ...parameters } = this.getConfig();
@@ -193,7 +228,9 @@ class ScreenStream {
       this.statsTimer = setInterval(() => this.onChange(), 1000);
       this.status = 'running'; this.onChange();
     } catch (error) {
-      try { await this.stopInternal(); } catch (cleanupError) { error = new Error(`${error.message}；${cleanupError.message}`); }
+      try { await this.stopInternal(); } catch (cleanupError) {
+        if (cleanupError.message !== error.message) error = new Error(`${error.message}；${cleanupError.message}`);
+      }
       this.status = 'error'; this.error = String(error.message || error).slice(0, 500); this.onChange();
       throw error;
     }
@@ -251,7 +288,9 @@ class ScreenStream {
     if (generation !== this.generation || this.status === 'stopping' || this.status === 'stopped') return;
     void this.serialize(async () => {
       if (generation !== this.generation) return;
-      try { await this.stopInternal(); } catch (error) { message += '；' + error.message; }
+      try { await this.stopInternal(); } catch (error) {
+        if (error.message !== message) message += '；' + error.message;
+      }
       this.status = 'error'; this.error = message; this.onChange();
     });
   }

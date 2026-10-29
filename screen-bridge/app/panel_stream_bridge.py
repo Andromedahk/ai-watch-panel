@@ -24,10 +24,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools" / "poc"))
 
 try:
-    from . import streaming, ryuo4
+    from . import streaming, ryuo4, ryuo_brightness
 except ImportError:
     import streaming
     import ryuo4
+    import ryuo_brightness
 
 
 DEVICE_ID = "zhanyu"
@@ -512,6 +513,7 @@ def main(argv=None):
     mode.add_argument("--check", action="store_true", help="Check local runtime files without opening USB")
     mode.add_argument("--dry-run", action="store_true", help="Encode input without accessing any USB device")
     mode.add_argument("--probe", action="store_true", help="Read device information without deploying or starting playback")
+    mode.add_argument("--brightness", type=int, help="Set RYUO IV brightness (1–100 percent) without starting or stopping playback")
     args = parser.parse_args(argv)
     stop, output_lock = threading.Event(), threading.Lock()
     if hasattr(sys.stdout, "reconfigure"):
@@ -529,6 +531,16 @@ def main(argv=None):
             signal.signal(getattr(signal, name), lambda *_: stop.set())
     try:
         is_ryuo = args.device == ryuo4.DEVICE_ID
+        if args.brightness is not None:
+            if not is_ryuo:
+                raise ValueError("亮度调节仅支持 ROG 龙王 IV")
+            ryuo_brightness.validate_brightness(args.brightness)
+            problem = usb_platform_error()
+            if problem:
+                raise RuntimeError(problem.replace("展域", "ROG 龙王 IV"))
+            result = ryuo_brightness.set_brightness(ryuo4.Adb(ryuo4.adb_path(args.resources)), args.brightness)
+            emit("brightness", result)
+            return 0
         width = args.width if args.width is not None else 2240
         height = args.height if args.height is not None else 1080
         bitrate = args.bitrate_mbps if args.bitrate_mbps is not None else (6 if is_ryuo else 8)

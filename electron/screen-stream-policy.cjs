@@ -20,7 +20,7 @@ function validateStreamConfig(value, { partial = false } = {}) {
   if ((!partial || Object.hasOwn(value, 'device')) && (device.maxWidth && next.width > device.maxWidth || device.maxHeight && next.height > device.maxHeight)) throw new Error('ROG RYUO IV HEVC resolution must not exceed 2240 × 1080');
   if (next.fps < 1 || next.fps > 60 || next.bitrateMbps < 1 || next.bitrateMbps > 50 || next.pageSeconds < 4 || next.pageSeconds > 120) throw new Error('Stream parameters out of range');
   if (typeof next.showMascot !== 'boolean') throw new Error('Invalid mascot setting');
-  if (![4, 6].includes(next.agentsPerPage)) throw new Error('Invalid Agent page size');
+  if (![2, 4, 6].includes(next.agentsPerPage)) throw new Error('Invalid Agent page size');
   return Object.fromEntries((partial ? Object.keys(value) : CONFIG_KEYS).map(key => [key, next[key]]));
 }
 function streamPreferences(value) {
@@ -29,4 +29,8 @@ function streamPreferences(value) {
     return { ...DEFAULT_STREAM_CONFIG, ...validateStreamConfig(config), enabled: value?.enabled === true };
   } catch { return { ...DEFAULT_STREAM_CONFIG }; }
 }
-module.exports = { DEVICES, DEFAULT_STREAM_CONFIG, validateStreamConfig, streamPreferences };
+function validateRyuoBrightness(value) {
+  if (!Number.isInteger(value) || value < 1 || value > 100) throw new Error('龙王 IV 亮度必须是 1–100 的整数百分比');
+  return value;
+}
+module.exports = { DEVICES, DEFAULT_STREAM_CONFIG, validateStreamConfig, streamPreferences, validateRyuoBrightness };

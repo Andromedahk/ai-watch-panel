@@ -20,6 +20,44 @@
 
 ---
 
+## 2026-10-29 · Codex（GPT-6.1 Sol / Windows 本地执行环境）· 提交龙王 USB、亮度与双卡改动
+
+- 用户授权：提交并推送当前已验收改动，目标为 `origin/codex/screen-stream-latency`。
+- 范围：龙王 Windows USB 发现修复、错误去重、原生 HID 亮度控制、每页双卡四页轮播及对应测试和说明；保留此前 Windows 编译安装记录。
+- 检查：提交前核对工作区与远端分支，沿用前述单元、界面、打包和实机验证结果，检查补丁空白及文件范围；原版参考、构建产物、用户配置、设备截图与证据继续留在忽略目录。
+
+## 2026-10-29 · Codex（GPT-6.1 Sol / Windows 本地执行环境；协作 ryuo_brightness_protocol、ryuo_brightness_hid、ryuo_brightness_ui）· 龙王亮度与双卡布局
+
+- 分支：继续 `codex/screen-stream-latency`，保留此前 USB 修复与安装记录；本轮未提交或推送。
+- 需求：集成用户提供原版文档的屏幕亮度控制，选择龙王 IV 时显示；追加每页两个 Agent、八个模块轮播四页。
+- 协议：原版文档的完整 HID config 会更改媒体列表，未照搬默认媒体。按 reverse-engineer-anything 技能读取可用工具边界，REA MCP 未连接，使用现成本地 Android SDK dexdump 只读核对参考 HomeUI/SerialService，并确认设备 APK 摘要一致。找到独立 `POST brightness 1`、JSON `{"value":N}`，只调用亮度分支；局部 config 缺少必填字段不可用。选取证据保留 `.local/qa/ryuo-brightness-protocol/`，不提交原版 APK、反汇编或真实设备资料。
+- 实现：独立窄 IPC 只接受 1–100 整数；按验证后的 USB ADB 目标匹配 HID 序列号、VID/PID、UsagePage、报告长度且必须唯一。Windows SetupAPI/HID、Mac IOKit 使用系统库，无新增运行库；Mac 字典使用 CFType callbacks。发送后只读检查精确背光值（百分比乘 2.5 取整，1% 为零特例），并确认原前台串流播放器未丢失；不直接写 sysfs、不发媒体配置、不改 ADB 转发。独立子进程有时间和输出边界，错误不会进入串流失败生命周期。
+- 界面：龙王条件显示滑块/百分比、独立应用、忙碌/成功/失败重试；上次设置与当前设备读数分开，首次不自动发送，统计刷新不覆盖未应用修改。新增 2×1 并排布局与四页说明，保持三皮肤、动效和等待全屏布局。普通配置保存保留亮度偏好，重新连接不自动重发旧值。
+- 验证：tsc 与 Vite 生产构建通过；Python 全部 106 项中 105 通过、1 项 Mac flock 跳过，包含 14 项 HID 模拟与 6 项亮度控制检查。26 项 Node 亮度/偏好检查通过；旧全量串流文件的 Darwin PATH 模拟在 Windows 下失败边界沿用此前记录。亮度 UI 七组检查通过且零渲染错误，覆盖未串流应用/持久化、失败重试、不重建输出窗口、切换隐藏、重启恢复与双卡保存。双卡九种皮肤变体、合成八模块四页完整覆盖及提问/授权几何共 13 项检查通过，并人工查看双卡预览。
+- 实机及安装：源桥 HID 60% 背光由 50 变为 150，恢复 20% 为 50，播放器保持前台。重建 Python 桥与 Windows 应用，隔离打包启动八卡、图片和沙盒通过。通过 computer-use 技能正常退出旧版，备份安装及完整用户数据，原址替换并校验 195 个来源文件；遇到 ADB 常驻文件占用后核对哈希相同并跳过相同文件，未终止 ADB 服务。配置与 LAN 配对哈希保持一致。应用内亮度设置成功，选择双卡后恢复串流，设备截图确认 4/4 页、两张卡片与看板娘；当前亮度 20%、翻页 8 秒，保持运行。
+- 产物与边界：构建 `release/windows-ryuo-brightness/win-unpacked/`，完整备份 `.local/installed-backups/`，真实设备截图/验证日志 `.local/qa/ryuo-brightness/`，均已忽略。Mac 原生 API 核对与模拟通过，尚未在 Mac 实机使用；不宣称长时间稳定性、全部固件兼容或实体延迟。
+
+## 2026-10-29 · Codex（Codex 桌面 Windows 本地执行环境；协作 ryuo_reference_review、ryuo_error_review）· 龙王 USB 识别修复与实机连接
+
+- 分支：继续 `codex/screen-stream-latency`，产品基线 `696714a`，保留此前未提交的编译安装记录；本轮未提交或推送。
+- 原因：只读检查发现主机 USB/ADB 接口状态正常、设备已授权，产品/SoC/型号、可读 VID/PID 和播放器均匹配，但 Windows 原生 ADB 的 `get-devpath` 为 `unknown`；原 `discover` 要求 `usb:`，提前跳过了真实目标。原版参考源码没有此门禁，但也不拒绝同型号无线设备，未照搬其宽松逻辑。
+- 修复：仅 Windows 且返回值精确为 `unknown` 时使用 USB 专用 `-d get-serialno`，必须与候选完全一致才继续原身份、VID/PID 和播放器校验；无 USB、多 USB、不同序列号或无线路径均拒绝，并提示必要时暂时只接目标屏幕。启动及运行中清理异常只对完全相同的消息去重，不吞掉独立恢复失败。
+- 外部资料：核对 `.gitignore` 原有 `ryuo4_screen/` 已生效，未跟踪任何参考文件；增加规则注释。参考目录含其自身 Git 与运行时，仅做只读源码对照，不执行其脚本、不复制固件、不安装 APK/驱动。
+- 验证：新增五项 Python 识别回归（含接受/拒绝子场景），全 Python 86 项中 85 通过、1 项 Mac flock 跳过。Electron 新增四项启动/运行错误回归，七项相关生命周期检查通过；全文件 22 项中 21 通过，一项既有 Darwin PATH 模拟因 Windows 分隔符失败，未改动该测试。独立复核未发现放宽设备边界。
+- 构建安装：重建 Python 桥与 Windows 应用，源码及打包桥 `--probe` 均通过且 `playbackStarted=false`；隔离应用启动八模块、图片和沙盒正常、零渲染错误。正常退出旧应用后备份安装与完整配置，再原址替换；193 个来源文件校验通过，配置与卸载组件保留。产物在 `release/windows-ryuo-usb-fix/win-unpacked/`，备份在 `.local/installed-backups/`。
+- 实机：从应用内开启已有龙王设置，进入正在串流，提交编码数增长；只读 ADB 确认播放器前台，设备截图显示四个 Agent 与看板娘/台词，原发现错误消失。保持串流运行供用户使用。截图及真实设备证据留在忽略目录 `.local/qa/ryuo-usb-fix/`，不纳入 Git。
+- 边界：本轮没有刷机、安装播放器、改系统安全设置、终止 ADB 服务或移除其他转发。设备截图与主机计数不用于推断端到端延迟、物理屏像素质量或长期稳定性；完整停止恢复与 Mac 实机仍待分别验收。
+
+## 2026-10-29 · Codex（Codex 桌面 Windows 本地执行环境；协作 win_stream_resources、win_latest_checks）· 最新 Windows 版编译与原址替换
+
+- 基线：`codex/screen-stream-latency` 已快进到 `696714a`，重新 fetch 确认与当时 `origin/main` 一致。按用户要求编译并替换已安装版本；产品源码未修改，应用版本号仍为 0.20.0，本轮不提交或推送。
+- 构建：类型检查与 Vite 生产构建通过，复用本地 Electron 44.5.1。既有本地开发 FFmpeg 经检查具备 libx264、libx265 和 MPEG-TS，未启用 nonfree；补充 Google 官方 platform-tools 37.0.1，校验下载归档完整性和 Windows PE，保留 NOTICE。ADB 仅运行版本查询，不枚举设备。重建 Python 桥，两种设备的 `--check` 均通过，生成 `release/windows-latest-696714a/win-unpacked/`。
+- 打包验证：归档内 95 个应用资源与工作区逐字节一致；隔离配置启动确认八个模块、图片、sandbox/contextIsolation 正常、渲染错误为零。包内桥分别通过展域 H.264 和龙王 2240×1080 HEVC / MPEG-TS 的真实无 USB 编码，包含静态重复画面和正常退出，stderr 均为空；另有云设置检查及 22 项龙王布局检查通过。
+- 定向测试：Node 66 项中 62 通过、4 失败；Python 81 项中 80 通过、1 项 macOS flock 检查跳过。三项 Node 失败来自 Windows 下 Unix socket、POSIX 文件权限及模拟 Darwin 路径的测试前提；另一项为独立云服务保存时对目录 fsync 返回 EPERM，导致配对 HTTP 500，已最小复现。云服务不在桌面包中，本次没有修改服务或掩盖失败，不声称所有 Windows 功能已验证。日志位于忽略目录 `.local/qa/windows-latest-696714a/`。
+- 安装：用户自行退出旧版后核对进程已结束，备份旧程序和完整用户数据到 `.local/installed-backups/`。原安装路径覆盖新包，保留卸载程序、更新元数据、快捷方式和用户配置；240 个原程序备份文件及 193 个新包文件的 SHA-256 校验通过，替换前后偏好及 LAN 配对文件一致。
+- 运行：从原安装位置启动，新版云端同步入口可见，既有展域串流设置自动恢复并开始发送画面。保留用户当前角色和配置，未开启云同步或切换设备。实体屏最终画质、龙王实机链路和生产远程操作仍未验收。
+- 交付边界：本次为本机开发构建，采用既有本地编码器，不冒充固定源码正式发布包；未创建 NSIS、版本标签或公开 Release。产物、下载输入、备份、真实用户数据和验证证据全部留在 Git 忽略目录。
+
 ## 2026-10-29 · Codex（Codex 桌面本地执行环境，含并行验证）· 云端与移动功能复测并合入 main
 
 - 分支：从 `codex/cloud-status-sync` 的 `42352fd` 复测，合入 `main`；远端核对基线为 `215e63d`，没有其他新增提交。

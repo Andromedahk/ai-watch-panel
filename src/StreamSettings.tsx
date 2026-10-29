@@ -14,10 +14,17 @@ export function StreamSettings({ state, onState }: { state: PanelState; onState:
   const [draft, setDraft] = useState<ScreenStreamConfig>(stream);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [brightness, setBrightness] = useState(state.ryuoBrightness ?? 85);
+  const [brightnessBusy, setBrightnessBusy] = useState(false);
+  const [brightnessError, setBrightnessError] = useState('');
+  const [brightnessApplied, setBrightnessApplied] = useState<number | null>(null);
+  // Frame counters refresh every second; only a changed saved value can replace
+  // an in-progress slider edit.
+  useEffect(() => setBrightness(state.ryuoBrightness ?? 85), [state.ryuoBrightness]);
   const configKey = [stream.device, stream.width, stream.height, stream.fps, stream.bitrateMbps, stream.pageSeconds, stream.showMascot, stream.agentsPerPage].join(':');
   useEffect(() => setDraft({ device: stream.device, width: stream.width, height: stream.height,
     fps: stream.fps, bitrateMbps: stream.bitrateMbps, pageSeconds: stream.pageSeconds, showMascot: stream.showMascot, agentsPerPage: stream.agentsPerPage || 4 }), [configKey]);
-  const transitioning = busy || stream.status === 'starting' || stream.status === 'stopping';
+  const transitioning = busy || brightnessBusy || stream.status === 'starting' || stream.status === 'stopping';
   const ryuo = draft.device === 'ryuo4';
   const capability = stream.deviceAvailability?.[draft.device]
     || (draft.device === stream.device ? stream : undefined);
@@ -41,6 +48,15 @@ export function StreamSettings({ state, onState }: { state: PanelState; onState:
     catch (err) { setError(err instanceof Error ? err.message : s('停止串流失败，请重试', 'Could not stop streaming. Please retry.')); }
     finally { setBusy(false); }
   }
+  async function applyBrightness() {
+    if (!window.panel?.setRyuoBrightness || transitioning || !ryuo) return;
+    setBrightnessBusy(true); setBrightnessError(''); setBrightnessApplied(null);
+    try {
+      onState(await window.panel.setRyuoBrightness(brightness));
+      setBrightnessApplied(brightness);
+    } catch (err) { setBrightnessError(err instanceof Error ? err.message : s('亮度设置失败，请重试', 'Could not set brightness. Please retry.')); }
+    finally { setBrightnessBusy(false); }
+  }
   return <fieldset className="stream-settings" data-stream-status={stream.status}>
     <legend>{s('水冷小屏幕串流', 'Liquid cooling display streaming')}</legend>
     <div className="stream-status"><span className={`tiny-dot ${stream.status === 'running' ? 'active' : ''}`} />
@@ -51,7 +67,7 @@ export function StreamSettings({ state, onState }: { state: PanelState; onState:
       : s('按曲面屏左右 1:1 分区：左侧四个 Agent，右上看板娘、右下额度历史。桌面只保留本配置页，收纳后继续串流。', 'Equal left and right areas for the curved display: four Agents on the left, companion at top right and quota history below. The desktop keeps this settings page; streaming continues while minimized or stored.')}</p>
     <label className="stream-field"><span>{s('屏幕类型', 'Display type')}</span><select aria-label={s('屏幕类型', 'Display type')} value={draft.device} disabled={transitioning} onChange={e => {
       const device = e.target.value as ScreenStreamConfig['device'];
-      setError('');
+      setError(''); setBrightnessError(''); setBrightnessApplied(null);
       setDraft({ ...draft, device, width: 2240, height: 1080, fps: 30, bitrateMbps: device === 'ryuo4' ? 6 : 8,
         agentsPerPage: device === 'ryuo4' ? 4 : draft.agentsPerPage });
     }}>
@@ -59,14 +75,31 @@ export function StreamSettings({ state, onState }: { state: PanelState; onState:
       <option value="ryuo4">{s('ROG 龙王 IV', 'ROG RYUO IV')} · cm16</option>
     </select></label>
     {ryuo && <p className="appearance-hint">{s('使用已刷入的定制固件与内置 RYUO 播放器，通过 USB ADB 连接；若屏幕提示调试授权，请允许。原生 2240 × 1080，默认 30 FPS、6 Mbps，使用 HEVC 编码。', 'Uses the installed custom firmware and RYUO player over USB ADB. Allow USB debugging if the display asks. Native 2240 × 1080 output defaults to 30 FPS and 6 Mbps using HEVC encoding.')}</p>}
+    {ryuo && <div className="stream-brightness">
+      <label className="stream-field"><span className="stream-brightness-label">{s('屏幕亮度', 'Display brightness')}<output>{brightness}%</output></span>
+        <input aria-label={s('龙王屏幕亮度', 'RYUO display brightness')} type="range" min={1} max={100} step={1} value={brightness} disabled={transitioning} onChange={e => {
+          setBrightness(Number(e.target.value)); setBrightnessError(''); setBrightnessApplied(null);
+        }} />
+      </label>
+      <p className="appearance-hint stream-brightness-saved">{state.ryuoBrightness == null
+        ? s('尚未设置亮度；滑块默认 85%，不代表设备当前亮度。', 'Brightness has not been set. The slider defaults to 85%; this is not the current device brightness.')
+        : s(`上次设置：${state.ryuoBrightness}%。未读取设备当前亮度。`, `Last setting: ${state.ryuoBrightness}%. Current device brightness has not been read.`)}</p>
+      <button className="dock-button" disabled={!available || !window.panel?.setRyuoBrightness || transitioning} onClick={() => void applyBrightness()}>{brightnessBusy ? s('正在应用亮度…', 'Applying brightness…') : s('应用亮度', 'Apply brightness')}</button>
+      <p className="appearance-hint">{s('连接龙王屏幕后即可单独应用，立即生效且不重启串流。', 'Apply while the RYUO display is connected. Brightness takes effect immediately without restarting the stream.')}</p>
+      {brightnessError && <p className="stream-error" role="alert">{brightnessError}</p>}
+      {brightnessApplied != null && <p className="stream-brightness-result" role="status">{stream.preview
+        ? s(`测试预览：亮度 ${brightnessApplied}%，未连接设备。`, `Test preview: brightness ${brightnessApplied}%; no device connected.`)
+        : s(`已应用亮度 ${brightnessApplied}%。`, `Applied brightness ${brightnessApplied}%.`)}</p>}
+    </div>}
     <div className="stream-field-grid">
       <label className="stream-field"><span>{s('画面宽度', 'Frame width')}</span><input aria-label={s('串流画面宽度', 'Stream frame width')} type="number" min={64} max={ryuo ? 2240 : 4096} step={2} value={draft.width} disabled={transitioning} onChange={e => setDraft({ ...draft, width: Number(e.target.value) })} /></label>
       <label className="stream-field"><span>{s('画面高度', 'Frame height')}</span><input aria-label={s('串流画面高度', 'Stream frame height')} type="number" min={64} max={ryuo ? 1080 : 4096} step={2} value={draft.height} disabled={transitioning} onChange={e => setDraft({ ...draft, height: Number(e.target.value) })} /></label>
       <label className="stream-field"><span>{s('目标帧率 · fps', 'Target frame rate · fps')}</span><input aria-label={s('串流目标帧率', 'Stream frame rate')} type="number" min={1} max={60} step={1} value={draft.fps} disabled={transitioning} onChange={e => setDraft({ ...draft, fps: Number(e.target.value) })} /></label>
       <label className="stream-field"><span>{ryuo ? s('HEVC 码率 · Mbps', 'HEVC bitrate · Mbps') : s('H.264 码率 · Mbps', 'H.264 bitrate · Mbps')}</span><input aria-label={s('串流码率', 'Stream bitrate')} type="number" min={1} max={50} step={1} value={draft.bitrateMbps} disabled={transitioning} onChange={e => setDraft({ ...draft, bitrateMbps: Number(e.target.value) })} /></label>
       <label className="stream-field"><span>{s('模块自动翻页 · 秒', 'Module page interval · seconds')}</span><input aria-label={s('串流自动翻页秒数', 'Stream page interval')} type="number" min={4} max={120} step={1} value={draft.pageSeconds} disabled={transitioning} onChange={e => setDraft({ ...draft, pageSeconds: Number(e.target.value) })} /></label>
-      {ryuo && <label className="stream-field"><span>{s('每页 Agent 数量', 'Agents per page')}</span><select aria-label={s('每页 Agent 数量', 'Agents per page')} value={draft.agentsPerPage || 4} disabled={transitioning} onChange={e => setDraft({ ...draft, agentsPerPage: Number(e.target.value) as 4 | 6 })}><option value={4}>{s('4 个 · 2 × 2', '4 · 2 × 2')}</option><option value={6}>{s('6 个 · 3 × 2', '6 · 3 × 2')}</option></select></label>}
+      {ryuo && <label className="stream-field"><span>{s('每页 Agent 数量', 'Agents per page')}</span><select aria-label={s('每页 Agent 数量', 'Agents per page')} value={draft.agentsPerPage || 4} disabled={transitioning} onChange={e => setDraft({ ...draft, agentsPerPage: Number(e.target.value) as 2 | 4 | 6 })}><option value={2}>{s('2 个 · 2 × 1', '2 · 2 × 1')}</option><option value={4}>{s('4 个 · 2 × 2', '4 · 2 × 2')}</option><option value={6}>{s('6 个 · 3 × 2', '6 · 3 × 2')}</option></select></label>}
     </div>
+    {ryuo && draft.agentsPerPage === 2 && <p className="appearance-hint">{s('双卡模式每页并排显示两个 Agent；启用八个 Agent 时自动轮播四页。', 'Two Agents appear side by side per page. With eight Agents enabled, the display rotates through four pages.')}</p>}
     <label className="switch-row"><span>{s('二次元看板娘模块', 'Anime companion module')}<small>{s('保留台词、表情和呼吸动效；刷新间隔沿用外观设置', 'Keep dialogue, expressions and breathing animations; use the appearance refresh interval')}</small></span><input aria-label={s('二次元看板娘模块', 'Anime companion module')} type="checkbox" checked={draft.showMascot} disabled={transitioning} onChange={e => setDraft({ ...draft, showMascot: e.target.checked })} /></label>
     <p className="appearance-hint">{s('小屏幕自动轮播模块、额度和币种。打开程序、拖动排序、刷新和翻页按钮均关闭；提问或授权请求会全屏提醒，请回到对应 Agent 处理。', 'Modules, quotas and currencies rotate automatically. Launch, reorder, refresh and paging controls are disabled. Input or approval requests take over the display; respond in the relevant Agent.')}</p>
     <p className="appearance-hint">{ryuo

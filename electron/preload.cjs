@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('panel', {
   configureCloud: config => ipcRenderer.invoke('panel:cloud-configure', config),
   forgetCloud: () => ipcRenderer.invoke('panel:cloud-forget'),
   setStreamConfig: config => ipcRenderer.invoke('panel:stream-config', config),
+  setRyuoBrightness: value => ipcRenderer.invoke('panel:ryuo-brightness', value),
   startStream: () => ipcRenderer.invoke('panel:stream-start'),
   stopStream: () => ipcRenderer.invoke('panel:stream-stop'),
   minimize: () => ipcRenderer.invoke('panel:minimize'),

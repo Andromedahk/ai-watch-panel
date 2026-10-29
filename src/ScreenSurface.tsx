@@ -8,7 +8,7 @@ import type { Provider, Skin } from './types';
 import type { ProviderView } from './view/model';
 
 type Props = {
-  providers: Provider[]; views: ProviderView[]; stream: { device?: 'zhanyu' | 'ryuo4'; pageSeconds: number; showMascot: boolean; agentsPerPage?: 4 | 6 };
+  providers: Provider[]; views: ProviderView[]; stream: { device?: 'zhanyu' | 'ryuo4'; pageSeconds: number; showMascot: boolean; agentsPerPage?: 2 | 4 | 6 };
   skin: Skin; anime: boolean; animate: boolean; testing: boolean; demo?: boolean; remote?: boolean; sampledAt?: string | null;
   renderCard: (view: ProviderView, index: number, visible: boolean) => ReactNode;
   renderMascot?: ReactNode;

@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, na
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
 const { ScreenStream, streamAvailability, streamDeviceAvailability } = require('./screen-stream.cjs');
-const { validateStreamConfig } = require('./screen-stream-policy.cjs');
+const { validateStreamConfig, validateRyuoBrightness } = require('./screen-stream-policy.cjs');
 // About links only to this fixed project page; the renderer never supplies a URL.
 const { homepage: REPOSITORY } = require('../package.json');
 const { traySummary } = require('./tray-summary.cjs');
@@ -480,6 +480,20 @@ else {
         return currentState();
       });
     });
+    handle('panel:ryuo-brightness', value => {
+      const brightness = validateRyuoBrightness(value);
+      return serializeStream(async () => {
+        if (streamShuttingDown) throw new Error('Application is shutting down');
+        await screenStream.setRyuoBrightness(brightness);
+        const previous = preferences.ryuoBrightness;
+        preferences.ryuoBrightness = brightness;
+        try { savePreferences(); } catch (error) {
+          preferences.ryuoBrightness = previous;
+          throw new Error('亮度已应用，但本机设置保存失败，请重试');
+        }
+        emitState(); return currentState();
+      });
+    });
     handle('panel:stream-start', () => serializeStream(async () => {
       if (streamShuttingDown) throw new Error('Application is shutting down');
       screenStream.assertAvailable();
@@ -550,7 +564,7 @@ else {
       buildApplicationMenu(); emitState(); return currentState();
     });
     handle('panel:configure', (value) => {
-      const next = validPreferences({ ...value, stream: preferences.stream, syncRole: preferences.syncRole, syncPort: preferences.syncPort, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
+      const next = validPreferences({ ...value, stream: preferences.stream, ryuoBrightness: preferences.ryuoBrightness, syncRole: preferences.syncRole, syncPort: preferences.syncPort, layout: preferences.layout, windowLayout: preferences.windowLayout, language: preferences.language, theme: preferences.theme, providerOrder: preferences.providerOrder, enabledProviders: preferences.enabledProviders, qwenKeychainAllowed: preferences.qwenKeychainAllowed,
         kimiSource: preferences.kimiSource, claudeSource: preferences.claudeSource, claudeNetworkAllowed: preferences.claudeNetworkAllowed, claudeHooksEnabled: preferences.claudeHooksEnabled, cacheCleanupPending: preferences.cacheCleanupPending, kimiWorkApp: preferences.kimiWorkApp, widgetsEnabled: preferences.widgetsEnabled, animeMode: preferences.animeMode, insights: preferences.insights, insightOrder: preferences.insightOrder, mascotInterval: preferences.mascotInterval, skin: preferences.skin, providerApps: preferences.providerApps });
       const changedSide = next.side !== preferences.side;
       preferences = next; savePreferences(); lock();
