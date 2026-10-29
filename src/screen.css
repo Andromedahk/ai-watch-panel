@@ -187,3 +187,24 @@
 @keyframes screen-attention-countdown { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes screen-attention-breathe { 50% { scale: 1.04; opacity: .45; } }
 @keyframes screen-character-breathe { 50% { transform: translateY(-.7vmin); } }
+
+/* RYUO IV uses a wide monitoring area and one narrow companion area. Keep this
+   profile separate from the equal physical faces of the Zhanyu adapter. */
+.screen-surface[data-device="ryuo4"] .screen-content { grid-template-columns: minmax(0, 10fr) minmax(0, 4fr); }
+.screen-surface[data-device="ryuo4"] .screen-sidebar[data-has-mascot="true"] { grid-template-rows: minmax(0, 1fr); }
+.screen-surface[data-device="ryuo4"] .screen-mascot .insight-mascot { flex-direction: column; gap: 2.5cqh; padding: 3cqw; }
+.screen-surface[data-device="ryuo4"] .screen-mascot .mascot-figure { width: 100%; height: auto; flex: 1 1 0; min-height: 0; }
+.screen-surface[data-device="ryuo4"] .screen-mascot .mascot-figure .avatar[data-crop="bust"] img { left: -4%; width: 108%; }
+.screen-surface[data-device="ryuo4"] .screen-mascot .mascot-bubble { flex: 0 0 auto; width: 100%; min-height: 20cqh; max-height: 30cqh; margin: 0; align-self: stretch; padding: 4cqw; font-size: min(6.2cqw, 4.2cqh); line-height: 1.5; }
+.screen-surface[data-device="ryuo4"] .screen-mascot .mascot-bubble::before { top: -1.1cqw; inset-inline-start: 45%; transform: rotate(135deg); }
+.screen-surface[data-device="ryuo4"] .screen-mascot .mascot-timer { height: .5cqh; }
+.screen-surface[data-device="ryuo4"] .screen-attention { grid-template-columns: minmax(0, 10fr) minmax(0, 4fr); }
+/* Reminder artwork shares one centered square anchor and may cross the bend. */
+.screen-surface[data-device="ryuo4"] .screen-attention-character { grid-column: 2; grid-row: 1; overflow: visible; }
+.screen-surface[data-device="ryuo4"] .screen-attention-character > .avatar { inset: auto; left: 40%; top: 50%; width: min(68vmin, 110%); height: auto; aspect-ratio: 1; translate: -50% -50%; }
+.screen-surface[data-device="ryuo4"] .screen-attention-character .avatar .avatar-face { border-radius: 50%; overflow: hidden; clip-path: circle(50%); mask-image: none; }
+.screen-surface[data-device="ryuo4"] .screen-attention-content { grid-column: 1; grid-row: 1; padding: 5vmin 6vmin; align-items: center; text-align: center; }
+.screen-surface[data-device="ryuo4"] .screen-attention h1 { font-size: min(12cqw, 14cqh); }
+.screen-surface[data-device="ryuo4"] .screen-attention h1[data-lines="2"] { font-size: min(9.5cqw, 10cqh); }
+.screen-surface[data-device="ryuo4"] .screen-attention h1 .screen-attention-agent { font-size: .6em; }
+.screen-surface[data-device="ryuo4"] .screen-attention-orbit { left: 40%; top: 50%; bottom: auto; width: min(70vmin, 112%); height: auto; aspect-ratio: 1; translate: -50% -50%; align-self: auto; justify-self: auto; }

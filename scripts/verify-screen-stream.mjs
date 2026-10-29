@@ -22,9 +22,27 @@ async function outputWindow() {
   return app.windows().find(page => page.url().includes('surface=screen'));
 }
 async function capture(name) {
+  const page = await outputWindow();
+  // DOM visibility alone includes cards still covered by their entry curtain.
+  // Keep normal animations running, but wait for the cards' final presentation.
+  await page.waitForFunction(() => [...document.querySelectorAll('.provider-card')].every(card => {
+    const style = getComputedStyle(card), curtain = getComputedStyle(card, '::before');
+    const entryFinished = card.getAnimations().filter(animation => /^(card-in|curtain-)/.test(animation.animationName || ''))
+      .every(animation => animation.playState === 'finished');
+    return Number(style.opacity) >= 0.99 && Number(curtain.opacity) <= 0.01 && entryFinished;
+  }));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const encoded = await app.evaluate(async ({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes('surface=screen'));
-    return (await window.webContents.capturePage()).toPNG().toString('base64');
+    const contents = window.webContents;
+    // Capture an actual subsequent offscreen paint, which is the bitmap consumed
+    // by the streaming pump, instead of a possibly older cached capturePage.
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { contents.removeListener('paint', painted); reject(new Error('No composed screen frame for QA capture')); }, 5000);
+      function painted(_event, _dirty, image) { clearTimeout(timer); resolve(image.toPNG().toString('base64')); }
+      contents.once('paint', painted);
+      contents.invalidate();
+    });
   });
   await writeFile(path.join(output, `${name}.png`), Buffer.from(encoded, 'base64'));
 }
@@ -51,6 +69,25 @@ try {
   await desktop.waitForFunction(() => document.querySelector('main')?.dataset.sampledAt);
   await desktop.locator('.toolbar button').last().click();
   await expect(desktop.locator('.stream-settings')).toBeVisible();
+  const initialState = await desktop.evaluate(() => window.panel.getState());
+  await app.evaluate(({ BrowserWindow }, state) => {
+    const desktop = BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().includes('surface=screen'));
+    desktop.webContents.send('panel:changed', { ...state, stream: { ...state.stream, deviceAvailability: {
+      zhanyu: { available: true, unavailableReason: null }, ryuo4: { available: false, unavailableReason: 'RYUO ADB component missing · QA' },
+    } } });
+  }, initialState);
+  await desktop.getByRole('combobox', { name: '屏幕类型', exact: true }).selectOption('ryuo4');
+  await expect(desktop.getByRole('spinbutton', { name: '串流画面宽度', exact: true })).toHaveValue('2240');
+  await expect(desktop.getByRole('spinbutton', { name: '串流画面高度', exact: true })).toHaveValue('1080');
+  await expect(desktop.getByText('RYUO ADB component missing · QA', { exact: true })).toBeVisible();
+  await expect(desktop.getByRole('button', { name: '开启小屏幕串流', exact: true })).toBeDisabled();
+  await desktop.getByRole('combobox', { name: '屏幕类型', exact: true }).selectOption('zhanyu');
+  await expect(desktop.getByRole('spinbutton', { name: '串流画面宽度', exact: true })).toHaveValue('2240');
+  await expect(desktop.getByRole('spinbutton', { name: '串流画面高度', exact: true })).toHaveValue('1080');
+  await expect(desktop.getByRole('button', { name: '开启小屏幕串流', exact: true })).toBeEnabled();
+  await app.evaluate(({ BrowserWindow }, state) => {
+    BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().includes('surface=screen')).webContents.send('panel:changed', state);
+  }, initialState);
   await desktop.getByRole('button', { name: '开启小屏幕串流', exact: true }).click();
   await expect(desktop.locator('main')).toHaveAttribute('data-surface', 'controller');
   await expect.poll(() => desktop.evaluate(() => window.panel.getState()).then(state => state.stream.status)).toBe('running');
@@ -142,9 +179,23 @@ try {
   assert.deepEqual(overflow, { body: false, cards: false });
   await capture('screen-compact');
 
+  await desktop.getByRole('combobox', { name: '屏幕类型', exact: true }).selectOption('ryuo4');
+  await expect(desktop.getByRole('spinbutton', { name: '串流画面宽度', exact: true })).toHaveValue('2240');
+  await expect(desktop.getByRole('spinbutton', { name: '串流画面高度', exact: true })).toHaveValue('1080');
+  await expect(desktop.getByRole('spinbutton', { name: '串流码率', exact: true })).toHaveValue('6');
+  await desktop.getByRole('button', { name: '应用串流参数', exact: true }).click();
+  await expect.poll(() => desktop.evaluate(() => window.panel.getState()).then(state => state.stream.status)).toBe('running');
+  assert.equal((await desktop.evaluate(() => window.panel.getState())).stream.device, 'ryuo4');
+  screen = await outputWindow();
+  assert.deepEqual(await screen.evaluate(() => ({ width: innerWidth, height: innerHeight })), { width: 2240, height: 1080 });
+  assert.equal(await screen.locator('button,input,select,a,[tabindex="0"]').count(), 0, 'RYUO output must retain the read-only screen bridge');
+  await expect(screen.locator('.provider-card:visible')).toHaveCount(4);
+  await capture('screen-ryuo4');
+
   await app.close(); app = null;
   const saved = JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8'));
   assert.equal(saved.stream.enabled, true);
+  assert.equal(saved.stream.device, 'ryuo4');
   app = await launch(); desktop = await app.firstWindow();
   await expect(desktop.locator('main')).toHaveAttribute('data-surface', 'controller');
   await expect.poll(() => desktop.evaluate(() => window.panel.getState()).then(state => state.stream.status), { timeout: 15000 }).toBe('running');
@@ -154,7 +205,7 @@ try {
   await expect(desktop.locator('.provider-card')).toHaveCount(8);
   assert.equal((await desktop.evaluate(() => window.panel.getState())).stream.enabled, false);
   assert.deepEqual(errors, []);
-  console.log('Screen stream QA passed: settings desktop collapses to side rail and restores; separate read-only offscreen renderer; animation and frames while collapsed/minimized/stored; disabled interactions; bounded settings; fullscreen multi-agent waiting and automatic clearing; paging; layout; persisted restart; stop restores desktop. USB was not opened.');
+  console.log('Screen stream QA passed: device-specific availability and presets; settings desktop collapses to side rail and restores; separate read-only offscreen renderer; animation and frames while collapsed/minimized/stored; disabled interactions; bounded settings; fullscreen multi-agent waiting and automatic clearing; paging; layout; RYUO device switch and persisted restart; stop restores desktop. USB was not opened.');
 } finally {
   if (app) await app.close().catch(() => {});
   // This folder was created by mkdtemp above, exclusively for this QA run.

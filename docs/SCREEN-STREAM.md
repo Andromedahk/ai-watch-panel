@@ -5,7 +5,7 @@
 ## 使用
 
 1. 使用含桥接组件的 Windows x64 或 macOS 15+ AI Watch（Mac 按芯片选择 arm64 / x64）；通过 USB 连接屏幕，关闭其他占用屏幕的程序，包括 Windows KANALI 及其子进程。
-2. 在「配置 → 小屏幕串流」选择展域屏幕，默认 2240 × 1080、30 FPS、8 Mbps，点击开启。
+2. 在「配置 → 小屏幕串流」选择屏幕：展域默认 2240 × 1080、30 FPS、8 Mbps H.264；ROG 龙王 IV 默认原生 2240 × 1080、30 FPS、6 Mbps HEVC，然后点击开启。
 3. 主桌面变成配置页。标题栏按钮可最小化或收纳到托盘，屏幕继续运行。外观、模块、来源、图片、LAN 同步均沿用原设置。
 4. 点击关闭串流，等待停止和恢复完成，再使用原厂软件。错误会显示在配置页，可重新应用参数重连。
 
@@ -13,7 +13,7 @@ Mac 的桥、编码器和 libusb 随 AI Watch 打包，使用者无需另装 Pyt
 
 看板娘默认开启，复用原版中英台词，刷新间隔沿用「外观 → 下半屏」。若关闭自动刷新，人物仍根据状态显示台词；若要自动换句，请将间隔设为 5–300 秒。无需开启桌面二次元模式才能在小屏显示看板娘。小屏 Agent 卡片是否使用角色图仍跟随二次元模式。
 
-当前设备使用左右 1:1 的曲面分区。2240×1080 展开画布的左半显示四张 Agent 卡片（2×2），右半上方显示看板娘和台词、下方显示额度历史。弯折处留空，文字不会横跨两侧；半尺寸或方形画布也保持左右布局。超过四个 Agent 自动轮播，少量模块使用左侧可用空间，关闭看板娘后曲线填满右侧。
+展域设备使用左右 1:1 的曲面分区。2240×1080 展开画布的左半显示四张 Agent 卡片（2×2），右半上方显示看板娘和台词、下方显示额度历史。弯折处留空，文字不会横跨两侧；半尺寸或方形画布也保持左右布局。超过四个 Agent 自动轮播，少量模块使用左侧可用空间，关闭看板娘后曲线填满右侧。龙王 IV 使用下述独立 10:4 分区。
 
 左侧卡片上半集中显示大头像、名字、套餐与状态，下半显示额度。圆环模式扩大头像及外环，卡片状态光效保留；该分区只用于小屏，不改变桌面皮肤布局。
 
@@ -27,6 +27,32 @@ Mac 的桥、编码器和 libusb 随 AI Watch 打包，使用者无需另装 Pyt
 
 多条提醒每 6 秒自动切换，角色和文字滑入淡入，屏幕底部显示轮换进度。有非过期等待任务明细时，同一 Agent 的任务分别展示；无明细则保留 Agent 汇总提醒，同时待回答/授权分为两行。任务身份不使用采样时间，普通刷新不会反复重启动画或轮播。关闭动效或系统减少动态效果时仍会自动换页；状态解除后恢复监看画面。
 
+## ROG 龙王 IV / RYUO IV
+
+本适配针对 `0b05:1c76`、`cm16` / `RK3562`、产品标识 `ROG_RYUO_IV_Standard`，屏幕需已刷入定制固件并预装 `com.ryuo.stream/.StreamActivity`。AI Watch 不刷机、不安装 APK，也不修改 system 分区。只接受 USB ADB 的唯一匹配设备；未授权、离线、多个目标或缺少播放器均会报错，不会任选其他 Android 设备。
+
+龙王默认使用原生 **2240 × 1080、30 FPS、6 Mbps**。该宽度超过设备的 H.264 解码上限，因此固定采用 **libx265 HEVC + MPEG-TS**，不沿用展域的 H.264。低于原生的偶数画布也可使用，最大宽 2240、高 1080。稳定版 Android MediaPlayer 自身会缓冲，不能由主机帧率、发送统计或预览推断设备端到端延迟；实验低延迟播放器不属于本适配。
+
+展开画布按 **左 10 : 右 4** 设计，左侧默认采用用户选定的 **四个 Agent（2×2）**，六卡保留为可选设置，超出每页数量后自动轮播；右侧默认只放一个二次元看板娘及台词，不显示额度历史。回答 / 授权提醒占满画布，文字在左侧 10/14 区域内居中，右侧角色裁成圆形并移除半身渐隐截断，头像与装饰圆圈共用上下居中的基准；提醒画面允许角色和圆圈适当跨过折角向左延伸。四卡方案、圆形提醒头像与居中文字位置已由用户确认；后续仍可调整台词位置及折弯安全距离。展域既有 1:1 布局单独保留。
+
+正常连接先检查本地编码器 / ADB，再识别设备并确认播放器状态。主机仅在 `127.0.0.1` 的随机端口提供单客户端 HTTP 视频，经 `adb reverse --no-rebind` 映射到屏幕同端口。映射冲突直接失败，不替换已有转发。停止或失败时关闭本次编码器、socket 和映射，结束本次播放器并启动 HomeUI；只有观察到 HomeUI 回到前台才报告恢复成功。设备拔出或恢复失败时保留错误，桌面仍恢复为原面板。
+
+包含龙王支持的安装包额外需要 Android platform-tools。Mac 构建可设置 `RYUO_ADB_DIR` 或传 `--adb-dir`，Windows 可传 `-AdbDir`；也可放入忽略的 `screen-bridge/resources/adb/`。Windows 同目录必须包含 `AdbWinApi.dll` 与 `AdbWinUsbApi.dll`。构建器只取 ADB 及所需 DLL，并保留输入附带的许可证 / NOTICE / 源码材料；不会收集用户 ADB 密钥、配置或整个 SDK。未提供 ADB 时仍可构建展域版本，选择龙王时会明确显示缺失原因。Mac ADB 必须匹配当前架构，或为包含当前架构的通用程序。
+
+```sh
+# 已将对应平台的 platform-tools 放入 resources/adb 后
+npm run pack:mac
+# 或显式传入目录（需先满足桥构建说明中的原生依赖）
+python3 scripts/build-screen-bridge-macos.py --adb-dir screen-bridge/resources/adb
+```
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-screen-bridge.ps1 -AdbDir screen-bridge/resources/adb
+npm run pack:win
+```
+
+源码桥优先使用 `resources/adb/`，其次使用 `RYUO_ADB` 指定的 **ADB 可执行文件绝对路径**，最后查找 PATH；已打包的桥只使用随包 ADB。`RYUO_ADB` 与 `XANALI_PYTHON` 都只由主进程环境配置，渲染器不能选择可执行文件。桥的 `--device ryuo4 --check` 只检查本地资源，`--probe` 只读设备身份与播放器状态，`--dry-run` 真实编码 HEVC 但不解析或运行 ADB、不建立 HTTP 服务。`ryuo4_screen/` 只作本地参考并已加入 Git 忽略，不属于构建输入、源码包或安装包。
+
 ## 数据和渲染
 
 ```text
@@ -36,15 +62,16 @@ AI Watch 主进程 ──→ 桌面原配置页
            ↓ 只读 IPC
 离屏 React 页面（原 ProviderCard / Mascot + 额度历史）
            ↓ 固定大小 BGRA 位图
-内部 Python 桥 → FFmpeg H.264 → Windows USB / macOS libusb → 展域屏幕
+内部 Python 桥 ┬→ FFmpeg H.264 → Windows USB / macOS libusb → 展域屏幕
+               └→ FFmpeg HEVC / MPEG-TS → 本机 HTTP / ADB reverse → 龙王 IV
 ```
 
-- 新的 `electron/screen-stream-policy.cjs` 是设备能力表和参数校验边界，目前仅允许 `zhanyu`。分辨率必须是 64–4096 内的偶数，面积不超过 2240 × 1080；目标帧率 1–60、码率 1–50 Mbps、模块间隔 4–120 秒。
+- `electron/screen-stream-policy.cjs` 是设备能力表和参数校验边界，仅允许 `zhanyu` 和 `ryuo4`。分辨率必须是 64–4096 内的偶数，面积不超过 2240 × 1080；龙王另限制宽不超过 2240、高不超过 1080。目标帧率 1–60、码率 1–50 Mbps、模块间隔 4–120 秒，Agent 每页只允许 4 或 6。
 - `screen-preload.cjs` 仅暴露读取状态和订阅，不暴露系统操作。主进程验证消息发送窗口；桌面在串流模式下也禁止程序启动、重排和手动刷新。
 - 离屏窗口使用 sandbox/contextIsolation，后台不节流；内容尺寸与像素比例固定，独立于主显示器 DPI。不采集整个桌面，也不会将电脑上的其他窗口送往设备。
 - Mac 使用随包 libusb 访问 VID `391a` / PID `1021`，按 USB 描述符选择打印接口及双向 bulk 端点。不会更换设备配置或强制卸载驱动；按设备加跨进程锁，阻止两个 AI Watch 同时接管同一屏幕。Windows 保留原有 USB 传输。Mac 不使用桌面采集 API，因此无需屏幕录制权限。
 - 桥报告就绪后立即发送首帧，后续新画面直接发送；一帧正在写入时仅保留最新待发送位图，写入完成后立即续发。主进程不重复传送静态位图，内部桥继续按目标 FPS 编码最近的完整画面，保持静态显示和设备播放。
-- 编码线程在帧率等待结束后才选择最新位图，避免提前选取旧画面；编码器逐包刷新输出，H.264 待发送队列最多一帧。传输阻塞时通过背压控制积压，不能随意丢弃已编码的参考帧。统计采用桥接实际编码帧数，目标 FPS 不等于实机 FPS；测试预览的帧数仅代表新画面，不代表设备出帧。
+- 编码线程在帧率等待结束后才选择最新位图，避免提前选取旧画面；编码器逐包刷新输出，H.264 待发送队列最多一帧。传输阻塞时通过背压控制积压，不能随意丢弃已编码的参考帧。展域统计采用桥接输出的 H.264 帧数；龙王帧数为提交给 FFmpeg 的完整 BGRA 帧数，字节数为 HTTP 写出的 MPEG-TS 数据，均不证明屏幕已解码或显示。目标 FPS 不等于实机 FPS；测试预览的帧数仅代表新画面，不代表设备出帧。
 - 停止关闭标准输入并等待桥接进程完全退出，读取设备恢复结果；取消连接、编码器错误、USB 中断与退出应用共用停止流程。恢复失败会报告错误，不把杀进程当作成功恢复。
 - `src/ScreenSurface.tsx` 负责屏幕布局与提醒，`src/screen-attention.ts` 从当前等待状态生成稳定的轮播队列；`src/view/skins.tsx` 和 `insights.tsx` 通过可选只读模式复用原组件。台词缺失的旧原型没有使用 Mascot，本次不再维护平行的简化看板娘。
 - 桌面修改自选图片和测试场景会通知屏幕；LAN 客户端屏幕跟随收到的远端数据，不触发本机额外查询。`screen-history.ts` 使用同源 BroadcastChannel 应答首次历史请求并推送更新，只传验证过的额度样本；按本机/远端和主机标识匹配，屏幕不另行写动态日志。
@@ -89,7 +116,7 @@ npm run dist:win  # 原 AI Watch 的 NSIS 安装包
 
 Mac 在 macOS 15+ 的原生环境执行 `npm run pack:mac` 或 `npm run dist:mac`，分别生成当前芯片的 App 或 DMG / ZIP；不能拿一个架构的桥打入另一架构的应用。两个 CI runner 分别生成 Apple Silicon 与 Intel 包。缺少组件时设置页禁用开启按钮并说明原因；低于 macOS 15 的串流请求会被主进程和桥同时拒绝。
 
-正式 Release CI 从固定的 FFmpeg / x264 官方源码构建对应主机的编码器，Mac 再构建 libusb，随后构建 Python 桥和 ARM64 设备端程序。设备端程序始终运行在屏幕中，与 Mac 芯片架构无关。发布前运行资源检查、真实无 USB 编码和打包应用检查；Windows 另有 NSIS 安装后检查。Linux 不提供展域 USB 适配。
+正式 Release CI 从固定的 FFmpeg / x264 / x265 官方源码构建对应主机的编码器，Mac 再构建 libusb，随后构建 Python 桥和 ARM64 设备端程序。设备端程序始终运行在屏幕中，与 Mac 芯片架构无关。发布前运行资源检查、真实无 USB 编码和打包应用检查；Windows 另有 NSIS 安装后检查。Linux 不提供展域 USB 适配。
 
 无硬件检查：
 
@@ -100,10 +127,13 @@ node scripts/verify-screen-curved.mjs
 node scripts/verify-screen-attention.mjs # 四 Agent 测试控件、完整标题、多语言和边界
 node scripts/verify-screen-sync.mjs
 node scripts/verify-screen-encoder.mjs  # 先构建内部桥，真实编码但不连接 USB
+node scripts/verify-screen-ryuo4.mjs    # 龙王 10:4 四卡/六卡和回答/授权截图；合成数据，无 USB
 ```
+
+龙王源码编码链可用 `node scripts/verify-ryuo-screen-encoder.mjs --python <Python可执行文件> --ffmpeg <FFmpeg可执行文件>` 验证；两个参数须为绝对路径，编码器需含 libx265 和 MPEG-TS。脚本临时准备隔离配置与编码器资源，强制 `--dry-run`、不提供 ADB，验证原生 BGRA 尺寸、HEVC 输出、静止帧重复、EOF 和桌面恢复；报告保留在忽略的 `.local/qa/ryuo-encoder/`。恢复提示会如实保留，因为无 USB 测试没有接管屏幕，不能宣称设备 HomeUI 已恢复。
 
 测试脚本创建隔离配置、合成 Agent 数据和离屏预览，不访问真实账号或 USB。`AI_WATCH_STREAM_PREVIEW=1` 仅在隔离的测试配置配合合成状态时生效。测试覆盖设置页、只读控件/IPC、后台帧与台词、全屏提醒和清除、翻页、配置重启与恢复桌面。Python 编码测试和 Go 检查见桥接说明。
 
-硬件边界：当前只具备 PASE_1021 适配代码；未在本功能中完成实机 USB 串流、画质、热负载、持续运行或厂商界面恢复验收。Mac 原生编译和实际 USB 接口占用必须分别验证，模拟传输测试不能证明设备一定可被 macOS 占用。新硬件控制文案提供中文及英文回退，原有面板语言保持完整。
+硬件边界：PASE_1021 与 ROG 龙王 IV 均已加入适配代码；尚未在本功能中完成实机 USB 串流、画质、热负载、持续运行或厂商界面恢复验收。本轮未连接 ADB 设备，龙王布局截图也不代表屏幕端播放效果。macOS 为当前验收平台，Windows / Linux 的新增龙王支持仍属准备阶段，Linux 不开放连接。Mac 原生编译和实际 USB 接口占用必须分别验证，模拟传输测试不能证明设备一定可被 macOS 占用。新硬件控制文案提供中文及英文回退，原有面板语言保持完整。
 
 2026-10-27 的[双架构原生 CI](https://github.com/Andromedahk/ai-watch-panel/actions/runs/40363505467)已通过 Apple Silicon 与 Intel 的组件编译、严格签名、独立编码、Electron 离屏链、DMG / ZIP 和包内应用启动检查。两套 Actions 安装产物可用于后续实体 USB 验收；未创建公开 Release。

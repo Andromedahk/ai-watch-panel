@@ -2,6 +2,7 @@
 param(
     [string]$Python = '',
     [string]$FfmpegDir = '',
+    [string]$AdbDir = '',
     [switch]$SkipDependencies,
     [switch]$RebuildDaemon
 )
@@ -55,6 +56,9 @@ $ffmpegVersion = Get-NativeOutput $ffmpegExe '-version'
 if ($ffmpegVersion -match '--enable-nonfree') { throw 'Select an FFmpeg build without --enable-nonfree.' }
 $ffmpegEncoders = Get-NativeOutput $ffmpegExe '-hide_banner -encoders'
 if ($ffmpegEncoders -notmatch '\blibx264\b') { throw 'FFmpeg must include the libx264 encoder.' }
+if ($ffmpegEncoders -notmatch '\blibx265\b') { throw 'FFmpeg must include the libx265 encoder for native-resolution RYUO IV.' }
+$ffmpegMuxers = Get-NativeOutput $ffmpegExe '-hide_banner -muxers'
+if ($ffmpegMuxers -notmatch '\bmpegts\b') { throw 'FFmpeg must include the MPEG-TS muxer for RYUO IV; rebuild the streaming encoder.' }
 
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 if (-not $Python) {
@@ -109,6 +113,11 @@ $packagedFfmpeg = Join-Path $packagedBridge '_internal/resources/ffmpeg'
 New-Item -ItemType Directory -Path $packagedFfmpeg -Force | Out-Null
 Copy-Item -LiteralPath $ffmpegExe -Destination $packagedFfmpeg -Force
 Get-ChildItem -LiteralPath $FfmpegDir -Filter '*.dll' -File | Copy-Item -Destination $packagedFfmpeg -Force
+$adbArgs = @((Join-Path $PSScriptRoot 'optional_adb_resources.py'), '--source-root', $sourceRoot,
+    '--bundle-root', $packagedBridge, '--platform', 'win32')
+if ($AdbDir) { $adbArgs += @('--adb-dir', $AdbDir) }
+& $Python @adbArgs
+Assert-ExitCode 'Package optional RYUO IV ADB runtime'
 
 $licenseRoot = Join-Path $packagedBridge 'licenses'
 New-Item -ItemType Directory -Path $licenseRoot -Force | Out-Null

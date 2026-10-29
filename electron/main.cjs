@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, screen, dialog, Menu, Tray, nativeImage, nativeTheme, net, shell, systemPreferences, safeStorage } = require('electron');
 const { createI18n, isLanguage } = require('./i18n.cjs');
 const { PanelTray } = require('./panel-tray.cjs');
-const { ScreenStream, streamAvailability } = require('./screen-stream.cjs');
+const { ScreenStream, streamAvailability, streamDeviceAvailability } = require('./screen-stream.cjs');
 const { validateStreamConfig } = require('./screen-stream-policy.cjs');
 // About links only to this fixed project page; the renderer never supplies a URL.
 const { homepage: REPOSITORY } = require('../package.json');
@@ -182,7 +182,7 @@ function buildApplicationMenu() {
 function currentState() {
   const display = screen.getDisplayMatching(window.getBounds());
   const { providerApps: _privateLaunchPaths, kimiWorkApp: _privateWorkPath, cacheCleanupPending: _cacheFlag, ...publicPreferences } = preferences;
-  return { ...publicPreferences, stream: screenStream?.state() || { ...preferences.stream, ...streamAvailability({ packaged: app.isPackaged }), status: 'stopped', error: null, frames: 0, droppedFrames: 0, preview: false }, surface: 'desktop', collapsed, desktop: true, platform: process.platform,
+  return { ...publicPreferences, stream: screenStream?.state() || { ...preferences.stream, ...streamAvailability({ packaged: app.isPackaged, device: preferences.stream.device }), deviceAvailability: streamDeviceAvailability({ packaged: app.isPackaged }), status: 'stopped', error: null, frames: 0, droppedFrames: 0, preview: false }, surface: 'desktop', collapsed, desktop: true, platform: process.platform,
     trayAvailable: panelTray?.available === true, stored: panelTray?.stored === true,
     widgetsAvailable: widgetPublisher?.available === true, widgetSyncError: widgetPublisher?.error === true,
     widgetBackground: panelTray?.widgetBackground === true,

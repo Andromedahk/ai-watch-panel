@@ -8,7 +8,7 @@ import type { Provider, Skin } from './types';
 import type { ProviderView } from './view/model';
 
 type Props = {
-  providers: Provider[]; views: ProviderView[]; stream: { pageSeconds: number; showMascot: boolean };
+  providers: Provider[]; views: ProviderView[]; stream: { device?: 'zhanyu' | 'ryuo4'; pageSeconds: number; showMascot: boolean; agentsPerPage?: 4 | 6 };
   skin: Skin; anime: boolean; animate: boolean; testing: boolean; demo?: boolean; remote?: boolean; sampledAt?: string | null;
   renderCard: (view: ProviderView, index: number, visible: boolean) => ReactNode;
   renderMascot?: ReactNode;
@@ -43,7 +43,8 @@ export function ScreenSurface({ providers, views, stream, skin, anime, animate, 
     return () => window.removeEventListener('resize', update);
   }, []);
   const mascot = Boolean(stream.showMascot && views.length && renderMascot);
-  const layout = screenLayout(size.width, size.height, views.length, mascot);
+  const ryuo = stream.device === 'ryuo4';
+  const layout = screenLayout(size.width, size.height, views.length, mascot, stream.device, stream.agentsPerPage);
   const pages = Math.max(1, Math.ceil(views.length / layout.capacity));
   const providerKey = views.map(view => view.id).join(',');
   const page = useRotation(stream.pageSeconds, `${providerKey}:${layout.capacity}`, pages);
@@ -63,7 +64,7 @@ export function ScreenSurface({ providers, views, stream, skin, anime, animate, 
     : [reminder?.reason === 'input' ? inputLabel : reminder?.reason === 'approval' ? approvalLabel : t('{p0} 在等你处理', { p0: attentionName })];
   return <main className={`screen-surface skin-${skin} ${anime ? 'anime-mode' : ''} ${!animate ? 'no-animation' : ''}`}
     data-surface="screen" data-test-mode={testing} data-page={currentPage + 1} data-attention-count={waiting.length}
-    data-portrait={layout.portrait} data-visible-cards={visibleCount} data-screen-profile="curved-dual-face"
+    data-portrait={layout.portrait} data-visible-cards={visibleCount} data-screen-profile={ryuo ? 'ryuo-wide-left' : 'curved-dual-face'} data-device={stream.device || 'zhanyu'}
     style={{ '--screen-cols': columns, '--screen-rows': rows } as CSSProperties}>
     <div className="screen-content" data-has-mascot={mascot} aria-hidden={Boolean(attention)}>
       <section className="screen-agent-module" aria-label={s('Agent 监看模块', 'Agent monitoring modules')}>
@@ -79,7 +80,7 @@ export function ScreenSurface({ providers, views, stream, skin, anime, animate, 
       </section>
       <aside className="screen-sidebar" data-has-mascot={mascot}>
         {mascot && <div className="screen-mascot" aria-label={s('二次元看板娘模块', 'Anime companion module')}>{renderMascot}</div>}
-        <div className="screen-trend" aria-label={s('额度历史曲线', 'Quota history chart')}>{renderTrend}</div>
+        {!ryuo && <div className="screen-trend" aria-label={s('额度历史曲线', 'Quota history chart')}>{renderTrend}</div>}
       </aside>
     </div>
     {attention && reminder && <section key={reminder.key} className={`screen-attention ${waiting.length > 1 ? 'screen-attention-rotating' : ''}`} role="alert" aria-live="assertive" aria-atomic="true"

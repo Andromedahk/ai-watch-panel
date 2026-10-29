@@ -44,12 +44,17 @@ def main(argv=None):
     verify_native_binary(helper, arch)
     for name in RUNTIME_FILES:
         verify_native_binary(runtime / name, arch)
+    adb = runtime / "adb" / "adb"
+    if adb.exists():
+        verify_native_binary(adb, arch, allow_universal=True)
     verify_python_binaries(root / "_internal", arch)
     subprocess.run([str(helper), "--check"], check=True)
     smoke = Path(__file__).resolve().parent.parent / "screen-bridge" / "tests" / "smoke_panel_stream_bridge.py"
     if not smoke.is_file():
         smoke = root / "source" / "screen-bridge" / "tests" / "smoke_panel_stream_bridge.py"
     subprocess.run([sys.executable, str(smoke), "--bridge", str(helper)], check=True)
+    subprocess.run([sys.executable, str(smoke), "--bridge", str(helper), "--device", "ryuo4",
+                    "--width", "2240", "--height", "1080", "--fps", "30", "--bitrate-mbps", "6"], check=True)
     print(f"Native macOS {arch} bridge, sources, signatures and no-USB encoding verified.")
 
 

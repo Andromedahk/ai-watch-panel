@@ -24,9 +24,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools" / "poc"))
 
 try:
-    from . import streaming
+    from . import streaming, ryuo4
 except ImportError:
     import streaming
+    import ryuo4
 
 
 DEVICE_ID = "zhanyu"
@@ -83,17 +84,21 @@ def unbuffered_input(stream):
     return getattr(stream, "raw", stream)
 
 
-def raw_ffmpeg_command(binary, config):
+def raw_ffmpeg_command(binary, config, container="h264", codec="h264"):
     """Encode the renderer's full BGRA bitmap without desktop/window capture."""
-    return [str(binary), "-hide_banner", "-loglevel", "warning", "-nostdin",
+    command = [str(binary), "-hide_banner", "-loglevel", "warning", "-nostdin",
             "-f", "rawvideo", "-pixel_format", "bgra", "-video_size",
             f"{config.width}x{config.height}", "-framerate", str(config.fps),
             "-i", "pipe:0", "-an", "-vf", "setsar=1,format=yuv420p",
-            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
+            "-c:v", "libx265" if codec == "hevc" else "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
             "-b:v", f"{config.bitrate_mbps}M", "-maxrate", f"{config.bitrate_mbps}M",
-            "-bufsize", f"{config.bitrate_mbps}M", "-x264-params",
-            f"aud=1:repeat-headers=1:annexb=1:keyint={config.fps}:min-keyint={config.fps}:scenecut=0:bframes=0",
-            "-flush_packets", "1", "-f", "h264", "pipe:1"]
+            "-bufsize", f"{config.bitrate_mbps}M", "-x265-params" if codec == "hevc" else "-x264-params",
+            (f"repeat-headers=1:keyint={config.fps}:min-keyint={config.fps}:scenecut=0:bframes=0:rc-lookahead=0:pools=4:frame-threads=2:log-level=error"
+             if codec == "hevc" else f"aud=1:repeat-headers=1:annexb=1:keyint={config.fps}:min-keyint={config.fps}:scenecut=0:bframes=0"),
+            "-flush_packets", "1", "-f", container]
+    if container == "mpegts":
+        command += ["-mpegts_flags", "+resend_headers", "-muxdelay", "0", "-muxpreload", "0"]
+    return command + ["pipe:1"]
 
 
 class LatestFrameInput:
@@ -320,13 +325,188 @@ class PanelStreamSession(streaming.StreamSession):
             raise error
 
 
+
+class RyuoPanelStreamSession(PanelStreamSession):
+    """Encode the native panel as HEVC MPEG-TS for the preinstalled RYUO player."""
+    def __init__(self, config, resources_dir, emit, source, dry_run=False):
+        def emit_metric(kind, data):
+            # MPEG-TS is transported in byte chunks. The bounded input writer
+            # counts submitted complete BGRA frames, not decoded/displayed ones.
+            if kind in ("ready", "stats", "stopped") and isinstance(data, dict):
+                data = {**data, "frameMetric": "submitted"}
+            emit(kind, data)
+        super().__init__(config, resources_dir, emit_metric, source, dry_run)
+
+    def run(self, stop):
+        ryuo4.validate_config(self.config)
+        # Dry-run exercises the same MPEG-TS encoder without resolving or calling
+        # ADB, loading libusb, starting a server, or touching a physical device.
+        if not encoder_path(self.resources_dir).is_file():
+            raise FileNotFoundError("缺少随附的 FFmpeg 编码器")
+        ryuo4.validate_muxer(encoder_path(self.resources_dir))
+        if not self.dry_run:
+            problem = usb_platform_error()
+            if problem:
+                raise RuntimeError(problem.replace("展域", "ROG 龙王 4"))
+            adb = ryuo4.Adb(ryuo4.adb_path(self.resources_dir))
+        incoming = LatestFrameInput(self.source, self.config.width * self.config.height * 4, stop)
+        incoming.start()
+        error, restored, device = None, False, None
+        self.device_session = None
+        try:
+            self._cancel(stop)
+            if not self.dry_run:
+                serial = ryuo4.discover(adb)
+                self._cancel(stop)
+                device = ryuo4.DeviceSession(adb, serial)
+                self.device_session = device
+                self.emit("device", ryuo4.public_identity())
+            self.started = self.last_stats = time.monotonic()
+            self._raw(stop, incoming)
+        except InterruptedError:
+            if not stop.is_set():
+                raise
+        except Exception as exc:
+            error = exc
+        finally:
+            stop.set()
+            if device is not None:
+                try:
+                    restored = device.cleanup()
+                except Exception as exc:
+                    error = RuntimeError(str(error) + "；" + str(exc)) if error else exc
+            if incoming.error and error is None:
+                error = incoming.error
+            if self.started:
+                self._stats(rendered=False, force=True)
+            self.emit("stopped", dict(restored=restored, dryRun=self.dry_run,
+                                      frames=self.frames, failed=error is not None))
+        if error:
+            raise error
+
+    def _raw(self, stop, incoming):
+        config = self.config
+        proc = subprocess.Popen(raw_ffmpeg_command(encoder_path(self.resources_dir), config, "mpegts", "hevc"),
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, bufsize=0,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        local_stop = threading.Event()
+        errors = deque(maxlen=12)
+        relay = None
+        encoded_frames, dry_bytes = [0], [0]
+
+        def read_errors():
+            for line in iter(proc.stderr.readline, b""):
+                errors.append(line.decode("utf-8", "replace").strip())
+
+        def write_input():
+            next_frame = time.monotonic()
+            try:
+                while not local_stop.is_set() and not stop.is_set():
+                    if not incoming.available.wait(0.1):
+                        continue
+                    delay = next_frame - time.monotonic()
+                    if delay > 0 and local_stop.wait(delay):
+                        return
+                    frame, _ = incoming.snapshot()
+                    if frame is None or stop.is_set():
+                        continue
+                    remaining = memoryview(frame)
+                    while remaining and not local_stop.is_set() and not stop.is_set():
+                        written = proc.stdin.write(remaining)
+                        if not written:
+                            raise BrokenPipeError("编码器输入已关闭")
+                        remaining = remaining[written:]
+                    if not remaining:
+                        encoded_frames[0] += 1
+                    next_frame = max(next_frame + 1 / config.fps, time.monotonic())
+            except Exception as exc:
+                if not local_stop.is_set() and not stop.is_set():
+                    errors.append(str(exc))
+                    local_stop.set()
+            finally:
+                try:
+                    proc.stdin.close()
+                except OSError:
+                    pass
+
+        def drain_dry_output():
+            while not local_stop.is_set() and not stop.is_set():
+                chunk = proc.stdout.read(16 * 1024)
+                if not chunk:
+                    return
+                dry_bytes[0] += len(chunk)
+
+        workers = [threading.Thread(target=read_errors, name="ryuo-encoder-errors", daemon=True),
+                   threading.Thread(target=write_input, name="ryuo-encoder-input", daemon=True)]
+        if self.dry_run:
+            workers.append(threading.Thread(target=drain_dry_output, name="ryuo-dry-output", daemon=True))
+        try:
+            if not self.dry_run:
+                relay = ryuo4.TsRelay(proc.stdout, local_stop)
+                relay.start()
+                self._cancel(stop)
+                self.device_session.launch(relay.port)
+                self._cancel(stop)
+            for worker in workers:
+                worker.start()
+            self.emit("ready", dict(protocol=PROTOCOL_VERSION, device=ryuo4.DEVICE_ID,
+                                    width=config.width, height=config.height, fps=config.fps,
+                                    pixelFormat="bgra", frameBytes=config.width * config.height * 4,
+                                    codec="hevc", container="mpegts", dryRun=self.dry_run))
+            self.emit("status", "正在串流 · ROG 龙王 4" if not self.dry_run else "编码自检 · 未连接设备")
+            previous_frames = previous_bytes = 0
+            started = time.monotonic()
+            while not stop.wait(0.1):
+                if local_stop.is_set() or proc.poll() is not None:
+                    raise RuntimeError("ROG 龙王 4 编码器已退出：" + "\n".join(errors))
+                if relay is not None:
+                    if relay.error:
+                        raise RuntimeError("ROG 龙王 4 传输失败：" + str(relay.error))
+                    if not relay.connected.is_set() and time.monotonic() - started > 20:
+                        raise RuntimeError("ROG 龙王 4 播放器未连接，请检查定制固件与播放器")
+                    if relay.connected.is_set() and time.monotonic() - relay.last_sent > 10:
+                        raise RuntimeError("ROG 龙王 4 已停止接收串流")
+                frames, sent = encoded_frames[0], relay.bytes if relay else dry_bytes[0]
+                self.frames += frames - previous_frames
+                self.window_frames += frames - previous_frames
+                self._stats(sent - previous_bytes, rendered=False)
+                previous_frames, previous_bytes = frames, sent
+            self.frames += encoded_frames[0] - previous_frames
+            self.window_frames += encoded_frames[0] - previous_frames
+            self._stats((relay.bytes if relay else dry_bytes[0]) - previous_bytes, rendered=False)
+            if incoming.error:
+                raise incoming.error
+        finally:
+            local_stop.set()
+            if relay is not None:
+                relay.close_sockets()
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=3)
+            if relay is not None:
+                relay.close()
+            for worker in workers:
+                if worker.ident is not None:
+                    worker.join(timeout=2)
+            for pipe in (proc.stdin, proc.stdout, proc.stderr):
+                try:
+                    pipe.close()
+                except OSError:
+                    pass
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--device", choices=[DEVICE_ID], default=DEVICE_ID)
-    parser.add_argument("--width", type=int, default=2240)
-    parser.add_argument("--height", type=int, default=1080)
+    parser.add_argument("--device", choices=[DEVICE_ID, ryuo4.DEVICE_ID], default=DEVICE_ID)
+    parser.add_argument("--width", type=int)
+    parser.add_argument("--height", type=int)
     parser.add_argument("--fps", type=int, default=30)
-    parser.add_argument("--bitrate-mbps", type=int, default=8)
+    parser.add_argument("--bitrate-mbps", type=int)
     parser.add_argument("--resources", type=Path, default=default_resources())
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Check local runtime files without opening USB")
@@ -348,8 +528,37 @@ def main(argv=None):
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), lambda *_: stop.set())
     try:
-        config = streaming.StreamConfig(width=args.width, height=args.height, fps=args.fps,
-                                        bitrate_mbps=args.bitrate_mbps, show_cursor=False).validate()
+        is_ryuo = args.device == ryuo4.DEVICE_ID
+        width = args.width if args.width is not None else 2240
+        height = args.height if args.height is not None else 1080
+        bitrate = args.bitrate_mbps if args.bitrate_mbps is not None else (6 if is_ryuo else 8)
+        config = streaming.StreamConfig(width=width, height=height, fps=args.fps,
+                                        bitrate_mbps=bitrate, show_cursor=False).validate()
+        if is_ryuo:
+            ryuo4.validate_config(config)
+        if is_ryuo and (args.check or args.probe):
+            problem, adb_binary = None, None
+            try:
+                if not encoder_path(args.resources).is_file():
+                    raise FileNotFoundError("缺少随附的 FFmpeg 编码器")
+                ryuo4.validate_muxer(encoder_path(args.resources))
+                platform_problem = usb_platform_error()
+                if platform_problem:
+                    raise RuntimeError(platform_problem.replace("展域", "ROG 龙王 4"))
+                adb_binary = ryuo4.adb_path(args.resources)
+            except (OSError, RuntimeError) as exc:
+                problem = str(exc)
+            if args.check:
+                emit("check", dict(protocol=PROTOCOL_VERSION, device=args.device,
+                                   encoder=encoder_path(args.resources).is_file(), adb=adb_binary is not None,
+                                   platform=sys.platform, available=problem is None, reason=problem))
+                return 0 if problem is None else 1
+            if problem:
+                raise RuntimeError(problem)
+            ryuo4.discover(ryuo4.Adb(adb_binary))
+            emit("probe", dict(device=args.device, platform=sys.platform,
+                               info=ryuo4.public_identity(), playbackStarted=False))
+            return 0
         if args.check:
             encoder = encoder_path(args.resources).is_file()
             daemon = (args.resources / "streamd-arm64").is_file()
@@ -373,7 +582,8 @@ def main(argv=None):
             finally:
                 screen.close()
             return 0
-        session = PanelStreamSession(config, args.resources, emit, unbuffered_input(sys.stdin.buffer), args.dry_run)
+        session_class = RyuoPanelStreamSession if is_ryuo else PanelStreamSession
+        session = session_class(config, args.resources, emit, unbuffered_input(sys.stdin.buffer), args.dry_run)
         session.run(stop)
         return 0
     except Exception as exc:
