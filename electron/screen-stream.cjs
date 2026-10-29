@@ -11,9 +11,10 @@ function isFile(file) {
 // Detect incomplete custom builds before changing desktop mode or touching USB;
 // the rest of AI Watch remains available when streaming resources are missing.
 function streamAvailability({ packaged = false, resourcesPath = process.resourcesPath, root = path.resolve(__dirname, '..'),
-  env = process.env, platform = process.platform, arch = process.arch, osRelease = os.release(), preview = false, fileExists = isFile } = {}) {
+  env = process.env, platform = process.platform, arch = process.arch, osRelease = os.release(), preview = false, device = 'zhanyu', fileExists = isFile } = {}) {
+  if (!Object.hasOwn(DEVICES, device)) return { available: false, unavailableReason: '不支持的屏幕类型' };
   if (preview) return { available: true, unavailableReason: null };
-  if (!['win32', 'darwin'].includes(platform)) return { available: false, unavailableReason: '展域 USB 串流需要 Windows 或 macOS 15 及以上' };
+  if (!['win32', 'darwin'].includes(platform)) return { available: false, unavailableReason: 'USB 串流需要 Windows 或 macOS 15 及以上' };
   if (platform === 'darwin' && (!Number.isInteger(Number(osRelease.split('.')[0])) || Number(osRelease.split('.')[0]) < 24)) {
     return { available: false, unavailableReason: 'Mac USB 串流需要 macOS 15 及以上' };
   }
@@ -23,22 +24,44 @@ function streamAvailability({ packaged = false, resourcesPath = process.resource
   const bundle = packaged ? path.join(resourcesPath || '', 'screen-bridge')
     : path.join(root, '.local', 'screen-bridge', 'XANALI-Panel-Bridge');
   const hasBridge = fileExists(path.join(bundle, bridgeName));
-  let resources;
+  let resources, sourceMode = false;
   if (packaged || (!env.XANALI_PYTHON && hasBridge)) {
     if (!hasBridge) return { available: false, unavailableReason: '此安装包未包含串流组件，请使用包含串流组件的 AI Watch 安装包' };
     resources = path.join(bundle, '_internal', 'resources');
   } else {
+    sourceMode = true;
     const source = path.join(root, 'screen-bridge');
     resources = path.join(source, 'resources');
     if (!fileExists(path.join(source, 'app', 'panel_stream_bridge.py'))) {
       return { available: false, unavailableReason: '开发串流资源未准备完成，请先构建串流组件或准备 Python 桥、编码器和设备端服务' };
     }
   }
+  if (device === 'ryuo4') {
+    if (!fileExists(path.join(resources, 'ffmpeg', encoderName))) {
+      return { available: false, unavailableReason: '龙王 IV 串流缺少 FFmpeg 编码器，请重新构建串流组件' };
+    }
+    const adbName = platform === 'win32' ? 'adb.exe' : 'adb';
+    const bundledAdb = path.join(resources, 'adb', adbName);
+    const searchPath = (env.PATH || env.Path || '').split(platform === 'win32' ? ';' : path.delimiter).filter(Boolean);
+    const sourceAdb = sourceMode && (env.RYUO_ADB ? path.isAbsolute(env.RYUO_ADB) && fileExists(env.RYUO_ADB) : searchPath.some(directory => fileExists(path.join(directory, adbName))));
+    if (!fileExists(bundledAdb) && !sourceAdb) {
+      return { available: false, unavailableReason: '龙王 IV 串流缺少 ADB：请使用包含 Android platform-tools 的构建；源码开发可设置 RYUO_ADB' };
+    }
+    if (platform === 'win32' && fileExists(bundledAdb)
+        && ['AdbWinApi.dll', 'AdbWinUsbApi.dll'].some(name => !fileExists(path.join(resources, 'adb', name)))) {
+      return { available: false, unavailableReason: '龙王 IV 的 ADB 运行库不完整，请重新构建包含 platform-tools DLL 的应用' };
+    }
+    return { available: true, unavailableReason: null };
+  }
   if (!fileExists(path.join(resources, 'ffmpeg', encoderName)) || !fileExists(path.join(resources, 'streamd-arm64'))
       || platform === 'darwin' && !fileExists(path.join(resources, 'libusb', 'libusb-1.0.0.dylib'))) {
     return { available: false, unavailableReason: '串流组件不完整：缺少编码器、USB 运行库或设备端服务，请重新构建完整应用' };
   }
   return { available: true, unavailableReason: null };
+}
+
+function streamDeviceAvailability(options = {}) {
+  return Object.fromEntries(Object.keys(DEVICES).map(device => [device, streamAvailability({ ...options, device })]));
 }
 
 function bridgeCommand({ packaged = false, resourcesPath = process.resourcesPath, root = path.resolve(__dirname, '..'), env = process.env, platform = process.platform, fileExists = isFile } = {}) {
@@ -95,9 +118,9 @@ class ScreenStream {
     this.status = 'stopped'; this.error = null; this.window = null; this.child = null;
     this.operation = Promise.resolve(); this.generation = 0; this.pump = null;
   }
-  availability() { return streamAvailability({ packaged: this.app.isPackaged, preview: this.preview }); }
+  availability() { return streamAvailability({ packaged: this.app.isPackaged, preview: this.preview, device: this.getConfig().device }); }
   assertAvailable() { const state = this.availability(); if (!state.available) throw new Error(state.unavailableReason); }
-  state() { return { ...this.getConfig(), ...this.availability(), status: this.status, error: this.error,
+  state() { return { ...this.getConfig(), ...this.availability(), deviceAvailability: streamDeviceAvailability({ packaged: this.app.isPackaged, preview: this.preview }), status: this.status, error: this.error,
     frames: this.preview ? this.pump?.frames || 0 : this.bridgeStats?.frames || 0,
     droppedFrames: (this.pump?.droppedFrames || 0) + (this.bridgeStats?.skipped || 0), preview: this.preview }; }
   serialize(callback) { const result = this.operation.then(callback); this.operation = result.catch(() => {}); return result; }
@@ -185,7 +208,9 @@ class ScreenStream {
       this.child = child;
       child.streamResult = { ready: false, stopped: null, error: null };
       child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
-      const timer = setTimeout(() => reject(new Error('屏幕连接超时，请确认设备已连接并退出 KANALI')), 90000);
+      const timer = setTimeout(() => reject(new Error(config.device === 'ryuo4'
+        ? '龙王 IV 连接超时，请确认 USB ADB 已授权、播放器已预置并退出其他串流软件'
+        : '屏幕连接超时，请确认设备已连接并退出 KANALI')), 90000);
       this.cancelStart = () => { clearTimeout(timer); reject(new Error('串流启动已取消')); };
       const fail = message => { clearTimeout(timer); if (!ready) reject(new Error(message)); else this.fail(message, generation); };
       child.stdin.on('error', () => fail('串流管道已断开'));
@@ -261,4 +286,4 @@ class ScreenStream {
     this.status = 'stopped'; this.error = null; this.onChange();
   }
 }
-module.exports = { ScreenStream, FramePump, bridgeCommand, streamAvailability };
+module.exports = { ScreenStream, FramePump, bridgeCommand, streamAvailability, streamDeviceAvailability };

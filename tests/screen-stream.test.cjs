@@ -4,7 +4,7 @@ const { EventEmitter } = require('node:events');
 const { PassThrough } = require('node:stream');
 const path = require('node:path');
 const { DEFAULT_STREAM_CONFIG, streamPreferences, validateStreamConfig } = require('../electron/screen-stream-policy.cjs');
-const { FramePump, ScreenStream, bridgeCommand, streamAvailability } = require('../electron/screen-stream.cjs');
+const { FramePump, ScreenStream, bridgeCommand, streamAvailability, streamDeviceAvailability } = require('../electron/screen-stream.cjs');
 const { validPreferences } = require('../electron/window-policy.cjs');
 
 test('screen settings validate resolutions, resource bounds and device identities before launching', () => {
@@ -29,6 +29,64 @@ test('saved stream mode survives ordinary preferences migration; corrupt input r
   assert.equal(prefs.stream.showMascot, false);
   assert.deepEqual(streamPreferences({ enabled: true, device: 'missing-adapter' }), DEFAULT_STREAM_CONFIG);
   assert.deepEqual(streamPreferences(null), DEFAULT_STREAM_CONFIG);
+});
+
+test('RYUO uses native HEVC defaults and rejects dimensions outside the physical screen', () => {
+  const config = validateStreamConfig({ device: 'ryuo4' });
+  assert.equal(config.width, 2240); assert.equal(config.height, 1080);
+  assert.equal(config.bitrateMbps, 6); assert.equal(config.fps, 30);
+  assert.equal(config.agentsPerPage, 4);
+  assert.equal(validateStreamConfig({ device: 'ryuo4', agentsPerPage: 6 }).agentsPerPage, 6);
+  assert.throws(() => validateStreamConfig({ agentsPerPage: 5 }), /page size/);
+  assert.throws(() => validateStreamConfig({ agentsPerPage: '6' }), /page size/);
+  assert.equal(validateStreamConfig({ device: 'ryuo4', width: 1920, height: 1080 }).height, 1080);
+  for (const dimensions of [{ width: 2242, height: 926 }, { width: 1920, height: 1090 }, { width: 1080, height: 1920 }]) {
+    assert.throws(() => validateStreamConfig({ device: 'ryuo4', ...dimensions }), /resolution/);
+  }
+  assert.equal(validPreferences({ stream: { device: 'ryuo4', enabled: true } }).stream.device, 'ryuo4');
+  assert.equal(validPreferences({ stream: { device: 'ryuo4', enabled: true } }).stream.width, 2240);
+  assert.equal(validPreferences({ stream: { device: 'ryuo4', enabled: true } }).stream.enabled, true);
+});
+
+test('packaged RYUO needs its own ADB resources and does not depend on the Zhanyu daemon or libusb', () => {
+  const resourcesPath = path.resolve('ryuo-fixture'), bundle = path.join(resourcesPath, 'screen-bridge');
+  const resources = path.join(bundle, '_internal', 'resources');
+  const files = new Set([path.join(bundle, 'XANALI-Panel-Bridge'), path.join(resources, 'ffmpeg', 'ffmpeg')]);
+  const options = { packaged: true, platform: 'darwin', osRelease: '24.0.0', arch: 'arm64', resourcesPath,
+    env: { RYUO_ADB: '/external/adb', PATH: '/external' }, fileExists: file => files.has(file) };
+  files.add('/external/adb');
+  assert.match(streamAvailability({ ...options, device: 'ryuo4' }).unavailableReason, /缺少 ADB/);
+  files.add(path.join(resources, 'adb', 'adb'));
+  assert.deepEqual(streamAvailability({ ...options, device: 'ryuo4' }), { available: true, unavailableReason: null });
+  const capabilities = streamDeviceAvailability(options);
+  assert.equal(capabilities.ryuo4.available, true);
+  assert.equal(capabilities.zhanyu.available, false);
+  assert.equal(Object.hasOwn(capabilities.ryuo4, 'adbPath'), false, 'renderer gets capabilities, never local tool paths');
+  assert.equal(streamAvailability({ ...options, device: '__proto__', preview: true }).available, false);
+});
+
+test('Windows RYUO bundle requires both platform-tools DLLs', () => {
+  const resourcesPath = path.resolve('ryuo-win-fixture'), bundle = path.join(resourcesPath, 'screen-bridge');
+  const resources = path.join(bundle, '_internal', 'resources');
+  const files = new Set(['XANALI-Panel-Bridge.exe', '_internal/resources/ffmpeg/ffmpeg.exe', '_internal/resources/adb/adb.exe'].map(name => path.join(bundle, name)));
+  const options = { packaged: true, device: 'ryuo4', platform: 'win32', resourcesPath, fileExists: file => files.has(file) };
+  assert.match(streamAvailability(options).unavailableReason, /运行库不完整/);
+  files.add(path.join(resources, 'adb', 'AdbWinApi.dll'));
+  assert.equal(streamAvailability(options).available, false);
+  files.add(path.join(resources, 'adb', 'AdbWinUsbApi.dll'));
+  assert.equal(streamAvailability(options).available, true);
+});
+
+test('only source-mode RYUO resolves an explicitly supplied or PATH ADB', () => {
+  const root = path.resolve('ryuo-source-fixture');
+  const files = new Set(['app/panel_stream_bridge.py', 'resources/ffmpeg/ffmpeg'].map(name => path.join(root, 'screen-bridge', name)));
+  files.add('/dev-tools/adb');
+  const options = { root, device: 'ryuo4', platform: 'darwin', osRelease: '24.0.0', arch: 'arm64', fileExists: file => files.has(file) };
+  assert.equal(streamAvailability({ ...options, env: { RYUO_ADB: '/dev-tools/adb' } }).available, true);
+  assert.equal(streamAvailability({ ...options, env: { PATH: '/dev-tools' } }).available, true);
+  assert.equal(streamAvailability({ ...options, env: { RYUO_ADB: '/missing/adb', PATH: '/dev-tools' } }).available, false);
+  files.add(path.join(root, '.local/screen-bridge/XANALI-Panel-Bridge/XANALI-Panel-Bridge'));
+  assert.equal(streamAvailability({ ...options, env: { RYUO_ADB: '/dev-tools/adb' } }).available, false);
 });
 
 test('packaged availability requires the bridge, FFmpeg and device daemon before enabling streaming', () => {

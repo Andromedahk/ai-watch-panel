@@ -1,4 +1,4 @@
-"""Exercise real BGRA -> FFmpeg -> H.264 -> NDJSON without opening USB.
+"""Exercise real BGRA -> FFmpeg -> H.264/HEVC -> NDJSON without opening USB.
 
 Run with the source Python runtime, or --bridge <packaged bridge executable>.
 """
@@ -15,13 +15,16 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bridge", type=Path)
+    parser.add_argument("--device", choices=("zhanyu", "ryuo4"), default="zhanyu")
     parser.add_argument("--width", type=int, default=1120)
     parser.add_argument("--height", type=int, default=540)
     parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument("--bitrate-mbps", type=int, default=8)
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     command = [str(args.bridge)] if args.bridge else [sys.executable, str(root / "app" / "panel_stream_bridge.py")]
-    command += ["--dry-run", "--width", str(args.width), "--height", str(args.height), "--fps", str(args.fps)]
+    command += ["--dry-run", "--device", args.device, "--width", str(args.width), "--height", str(args.height),
+                "--fps", str(args.fps), "--bitrate-mbps", str(args.bitrate_mbps)]
     proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     events, messages, errors = queue.Queue(), [], []
@@ -49,6 +52,8 @@ def main():
                 raise AssertionError(event["data"])
         assert event["data"]["frameBytes"] == args.width * args.height * 4
         assert event["data"]["dryRun"]
+        if args.device == "ryuo4":
+            assert event["data"]["codec"] == "hevc" and event["data"]["container"] == "mpegts", event
         for index in range(args.fps * 2):
             pixel = bytes((index * 5 % 256, index * 3 % 256, 180, 255))
             proc.stdin.write(pixel * (args.width * args.height))
@@ -67,7 +72,7 @@ def main():
         assert stopped["frames"] >= args.fps * 2, stopped
         stats = [event["data"] for event in messages if event["type"] == "stats"]
         assert stats and stats[-1]["bytes"] > 0, stats
-        print(json.dumps(dict(ok=True, deviceAccess=False, width=args.width, height=args.height,
+        print(json.dumps(dict(ok=True, deviceAccess=False, device=args.device, width=args.width, height=args.height,
                               targetFps=args.fps, frames=stopped["frames"],
                               bytes=stats[-1]["bytes"], stderr="".join(errors))))
     finally:

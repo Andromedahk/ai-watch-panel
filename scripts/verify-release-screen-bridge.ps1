@@ -9,11 +9,16 @@ $required = @(
     '_internal/resources/ffmpeg/ffmpeg.exe',
     'source/ffmpeg/ffmpeg-9.0.2.tar.xz',
     'source/ffmpeg/x264-b35605ace3ddf7c1a5d67a2eb553f034aef41d55.tar.bz2',
+    'source/ffmpeg/x265_4.1.tar.gz',
+    'source/ffmpeg/x265-CMakeCache.txt',
+    'source/ffmpeg/x265-configure.log',
+    'source/ffmpeg/x265-build.log',
     'source/ffmpeg/build-release-ffmpeg.sh',
     'source/ffmpeg/BUILD-INFO.txt',
     'source/ffmpeg/ENCODER-SHA256SUMS.txt',
     'licenses/ffmpeg/FFmpeg-COPYING.GPLv2.txt',
     'licenses/ffmpeg/x264-COPYING.txt',
+    'licenses/ffmpeg/x265-COPYING.txt',
     'THIRD-PARTY-NOTICES.md'
 )
 foreach ($relative in $required) {
@@ -28,6 +33,7 @@ if ($LASTEXITCODE -ne 0) { throw 'The installed screen bridge runtime failed --c
 $sources = @{
     'ffmpeg-9.0.2.tar.xz' = '8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e'
     'x264-b35605ace3ddf7c1a5d67a2eb553f034aef41d55.tar.bz2' = '6eeb82934e69fd51e043bd8c5b0d152839638d1ce7aa4eea65a3fedcf83ff224'
+    'x265_4.1.tar.gz' = 'a31699c6a89806b74b0151e5e6a7df65de4b49050482fe5ebf8a4379d7af8f29'
 }
 foreach ($name in $sources.Keys) {
     $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $BridgeRoot "source/ffmpeg/$name")).Hash.ToLowerInvariant()
@@ -48,4 +54,6 @@ foreach ($line in Get-Content (Join-Path $BridgeRoot 'source/ffmpeg/ENCODER-SHA2
 $projectRoot = Split-Path $PSScriptRoot -Parent
 python (Join-Path $projectRoot 'screen-bridge/tests/smoke_panel_stream_bridge.py') --bridge (Join-Path $BridgeRoot 'XANALI-Panel-Bridge.exe')
 if ($LASTEXITCODE -ne 0) { throw 'The installed screen bridge failed its no-USB encoding test.' }
+python (Join-Path $projectRoot 'screen-bridge/tests/smoke_panel_stream_bridge.py') --bridge (Join-Path $BridgeRoot 'XANALI-Panel-Bridge.exe') --device ryuo4 --width 2240 --height 1080 --fps 30 --bitrate-mbps 6
+if ($LASTEXITCODE -ne 0) { throw 'The installed screen bridge failed its native-resolution HEVC no-USB encoding test.' }
 Write-Host 'Packaged screen bridge, corresponding source, and real no-USB encoding verified.'

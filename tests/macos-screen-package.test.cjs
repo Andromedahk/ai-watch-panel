@@ -56,6 +56,22 @@ test('Packaging hook does not require a Mac bridge for Windows or Linux', async 
   await beforePack({ electronPlatformName: 'win32' });
   await beforePack({ electronPlatformName: 'linux' });
 });
+test('Mac packaging checks optional RYUO ADB CPU and permits a compatible universal executable', t => {
+  const root = bundle(t);
+  const adb = path.join(root, '_internal/resources/adb/adb');
+  fs.mkdirSync(path.dirname(adb), { recursive: true });
+  fs.copyFileSync(path.join(root, 'XANALI-Panel-Bridge'), adb);
+  beforePack.validateBridge(root, 'arm64');
+  const bytes = fs.readFileSync(adb);
+  bytes.writeUInt32LE(0x01000007, 4);
+  fs.writeFileSync(adb, bytes);
+  assert.throws(() => beforePack.validateBridge(root, 'arm64'), /Wrong architecture.*ADB/);
+  const universal = Buffer.alloc(48);
+  universal.writeUInt32BE(0xcafebabe, 0); universal.writeUInt32BE(2, 4);
+  universal.writeUInt32BE(0x01000007, 8); universal.writeUInt32BE(0x0100000c, 28);
+  fs.writeFileSync(adb, universal);
+  beforePack.validateBridge(root, 'arm64');
+});
 
 // Execute the real QA bootstrap with mocked process launch: regressions here
 // could otherwise open USB from an encoder test on a developer's Mac.

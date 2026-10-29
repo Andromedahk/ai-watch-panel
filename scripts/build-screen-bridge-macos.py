@@ -12,6 +12,7 @@ import sys
 
 from macos_stream_support import (require_native_macos, sign_python_frameworks, verify_daemon,
                                  verify_native_binary, verify_resource_bundle)
+from optional_adb_resources import adb_input_directory, copy_optional_adb
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "screen-bridge"
@@ -40,7 +41,7 @@ def copy_rebuild_sources(repository, resources, bundle):
     scripts = packaged_source / "scripts"
     scripts.mkdir(parents=True, exist_ok=True)
     for name in ("build-screen-bridge-macos.py", "build-macos-stream-resources.sh",
-                 "macos_stream_support.py", "verify-release-screen-bridge-macos.py"):
+                 "macos_stream_support.py", "optional_adb_resources.py", "verify-release-screen-bridge-macos.py"):
         shutil.copy2(repository / "scripts" / name, scripts / name)
     shutil.copytree(resources / "source", packaged_source / "native", dirs_exist_ok=True)
     shutil.copy2(resources / "resources-manifest.json", packaged_source / "native" / "resources-manifest.json")
@@ -52,6 +53,7 @@ def main(argv=None):
     parser.add_argument("--resources-dir", type=Path, help="A complete native resource bundle made by build-macos-stream-resources.sh")
     parser.add_argument("--rebuild-resources", action="store_true")
     parser.add_argument("--skip-dependencies", action="store_true")
+    parser.add_argument("--adb-dir", type=Path, help="Optional native Android platform-tools directory for RYUO IV")
     args = parser.parse_args(argv)
     arch = require_native_macos()
     if sys.version_info[:2] != (3, 13):
@@ -64,6 +66,13 @@ def main(argv=None):
     verify_resource_bundle(resources, arch)
     for name in ("ffmpeg/ffmpeg", "libusb/libusb-1.0.0.dylib"):
         verify_native_binary(resources / name, arch)
+    muxers = subprocess.check_output([str(resources / "ffmpeg" / "ffmpeg"), "-hide_banner", "-muxers"], text=True)
+    if "mpegts" not in muxers.split():
+        raise RuntimeError("Rebuild streaming resources with MPEG-TS support: use --rebuild-resources.")
+    encoders = subprocess.check_output([str(resources / "ffmpeg" / "ffmpeg"), "-hide_banner", "-encoders"], text=True)
+    if "libx265" not in encoders.split():
+        raise RuntimeError("Rebuild streaming resources with HEVC/libx265 support: use --rebuild-resources.")
+    adb_directory = adb_input_directory(SOURCE, args.adb_dir)
 
     BUILD.mkdir(parents=True, exist_ok=True)
     venv = ROOT / ".local" / "screen-bridge-venv"
@@ -99,6 +108,7 @@ def main(argv=None):
     internal = BUNDLE / "_internal" / "resources"
     for name in ("ffmpeg", "libusb"):
         shutil.copytree(resources / name, internal / name, dirs_exist_ok=True)
+    copy_optional_adb(adb_directory, BUNDLE, "darwin", arch)
     copy_rebuild_sources(ROOT, resources, BUNDLE)
     shutil.copytree(SOURCE / "licenses", BUNDLE / "licenses", dirs_exist_ok=True)
     shutil.copytree(resources / "licenses", BUNDLE / "licenses" / "native", dirs_exist_ok=True)

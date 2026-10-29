@@ -1,7 +1,8 @@
-/** The current 90° curved device has two equal physical faces in its unfolded frame.
- * Keep four agents on the left face; never move a card across the bend or move the
- * right-hand panels below it because a preview happens to be square/portrait. */
-export function screenLayout(width: number, height: number, count: number, _mascot: boolean) {
-  const capacity = Math.max(1, Math.min(count, 4));
-  return { capacity, columns: Math.min(2, capacity), portrait: height > width };
+/** Zhanyu keeps four agents on its left face. RYUO's wider left area can show
+ * four or six cards. Both profiles keep cards away from the companion area even
+ * when a preview happens to be square or portrait. */
+export function screenLayout(width: number, height: number, count: number, _mascot: boolean, device = 'zhanyu', agentsPerPage = 4) {
+  const limit = device === 'ryuo4' && agentsPerPage === 6 ? 6 : 4;
+  const capacity = Math.max(1, Math.min(count, limit));
+  return { capacity, columns: Math.min(limit === 6 ? 3 : 2, capacity), portrait: height > width };
 }

@@ -12,14 +12,16 @@ import sys
 SOURCE_HASHES = {
     "ffmpeg-9.0.2.tar.xz": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e",
     "x264-b35605ace3ddf7c1a5d67a2eb553f034aef41d55.tar.bz2": "6eeb82934e69fd51e043bd8c5b0d152839638d1ce7aa4eea65a3fedcf83ff224",
+    "x265_4.1.tar.gz": "a31699c6a89806b74b0151e5e6a7df65de4b49050482fe5ebf8a4379d7af8f29",
     "libusb-1.0.29.tar.bz2": "5977fc950f8d1395ccea9bd48c06b3f808fd3c2c961b44b0c2e6e29fc3a70a85",
 }
 RUNTIME_FILES = ("ffmpeg/ffmpeg", "libusb/libusb-1.0.0.dylib")
 REQUIRED_MATERIALS = tuple(f"source/{name}" for name in SOURCE_HASHES) + (
     "source/build-macos-stream-resources.sh", "source/BUILD-INFO.txt",
     "source/ffmpeg-version-buildconf.txt", "source/ffmpeg-config.mak", "source/x264-config.mak",
+    "source/x265-CMakeCache.txt", "source/x265-configure.log", "source/x265-build.log",
     "licenses/FFmpeg-COPYING.GPLv2.txt", "licenses/FFmpeg-COPYING.GPLv3.txt",
-    "licenses/FFmpeg-LICENSE.md", "licenses/x264-COPYING.txt", "licenses/libusb-COPYING.txt",
+    "licenses/FFmpeg-LICENSE.md", "licenses/x264-COPYING.txt", "licenses/x265-COPYING.txt", "licenses/libusb-COPYING.txt",
     "resources-manifest.json",
 )
 
@@ -89,17 +91,20 @@ def verify_resource_bundle(root: Path, arch: str) -> None:
     verify_source_archives(root / "source")
 
 
-def verify_native_architecture(path: Path, arch: str) -> None:
+def verify_native_architecture(path: Path, arch: str, *, allow_universal: bool = False) -> None:
     expected = "arm64" if arch == "arm64" else "x86_64"
     actual = subprocess.check_output(["lipo", "-archs", str(path)], text=True).split()
-    if actual != [expected]:
+    compatible = expected in actual and set(actual).issubset({"arm64", "x86_64"})
+    if not (compatible if allow_universal else actual == [expected]):
         raise ValueError(f"Wrong architecture in {path.name}: expected {expected}, got {actual}")
 
 
-def verify_native_binary(path: Path, arch: str, *, system_dependencies_only: bool = True) -> None:
-    verify_native_architecture(path, arch)
+def verify_native_binary(path: Path, arch: str, *, system_dependencies_only: bool = True,
+                         allow_universal: bool = False) -> None:
+    verify_native_architecture(path, arch, allow_universal=allow_universal)
     if system_dependencies_only:
-        listing = subprocess.check_output(["otool", "-L", str(path)], text=True)
+        command = ["otool", "-arch", "arm64" if arch == "arm64" else "x86_64", "-L", str(path)] if allow_universal else ["otool", "-L", str(path)]
+        listing = subprocess.check_output(command, text=True)
         for line in listing.splitlines()[1:]:
             dependency = line.strip().split(" (", 1)[0]
             if dependency.startswith(("/usr/lib/", "/System/Library/")):
@@ -107,7 +112,10 @@ def verify_native_binary(path: Path, arch: str, *, system_dependencies_only: boo
             if dependency == "@rpath/libusb-1.0.0.dylib" and path.name == "libusb-1.0.0.dylib":
                 continue  # LC_ID_DYLIB, not a third-party dependency.
             raise ValueError(f"Unbundled runtime dependency in {path.name}: {dependency}")
-    subprocess.run(["codesign", "--verify", "--strict", str(path)], check=True)
+    signature = ["codesign", "--verify", "--strict"]
+    if allow_universal:
+        signature.append("--all-architectures")
+    subprocess.run([*signature, str(path)], check=True)
 
 
 def framework_bundles(root: Path) -> list[Path]:
@@ -148,7 +156,8 @@ def verify_python_binaries(root: Path, arch: str) -> None:
             # code. Its signature is verified through the complete bundle below.
             verify_native_architecture(path, arch)
         else:
-            verify_native_binary(path, arch, system_dependencies_only=False)
+            verify_native_binary(path, arch, system_dependencies_only=False,
+                                 allow_universal=path.relative_to(root).as_posix() == "resources/adb/adb")
         count += 1
     if not count:
         raise ValueError("The packaged Python native runtime is missing")
