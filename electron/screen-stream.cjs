@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { DEVICES, validateStreamConfig, validateRyuoBrightness } = require('./screen-stream-policy.cjs');
+const { RyuoBrightness } = require('./ryuo-brightness.cjs');
 
 function isFile(file) {
   try { return fs.statSync(file).isFile(); } catch { return false; }
@@ -117,10 +118,13 @@ class ScreenStream {
     Object.assign(this, { app, BrowserWindow, getConfig, getState, getStatus, onChange, devUrl, preview, spawnProcess });
     this.status = 'stopped'; this.error = null; this.window = null; this.child = null;
     this.operation = Promise.resolve(); this.generation = 0; this.pump = null;
+    this.brightnessGeneration = 0;
+    this.brightness = new RyuoBrightness({ command: () => bridgeCommand({ packaged: this.app.isPackaged }),
+      spawnProcess: (...args) => this.spawnProcess(...args), preview, onChange });
   }
   availability() { return streamAvailability({ packaged: this.app.isPackaged, preview: this.preview, device: this.getConfig().device }); }
   assertAvailable() { const state = this.availability(); if (!state.available) throw new Error(state.unavailableReason); }
-  state() { return { ...this.getConfig(), ...this.availability(), deviceAvailability: streamDeviceAvailability({ packaged: this.app.isPackaged, preview: this.preview }), status: this.status, error: this.error,
+  state() { return { ...this.getConfig(), ...this.availability(), ...this.brightness.state(), deviceAvailability: streamDeviceAvailability({ packaged: this.app.isPackaged, preview: this.preview }), status: this.status, error: this.error,
     frames: this.preview ? this.pump?.frames || 0 : this.bridgeStats?.frames || 0,
     droppedFrames: (this.pump?.droppedFrames || 0) + (this.bridgeStats?.skipped || 0), preview: this.preview }; }
   serialize(callback) { const result = this.operation.then(callback); this.operation = result.catch(() => {}); return result; }
@@ -128,40 +132,18 @@ class ScreenStream {
   broadcast(channel, value) { if (this.window && !this.window.isDestroyed()) this.window.webContents.send(channel, value); }
   screenState() { return { ...this.getState(), surface: 'screen', collapsed: false, stored: false, layout: 'fullscreen' }; }
   start() { return this.serialize(() => this.startInternal()); }
-  stop() { this.cancelStart?.(); return this.serialize(() => this.stopInternal()); }
+  stop() {
+    this.cancelStart?.();
+    const brightnessStopped = this.stopRyuoBrightness();
+    return this.serialize(async () => { try { await this.stopInternal(); } finally { await brightnessStopped; } });
+  }
+  stopRyuoBrightness() { ++this.brightnessGeneration; return this.brightness.stop(); }
   setRyuoBrightness(value) {
     const brightness = validateRyuoBrightness(value);
+    const generation = this.brightnessGeneration;
     return this.serialize(() => {
-      if (this.preview) return brightness; // Isolated preview never touches USB.
-      const command = bridgeCommand({ packaged: this.app.isPackaged });
-      return new Promise((resolve, reject) => {
-        const child = this.spawnProcess(command.executable,
-          [...command.args, '--device', 'ryuo4', '--brightness', String(brightness)],
-          { cwd: command.cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-        let output = '', failure = '', applied = false, settled = false;
-        const finish = error => {
-          if (settled) return;
-          settled = true; clearTimeout(timer);
-          if (error) reject(error); else resolve(brightness);
-        };
-        const timer = setTimeout(() => { child.kill(); finish(new Error('龙王 IV 亮度调节超时，请检查 USB 连接及 HID 是否被占用')); }, 30000);
-        child.on('error', () => finish(new Error('无法启动龙王 IV 亮度组件')));
-        child.stderr.on('data', () => {}); // Drain native diagnostics; don't expose device paths.
-        child.stdout.setEncoding('utf8');
-        child.stdout.on('data', chunk => {
-          output += chunk;
-          if (output.length > 8192) { child.kill(); finish(new Error('亮度组件返回异常数据')); return; }
-          let newline;
-          while ((newline = output.indexOf('\n')) >= 0) {
-            const line = output.slice(0, newline); output = output.slice(newline + 1);
-            let message; try { message = JSON.parse(line); } catch { continue; }
-            if (message.type === 'brightness' && message.data?.brightness === brightness && message.data?.applied === true) applied = true;
-            if (message.type === 'error') failure = String(message.data || '亮度调节失败').slice(0, 500);
-          }
-        });
-        child.on('close', code => finish(code === 0 && applied && !failure ? null
-          : new Error(failure || '未确认龙王 IV 亮度已生效，请检查 USB HID 连接后重试')));
-      });
+      if (generation !== this.brightnessGeneration) throw new Error('亮度保活已停止');
+      return this.brightness.apply(brightness);
     });
   }
   async startInternal() {
@@ -169,6 +151,7 @@ class ScreenStream {
     const { enabled: _enabled, ...parameters } = this.getConfig();
     const config = validateStreamConfig(parameters);
     if (!DEVICES[config.device]) throw new Error('Unsupported screen device');
+    if (config.device !== 'ryuo4') await this.stopRyuoBrightness();
     const generation = ++this.generation;
     this.bridgeStats = null;
     this.status = 'starting'; this.error = null; this.onChange();

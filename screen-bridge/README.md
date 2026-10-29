@@ -6,7 +6,7 @@
 
 `--device ryuo4` 默认使用原生 2240 × 1080 / 30 FPS / 6 Mbps，libx265 HEVC 编码为 MPEG-TS，经本机回环 HTTP 和本次创建的 ADB reverse 转给 `com.ryuo.stream/.StreamActivity`。不刷机、不安装 APK；目标必须为已授权的唯一匹配 USB ADB 设备。龙王链路不使用展域的 libusb 与 streamd。桌面布局、10:4 分区及实机验收边界见[串流说明](../docs/SCREEN-STREAM.md#rog-龙王-iv--ryuo-iv)。
 
-`--device ryuo4 --brightness N` 独立调节 1–100% 亮度，不开启或结束串流。按 USB ADB 身份精确匹配原生 HID，发送专用 `POST brightness 1` / `{"value":N}`，再只读检查背光；不发送媒体 config、不直接写 sysfs。Windows HID 已实机验证，Mac IOKit 已准备但实机未验证。此模式与 check/probe/dry-run 互斥，使用系统库，无额外依赖。
+`--device ryuo4 --brightness N --hold` 独立保持 1–100% 亮度，不开启或结束视频。按 USB ADB 身份精确匹配原生 HID，发送专用 `POST brightness 1` / `{"value":N}`，再只读检查背光；每 2 秒发送心跳，避免 HomeUI 在约 5 秒无 HID 数据后恢复待机亮度。stdin 仅接受单行 `{"brightness":N}` 更新目标（最多 256 字节），EOF 或信号停止；初始/更新回读成功后返回 `brightness` 确认，后续返回 `brightness-heartbeat`。省略 `--hold` 保留单次调节能力，但无法保持超过固件超时。此模式与 check/probe/dry-run 互斥，不发送媒体 config、不直接写 sysfs，使用系统库，无额外依赖。Windows HID 已实机验证，Mac IOKit 已准备但实机未验证。
 
 Android platform-tools 为可选构建输入：放入 `resources/adb/`，或在 Mac 桥构建命令传 `--adb-dir`、Windows 传 `-AdbDir`；环境变量 `RYUO_ADB_DIR` / 指向 ADB 文件的 `RYUO_ADB` 也可选定输入。Mac 只需 ADB 可执行文件，Windows 另需同目录 `AdbWinApi.dll` 和 `AdbWinUsbApi.dll`。构建器校验 Mac 架构、依赖和签名，只复制指定运行时及附带的许可证 / NOTICE / 源码材料。没有 ADB 的构建继续支持展域，龙王设置页会显示组件缺失。源码模式也可使用绝对 `RYUO_ADB` 路径或 PATH；已打包应用不回退到外部 ADB。
 

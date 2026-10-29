@@ -100,6 +100,20 @@ try {
     .find(window => window.webContents.getURL().includes('surface=screen')).id), screenId);
   assert.equal((await desktop.evaluate(() => window.panel.getState())).stream.status, 'running');
   checks.push('Failed writes keep the previous saved value; retry succeeds without recreating the stream window.');
+  const holding = await desktop.evaluate(() => window.panel.getState());
+  assert.equal(holding.stream.ryuoBrightnessStatus, 'holding');
+  await app.evaluate(({ BrowserWindow }, state) => {
+    BrowserWindow.getAllWindows().filter(window => !window.webContents.getURL().includes('surface=screen'))
+      .forEach(window => window.webContents.send('panel:changed', { ...state, stream: {
+        ...state.stream, ryuoBrightnessStatus: 'error', ryuoBrightnessError: '亮度保活已中断 · QA',
+      } }));
+  }, holding);
+  await expect(desktop.locator('.stream-brightness [role="alert"]')).toContainText('亮度保活已中断 · QA');
+  await expect(desktop.locator('.stream-brightness-result')).toHaveCount(0);
+  await apply.click();
+  await expect(desktop.locator('.stream-brightness-result')).toContainText('亮度 50%，未连接设备');
+  await expect(desktop.locator('.stream-brightness [role="alert"]')).toHaveCount(0);
+  checks.push('A failed background hold clears stale success and can be reapplied without stopping video.');
   await desktop.screenshot({ path: path.join(output, 'brightness-settings.png') });
   await desktop.getByRole('combobox', { name: '屏幕类型', exact: true }).selectOption('zhanyu');
   await expect(desktop.locator('.stream-brightness')).toHaveCount(0);
@@ -108,6 +122,7 @@ try {
   checks.push('Changing device hides the controls and preserves the last setting.');
   await desktop.getByRole('button', { name: '关闭串流并恢复桌面面板', exact: true }).click();
   await expect.poll(() => desktop.evaluate(() => window.panel.getState()).then(state => state.stream.status)).toBe('stopped');
+  assert.equal((await desktop.evaluate(() => window.panel.getState())).stream.ryuoBrightnessStatus, 'inactive');
   await app.close(); app = null;
   await writeFile(path.join(profile, 'preferences.json'), JSON.stringify({
     ...JSON.parse(await readFile(path.join(profile, 'preferences.json'), 'utf8')),

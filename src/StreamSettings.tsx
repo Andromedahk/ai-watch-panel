@@ -85,9 +85,10 @@ export function StreamSettings({ state, onState }: { state: PanelState; onState:
         ? s('尚未设置亮度；滑块默认 85%，不代表设备当前亮度。', 'Brightness has not been set. The slider defaults to 85%; this is not the current device brightness.')
         : s(`上次设置：${state.ryuoBrightness}%。未读取设备当前亮度。`, `Last setting: ${state.ryuoBrightness}%. Current device brightness has not been read.`)}</p>
       <button className="dock-button" disabled={!available || !window.panel?.setRyuoBrightness || transitioning} onClick={() => void applyBrightness()}>{brightnessBusy ? s('正在应用亮度…', 'Applying brightness…') : s('应用亮度', 'Apply brightness')}</button>
-      <p className="appearance-hint">{s('连接龙王屏幕后即可单独应用，立即生效且不重启串流。', 'Apply while the RYUO display is connected. Brightness takes effect immediately without restarting the stream.')}</p>
-      {brightnessError && <p className="stream-error" role="alert">{brightnessError}</p>}
-      {brightnessApplied != null && <p className="stream-brightness-result" role="status">{stream.preview
+      <p className="appearance-hint">{s('应用后每 2 秒自动保持亮度，不重启串流。关闭串流、切换屏幕或退出软件后停止保持，设备可能恢复待机亮度。', 'Brightness is maintained every 2 seconds without restarting the stream. Maintaining stops when streaming is stopped, the display is changed, or the app quits; the device may return to standby brightness.')}</p>
+      {stream.ryuoBrightnessStatus === 'holding' && !stream.preview && <p className="stream-brightness-result" role="status">{s('亮度保持中 · 每 2 秒续期', 'Maintaining brightness · every 2 seconds')}</p>}
+      {(brightnessError || stream.ryuoBrightnessError) && <p className="stream-error" role="alert">{brightnessError || stream.ryuoBrightnessError}</p>}
+      {brightnessApplied != null && stream.ryuoBrightnessStatus === 'holding' && <p className="stream-brightness-result" role="status">{stream.preview
         ? s(`测试预览：亮度 ${brightnessApplied}%，未连接设备。`, `Test preview: brightness ${brightnessApplied}%; no device connected.`)
         : s(`已应用亮度 ${brightnessApplied}%。`, `Applied brightness ${brightnessApplied}%.`)}</p>}
     </div>}

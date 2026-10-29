@@ -514,7 +514,10 @@ def main(argv=None):
     mode.add_argument("--dry-run", action="store_true", help="Encode input without accessing any USB device")
     mode.add_argument("--probe", action="store_true", help="Read device information without deploying or starting playback")
     mode.add_argument("--brightness", type=int, help="Set RYUO IV brightness (1–100 percent) without starting or stopping playback")
+    parser.add_argument("--hold", action="store_true", help="Keep RYUO brightness alive every two seconds until stdin closes")
     args = parser.parse_args(argv)
+    if args.hold and (args.device != ryuo4.DEVICE_ID or args.brightness is None):
+        parser.error("--hold requires --device ryuo4 --brightness N")
     stop, output_lock = threading.Event(), threading.Lock()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", newline="\n", line_buffering=True)
@@ -538,7 +541,11 @@ def main(argv=None):
             problem = usb_platform_error()
             if problem:
                 raise RuntimeError(problem.replace("展域", "ROG 龙王 IV"))
-            result = ryuo_brightness.set_brightness(ryuo4.Adb(ryuo4.adb_path(args.resources)), args.brightness)
+            adb = ryuo4.Adb(ryuo4.adb_path(args.resources))
+            if args.hold:
+                ryuo_brightness.hold_brightness(adb, args.brightness, emit, unbuffered_input(sys.stdin.buffer), stop)
+                return 0
+            result = ryuo_brightness.set_brightness(adb, args.brightness)
             emit("brightness", result)
             return 0
         width = args.width if args.width is not None else 2240

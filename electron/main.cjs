@@ -339,9 +339,15 @@ async function restoreStreamDesktop() {
   finally { await setStreamDesktop(false); }
 }
 async function startStreamOutput() {
+  const brightnessGeneration = screenStream.brightnessGeneration;
   try {
     if (!streamDesktopBounds) await setStreamDesktop(true);
     await screenStream.start();
+    if (!streamShuttingDown && brightnessGeneration === screenStream.brightnessGeneration
+        && preferences.stream.device === 'ryuo4' && preferences.ryuoBrightness != null) {
+      // Brightness errors are reported separately and must not stop live video.
+      await screenStream.setRyuoBrightness(preferences.ryuoBrightness).catch(() => {});
+    }
   } catch (error) {
     try { await restoreStreamDesktop(); }
     catch (cleanupError) { throw new Error(`${error.message}；${cleanupError.message}`); }
@@ -475,6 +481,7 @@ else {
         const { enabled, ...config } = { ...previous, ...patch };
         preferences.stream = { ...validateStreamConfig(config), enabled };
         try { savePreferences(); } catch (error) { preferences.stream = previous; throw error; }
+        if (preferences.stream.device !== 'ryuo4') await screenStream.stopRyuoBrightness();
         emitState();
         if (enabled) await startStreamOutput();
         return currentState();
@@ -504,6 +511,7 @@ else {
     }));
     handle('panel:stream-stop', () => {
       screenStream.cancelStart?.();
+      void screenStream.stopRyuoBrightness();
       return serializeStream(async () => {
         await stopStreamOutput(); return currentState();
       });
@@ -794,6 +802,7 @@ else {
       event.preventDefault();
       if (!streamShuttingDown) {
         streamShuttingDown = true; screenStream.cancelStart?.();
+        void screenStream.stopRyuoBrightness();
         void serializeStream(() => screenStream.stop()).catch(() => {}).finally(() => { streamShutdownComplete = true; app.quit(); });
       }
       return;
