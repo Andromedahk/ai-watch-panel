@@ -106,6 +106,7 @@ function validPreferences(value) {
     syncRole: isSyncRole(value?.syncRole) ? value.syncRole : 'off',
     syncPort: isSyncPort(value?.syncPort) ? value.syncPort : 47321,
     stream: streamPreferences(value?.stream),
+    ryuoBrightness: Number.isInteger(value?.ryuoBrightness) && value.ryuoBrightness >= 1 && value.ryuoBrightness <= 100 ? value.ryuoBrightness : null,
     skin: isSkin(value?.skin) ? value.skin : 'watch',
     layout: isLayout(value?.layout) ? value.layout : 'single',
     windowLayout: value?.windowLayout === 'double' ? 'double' : 'single',

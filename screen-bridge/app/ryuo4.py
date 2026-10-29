@@ -1,6 +1,7 @@
 """ROG RYUO IV custom-firmware transport, using its preinstalled HTTP player.
 
-No flashing, package installation, root access or HID commands are performed.
+Streaming performs no flashing, package installation or root commands.
+The separate brightness adapter uses the vendor HID brightness command.
 Only a USB ADB device with the RYUO IV model/SoC identity is eligible.
 """
 from __future__ import annotations
@@ -75,7 +76,8 @@ class Adb:
 
 
 def discover(adb):
-    matches, unavailable = [], False
+    matches, unavailable, usb_unconfirmed = [], False, False
+    usb_serial = None
     output = adb.run("devices", "-l", timeout=15)
     for line in output.splitlines():
         parts = line.split()
@@ -87,9 +89,21 @@ def discover(adb):
         if parts[1] != "device":
             continue
         serial = parts[0]
-        # get-devpath also works on hosts whose devices -l omits the USB field.
-        # A TCP/wireless Android device must never be eligible for takeover.
-        if not adb.run("-s", serial, "get-devpath").startswith("usb:"):
+        devpath = adb.run("-s", serial, "get-devpath")
+        if sys.platform == "win32" and devpath == "unknown":
+            # The native Windows ADB backend can omit the USB path even for an
+            # authorized USB device. -d selects USB only and fails on ambiguity;
+            # never treat "unknown" or matching Android properties as USB proof.
+            if usb_serial is None:
+                try:
+                    usb_serial = adb.run("-d", "get-serialno")
+                except RuntimeError:
+                    usb_serial = ""
+            if serial != usb_serial:
+                usb_unconfirmed = True
+                continue
+        elif not devpath.startswith("usb:"):
+            # A TCP/wireless Android device is never eligible for takeover.
             continue
         identity = [adb.shell(serial, "getprop", prop) for prop in
                     ("ro.product.version", "ro.soc.model", "ro.product.model")]
@@ -115,6 +129,8 @@ def discover(adb):
         raise RuntimeError("检测到多台 ROG 龙王 4；请仅连接一台目标屏幕后重试")
     if not matches:
         suffix = "；有设备未授权或离线，请检查 USB ADB 授权" if unavailable else ""
+        if usb_unconfirmed:
+            suffix += "；Windows ADB 未提供 USB 路径且无法确认唯一 USB 设备，请暂时只保留目标屏幕的 USB ADB 连接后重试"
         raise RuntimeError("未找到已预置播放器的 ROG 龙王 4 USB 设备（0b05:1c76 / cm16 / RK3562）" + suffix)
     return matches[0]
 

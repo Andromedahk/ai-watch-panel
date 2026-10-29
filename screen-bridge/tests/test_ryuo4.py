@@ -23,6 +23,7 @@ class FakeAdb:
         self.activity_error = False
         self.home_error = False
         self.foreground = ryuo4.HOME_ACTIVITY
+        self.usb_serial = "screen-example"
 
     def run(self, *args, timeout=10):
         self.calls.append(tuple(args))
@@ -30,6 +31,10 @@ class FakeAdb:
             return "List of devices attached\n" + "\n".join(serial + " " + data[0] for serial, data in self.devices.items())
         if args[-1] == "get-devpath":
             return self.devices[args[1]][1]
+        if args == ("-d", "get-serialno"):
+            if isinstance(self.usb_serial, Exception):
+                raise self.usb_serial
+            return self.usb_serial
         if args[-2:] == ("reverse", "--list"):
             return self.rules
         return ""
@@ -56,6 +61,59 @@ class FakeAdb:
 
 
 class RyuoDeviceTests(unittest.TestCase):
+    def test_windows_unknown_path_requires_matching_usb_only_selector(self):
+        adb = FakeAdb({"screen-example": ("device", "unknown", ryuo4.MODEL, "RK3562", "cm16")})
+        with patch.object(ryuo4.sys, "platform", "win32"):
+            self.assertEqual(ryuo4.discover(adb), "screen-example")
+        self.assertIn(("-d", "get-serialno"), adb.calls)
+        self.assertIn(("shell", "screen-example", "pm", "list", "packages", ryuo4.PLAYER_PACKAGE), adb.calls)
+        self.assertFalse(any("am" in call or "reverse" in call for call in adb.calls))
+
+    def test_windows_unknown_path_rejects_other_missing_or_ambiguous_usb(self):
+        for usb_serial in ("other-usb-device", "unknown", "", RuntimeError("no devices found"),
+                           RuntimeError("more than one device/emulator")):
+            with self.subTest(usb_serial=str(usb_serial)), patch.object(ryuo4.sys, "platform", "win32"):
+                adb = FakeAdb({"screen-example": ("device", "unknown", ryuo4.MODEL, "RK3562", "cm16")})
+                adb.usb_serial = usb_serial
+                with self.assertRaisesRegex(RuntimeError, "唯一 USB"):
+                    ryuo4.discover(adb)
+                self.assertFalse(any(call[0] == "shell" for call in adb.calls))
+
+    def test_windows_usb_fallback_does_not_accept_matching_wireless_device(self):
+        for devpath in ("localhost:5555", "unknown"):
+            with self.subTest(devpath=devpath), patch.object(ryuo4.sys, "platform", "win32"):
+                adb = FakeAdb({"localhost:5555": ("device", devpath, ryuo4.MODEL, "RK3562", "cm16")})
+                with self.assertRaisesRegex(RuntimeError, "未找到"):
+                    ryuo4.discover(adb)
+                self.assertFalse(any(call[0] == "shell" for call in adb.calls))
+                if devpath != "unknown":
+                    self.assertNotIn(("-d", "get-serialno"), adb.calls)
+
+    def test_windows_usb_fallback_preserves_all_identity_and_player_checks(self):
+        for mismatch in ("model", "soc", "version", "ids", "player"):
+            with self.subTest(mismatch=mismatch), patch.object(ryuo4.sys, "platform", "win32"):
+                identity = ["device", "unknown", ryuo4.MODEL, "RK3562", "cm16"]
+                if mismatch in ("version", "soc", "model"):
+                    identity[{"version": 2, "soc": 3, "model": 4}[mismatch]] = "different-device"
+                adb = FakeAdb({"screen-example": tuple(identity)})
+                if mismatch == "ids":
+                    adb.ids["idProduct"] = "0x1234"
+                if mismatch == "player":
+                    adb.package = False
+                with self.assertRaisesRegex(RuntimeError, "未找到|未预置"):
+                    ryuo4.discover(adb)
+
+    def test_unknown_path_fallback_is_windows_only_and_existing_usb_needs_no_fallback(self):
+        adb = FakeAdb({"screen-example": ("device", "unknown", ryuo4.MODEL, "RK3562", "cm16")})
+        with patch.object(ryuo4.sys, "platform", "darwin"):
+            with self.assertRaisesRegex(RuntimeError, "未找到"):
+                ryuo4.discover(adb)
+        self.assertNotIn(("-d", "get-serialno"), adb.calls)
+        adb = FakeAdb()
+        with patch.object(ryuo4.sys, "platform", "win32"):
+            self.assertEqual(ryuo4.discover(adb), "screen-example")
+        self.assertNotIn(("-d", "get-serialno"), adb.calls)
+
     def test_discovery_requires_usb_and_exact_target_properties(self):
         adb = FakeAdb({"phone-example": ("device", "usb:phone", "phone", "RK3562", "cm16"),
                        "network-example": ("device", "localhost:5555", ryuo4.MODEL, "RK3562", "cm16"),

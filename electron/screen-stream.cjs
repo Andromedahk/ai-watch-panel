@@ -2,7 +2,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
-const { DEVICES, validateStreamConfig } = require('./screen-stream-policy.cjs');
+const { DEVICES, validateStreamConfig, validateRyuoBrightness } = require('./screen-stream-policy.cjs');
+const { RyuoBrightness } = require('./ryuo-brightness.cjs');
 
 function isFile(file) {
   try { return fs.statSync(file).isFile(); } catch { return false; }
@@ -117,10 +118,13 @@ class ScreenStream {
     Object.assign(this, { app, BrowserWindow, getConfig, getState, getStatus, onChange, devUrl, preview, spawnProcess });
     this.status = 'stopped'; this.error = null; this.window = null; this.child = null;
     this.operation = Promise.resolve(); this.generation = 0; this.pump = null;
+    this.brightnessGeneration = 0;
+    this.brightness = new RyuoBrightness({ command: () => bridgeCommand({ packaged: this.app.isPackaged }),
+      spawnProcess: (...args) => this.spawnProcess(...args), preview, onChange });
   }
   availability() { return streamAvailability({ packaged: this.app.isPackaged, preview: this.preview, device: this.getConfig().device }); }
   assertAvailable() { const state = this.availability(); if (!state.available) throw new Error(state.unavailableReason); }
-  state() { return { ...this.getConfig(), ...this.availability(), deviceAvailability: streamDeviceAvailability({ packaged: this.app.isPackaged, preview: this.preview }), status: this.status, error: this.error,
+  state() { return { ...this.getConfig(), ...this.availability(), ...this.brightness.state(), deviceAvailability: streamDeviceAvailability({ packaged: this.app.isPackaged, preview: this.preview }), status: this.status, error: this.error,
     frames: this.preview ? this.pump?.frames || 0 : this.bridgeStats?.frames || 0,
     droppedFrames: (this.pump?.droppedFrames || 0) + (this.bridgeStats?.skipped || 0), preview: this.preview }; }
   serialize(callback) { const result = this.operation.then(callback); this.operation = result.catch(() => {}); return result; }
@@ -128,12 +132,26 @@ class ScreenStream {
   broadcast(channel, value) { if (this.window && !this.window.isDestroyed()) this.window.webContents.send(channel, value); }
   screenState() { return { ...this.getState(), surface: 'screen', collapsed: false, stored: false, layout: 'fullscreen' }; }
   start() { return this.serialize(() => this.startInternal()); }
-  stop() { this.cancelStart?.(); return this.serialize(() => this.stopInternal()); }
+  stop() {
+    this.cancelStart?.();
+    const brightnessStopped = this.stopRyuoBrightness();
+    return this.serialize(async () => { try { await this.stopInternal(); } finally { await brightnessStopped; } });
+  }
+  stopRyuoBrightness() { ++this.brightnessGeneration; return this.brightness.stop(); }
+  setRyuoBrightness(value) {
+    const brightness = validateRyuoBrightness(value);
+    const generation = this.brightnessGeneration;
+    return this.serialize(() => {
+      if (generation !== this.brightnessGeneration) throw new Error('亮度保活已停止');
+      return this.brightness.apply(brightness);
+    });
+  }
   async startInternal() {
     await this.stopInternal();
     const { enabled: _enabled, ...parameters } = this.getConfig();
     const config = validateStreamConfig(parameters);
     if (!DEVICES[config.device]) throw new Error('Unsupported screen device');
+    if (config.device !== 'ryuo4') await this.stopRyuoBrightness();
     const generation = ++this.generation;
     this.bridgeStats = null;
     this.status = 'starting'; this.error = null; this.onChange();
@@ -193,7 +211,9 @@ class ScreenStream {
       this.statsTimer = setInterval(() => this.onChange(), 1000);
       this.status = 'running'; this.onChange();
     } catch (error) {
-      try { await this.stopInternal(); } catch (cleanupError) { error = new Error(`${error.message}；${cleanupError.message}`); }
+      try { await this.stopInternal(); } catch (cleanupError) {
+        if (cleanupError.message !== error.message) error = new Error(`${error.message}；${cleanupError.message}`);
+      }
       this.status = 'error'; this.error = String(error.message || error).slice(0, 500); this.onChange();
       throw error;
     }
@@ -251,7 +271,9 @@ class ScreenStream {
     if (generation !== this.generation || this.status === 'stopping' || this.status === 'stopped') return;
     void this.serialize(async () => {
       if (generation !== this.generation) return;
-      try { await this.stopInternal(); } catch (error) { message += '；' + error.message; }
+      try { await this.stopInternal(); } catch (error) {
+        if (error.message !== message) message += '；' + error.message;
+      }
       this.status = 'error'; this.error = message; this.onChange();
     });
   }

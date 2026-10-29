@@ -7,6 +7,12 @@
 .stream-field { min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; margin-block: 10px; }
 .stream-field input, .stream-field select { min-width: 0; width: 100%; color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px; font: inherit; }
 .stream-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.stream-brightness { margin-block: 14px; padding: 0 12px 8px; border: 1px solid var(--line-strong); border-radius: 8px; }
+.stream-brightness-label { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.stream-brightness-label output { font-weight: 650; font-variant-numeric: tabular-nums; }
+.stream-field input[type="range"] { padding: 0; border: 0; height: 24px; accent-color: var(--ok); background: transparent; }
+.stream-brightness .dock-button { width: 100%; }
+.stream-brightness-result { color: var(--ok); font-size: 12px; line-height: 1.6; }
 .stream-actions { display: flex; flex-direction: column; gap: 9px; }
 .stream-error { color: var(--warn); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .stream-stats { font-variant-numeric: tabular-nums; }

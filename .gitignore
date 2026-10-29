@@ -22,4 +22,5 @@ screen-bridge/tools/streamd/streamd-arm64
 
 dist-mobile/
 mobile/android/oem-config.properties
+# External upstream reference (including its nested Git repository and runtimes).
 ryuo4_screen/

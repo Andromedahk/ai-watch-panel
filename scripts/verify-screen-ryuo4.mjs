@@ -9,6 +9,7 @@ import path from 'node:path';
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-watch-ryuo4-'));
 const output = path.resolve('.local/qa/screen-ryuo4');
 const remindersOnly = process.argv.includes('--reminders-only');
+const counts = remindersOnly ? [] : process.argv.includes('--two-only') ? [2] : [2, 4, 6];
 const ids = ['claude', 'codex', 'antigravity', 'deepseek', 'zcode', 'kimi', 'qwen', 'workbuddy'];
 await mkdir(output, { recursive: true });
 await writeFile(path.join(profile, 'preferences.json'), JSON.stringify({
@@ -88,7 +89,7 @@ async function geometry(count, skin, variant) {
   assert.ok(result.bubbleText, detail);
   assert.equal(result.interactive, 0, detail); assert.equal(result.bodyOverflow, false, detail);
   assert.equal(new Set(result.cards.map(card => Math.round(card.x))).size, count === 6 ? 3 : 2, detail);
-  assert.equal(new Set(result.cards.map(card => Math.round(card.y))).size, 2, detail);
+  assert.equal(new Set(result.cards.map(card => Math.round(card.y))).size, count === 2 ? 1 : 2, detail);
   for (const card of result.cards) { assert.ok(card.right <= result.agents.right + 2 && card.bottom <= 1080, detail); assert.equal(card.overflow, false, detail); }
   checks.push({ count, skin, variant, ...result });
 }
@@ -100,7 +101,7 @@ try {
   await expect.poll(() => desktop.evaluate(() => window.panel.getState()).then(state => state.stream.status)).toBe('running');
   await outputWindow();
   const original = await desktop.evaluate(() => window.panel.getStatus());
-  for (const count of remindersOnly ? [] : [4, 6]) {
+  for (const count of counts) {
     await desktop.evaluate(count => window.panel.setStreamConfig({ agentsPerPage: count }), count);
     await outputWindow();
     for (const skin of ['watch', 'dial', 'party']) for (const variant of ['light', 'dark', 'anime']) {
@@ -117,13 +118,28 @@ try {
   await desktop.evaluate(async () => { await window.panel.setSkin('watch'); await window.panel.setTheme('dark'); await window.panel.setAnimeMode(true); });
   // Produce comparison images in fresh output windows after the rapid skin
   // matrix. This also starts each page at the same companion and metric state.
-  for (const count of remindersOnly ? [] : [4, 6]) {
+  for (const count of counts) {
     await desktop.evaluate(count => window.panel.setStreamConfig({ agentsPerPage: count }), count);
     await outputWindow();
     await expect(screen.locator('main')).toHaveClass(/anime-mode/);
     await expect(screen.locator('.provider-card:visible .avatar[data-anime="true"]')).toHaveCount(count);
     await geometry(count, 'watch', 'anime-comparison');
     await capture(`ryuo4-agents-${count}`);
+  }
+  if (counts.includes(2)) {
+    await desktop.evaluate(() => window.panel.setStreamConfig({ agentsPerPage: 2, pageSeconds: 4 }));
+    await outputWindow();
+    const visibleIds = [], pageNumbers = [];
+    for (let index = 0; index < 4; index++) {
+      await expect(screen.locator('.provider-card:visible')).toHaveCount(2);
+      const current = await screen.locator('main').getAttribute('data-page');
+      pageNumbers.push(Number(current));
+      visibleIds.push(...await screen.locator('.provider-card:visible').evaluateAll(cards => cards.map(card => card.dataset.provider)));
+      if (index < 3) await expect.poll(() => screen.locator('main').getAttribute('data-page'), { timeout: 6500 }).not.toBe(current);
+    }
+    assert.deepEqual(pageNumbers, [1, 2, 3, 4], 'two-card layout must rotate through four pages');
+    assert.deepEqual([...new Set(visibleIds)].sort(), [...ids].sort(), 'four pages must cover all eight enabled Agents');
+    checks.push({ layout: '2 × 1', pages: pageNumbers, providers: visibleIds });
   }
   for (const reason of ['input', 'approval']) {
     const snapshot = structuredClone(original);
@@ -172,7 +188,7 @@ try {
   await writeFile(path.join(output, remindersOnly ? 'reminder-checks.json' : 'checks.json'), JSON.stringify({ usbOpened: false, data: 'synthetic', humanAcceptance: { monitoringAgentsPerPage: 4, monitoringLayout: 'selected', reminderStyle: 'pending' }, checks }, null, 2));
   const panels = [['ryuo4-agents-4','已选方案：四个 Agent · 2 × 2'],['ryuo4-waiting-input','等待回答 · 左侧文字居中 / 右侧圆形角色'],['ryuo4-waiting-approval','等待授权 · 左侧文字居中 / 右侧圆形角色']];
   await writeFile(path.join(output, 'index.html'), '<!doctype html><meta charset="utf-8"><title>RYUO IV 四卡布局与提醒预览</title><style>body{margin:32px;background:#16191e;color:#edf0f4;font:18px system-ui}img{display:block;width:100%;margin:16px 0 40px}h1{font-size:28px}p{color:#bbc3ce}details{margin:48px 0;color:#bbc3ce}summary{cursor:pointer}</style><h1>ROG 龙王 IV · 已选择四 Agent 方案</h1><p>原生 2240 × 1080 · 默认每页四卡 · 右侧单看板娘与台词</p><p>合成测试数据 · 无 USB · 监看布局已选择，圆形头像与居中文字提醒等待确认</p>' + panels.map(([file,title])=>`<h2>${title}</h2><img src="${file}.png" alt="${title}">`).join('') + '<details><summary>备选：六个 Agent · 3 × 2（保留切换选项）</summary><img src="ryuo4-agents-6.png" alt="六 Agent 备选方案"></details>');
-  console.log(`RYUO layout QA passed: ${checks.length} geometry checks; ${remindersOnly ? 'vertically centered circular portrait and halo, centered left text, permitted bend overlap, question/approval alerts' : 'all skins and variants, 4/6 cards, mascot-only sidebar, centered circular question/approval alerts'}; screenshots in .local/qa/screen-ryuo4. USB was not opened. Four-card monitoring selected; reminder aesthetic acceptance pending.`);
+  console.log(`RYUO layout QA passed: ${checks.length} checks; ${remindersOnly ? 'question/approval alert geometry' : `all skins and variants, ${counts.join('/')} cards, mascot-only sidebar and question/approval alerts`}; screenshots in .local/qa/screen-ryuo4. USB was not opened.`);
 } finally {
   if (app) await app.close().catch(() => {});
   assert.ok(path.resolve(profile).startsWith(path.resolve(tmpdir()) + path.sep));

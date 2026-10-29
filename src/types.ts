@@ -16,11 +16,12 @@ export type CloudSummary = Omit<CloudConfig, 'token'> & { configured: boolean; s
 export type SyncSummary = { role: SyncRole; state: string; error?: string | null; code?: string; port?: number | null; addresses?: string[];
   paired?: number | boolean; connected?: number; name?: string; hostName?: string | null; address?: string | null };
 export type SyncHost = { address: string; port: number; name: string };
-export type ScreenStreamConfig = { device: 'zhanyu' | 'ryuo4'; width: number; height: number; fps: number; bitrateMbps: number; pageSeconds: number; showMascot: boolean; agentsPerPage: 4 | 6 };
+export type ScreenStreamConfig = { device: 'zhanyu' | 'ryuo4'; width: number; height: number; fps: number; bitrateMbps: number; pageSeconds: number; showMascot: boolean; agentsPerPage: 2 | 4 | 6 };
 export type ScreenStreamAvailability = { available: boolean; unavailableReason: string | null };
-export type ScreenStreamState = ScreenStreamConfig & { enabled: boolean; status: 'stopped' | 'starting' | 'running' | 'stopping' | 'error'; error: string | null; frames: number; droppedFrames: number; preview: boolean; available?: boolean; unavailableReason?: string | null; deviceAvailability?: Partial<Record<ScreenStreamConfig['device'], ScreenStreamAvailability>> };
+export type ScreenStreamState = ScreenStreamConfig & { enabled: boolean; status: 'stopped' | 'starting' | 'running' | 'stopping' | 'error'; error: string | null; frames: number; droppedFrames: number; preview: boolean; available?: boolean; unavailableReason?: string | null; deviceAvailability?: Partial<Record<ScreenStreamConfig['device'], ScreenStreamAvailability>>; ryuoBrightnessStatus?: 'inactive' | 'starting' | 'holding' | 'error'; ryuoBrightnessError?: string | null };
 export type PanelState = Preferences & {
   stream?: ScreenStreamState; surface?: 'screen' | 'desktop';
+  ryuoBrightness?: number | null;
   collapsed: boolean; desktop: boolean; platform: string; scaleFactor: number;
   trayAvailable: boolean; stored: boolean;
   widgetsEnabled: boolean; widgetsAvailable: boolean; widgetSyncError: boolean;
@@ -81,6 +82,7 @@ declare global {
       store(): Promise<PanelState>;
       minimize(): Promise<PanelState>;
       setStreamConfig(config: Partial<ScreenStreamConfig>): Promise<PanelState>;
+      setRyuoBrightness(value: number): Promise<PanelState>;
       startStream(): Promise<PanelState>;
       stopStream(): Promise<PanelState>;
       setWidgetsEnabled(enabled: boolean): Promise<PanelState>;

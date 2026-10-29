@@ -37,6 +37,8 @@ test('RYUO uses native HEVC defaults and rejects dimensions outside the physical
   assert.equal(config.bitrateMbps, 6); assert.equal(config.fps, 30);
   assert.equal(config.agentsPerPage, 4);
   assert.equal(validateStreamConfig({ device: 'ryuo4', agentsPerPage: 6 }).agentsPerPage, 6);
+  assert.equal(validateStreamConfig({ device: 'ryuo4', agentsPerPage: 2 }).agentsPerPage, 2);
+  assert.equal(validPreferences({ stream: { device: 'ryuo4', agentsPerPage: 2 } }).stream.agentsPerPage, 2);
   assert.throws(() => validateStreamConfig({ agentsPerPage: 5 }), /page size/);
   assert.throws(() => validateStreamConfig({ agentsPerPage: '6' }), /page size/);
   assert.equal(validateStreamConfig({ device: 'ryuo4', width: 1920, height: 1080 }).height, 1080);
@@ -336,3 +338,51 @@ test('bridge stop waits for EOF restoration and exposes restoration failures rat
     }
   }
 });
+
+for (const phase of ['startup', 'running']) {
+  for (const cleanupError of [null, '屏幕主界面恢复失败']) {
+    test(`bridge ${phase} error is reported once while distinct cleanup failures remain visible (${cleanupError || 'same error'})`, async () => {
+      const { stream, windows } = fixture();
+      const initialError = '未找到已预置播放器的 ROG 龙王 4 USB 设备';
+      const expected = cleanupError ? `${initialError}；${cleanupError}` : initialError;
+      const child = new EventEmitter();
+      child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+      child.stdin.resume();
+      child.exitCode = null;
+      child.kill = () => assert.fail('a reported bridge failure must still shut down gracefully');
+      const emit = (type, data) => child.stdout.write(JSON.stringify({ type, data }) + '\n');
+      child.stdin.on('finish', () => {
+        // The bridge's final error can repeat its initial failure, or report a
+        // separate restoration problem after the startup/streaming error.
+        emit('stopped', { restored: false, failed: true });
+        emit('error', cleanupError || initialError);
+        child.exitCode = 1;
+        child.emit('exit', 1);
+        child.emit('close', 1);
+      });
+      stream.preview = false;
+      stream.assertAvailable = () => {};
+      stream.spawnProcess = () => {
+        queueMicrotask(() => emit(phase === 'startup' ? 'error' : 'ready', phase === 'startup' ? initialError : { protocol: 1 }));
+        return child;
+      };
+      try {
+        if (phase === 'startup') {
+          await assert.rejects(stream.start(), error => {
+            assert.equal(error.message, expected);
+            return true;
+          });
+        } else {
+          await stream.start();
+          emit('error', initialError);
+          await stream.operation;
+        }
+        assert.equal(stream.status, 'error');
+        assert.equal(stream.error, expected);
+        assert.equal(windows[0].destroyed, true);
+        assert.equal(child.streamClosed, true);
+        assert.equal(stream.child, null);
+      } finally { await stream.stop(); }
+    });
+  }
+}
