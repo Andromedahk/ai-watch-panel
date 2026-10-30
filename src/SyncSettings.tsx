@@ -49,9 +49,7 @@ export function SyncSettings({ state, onState, notify }: Props) {
     <fieldset><legend>{t('本机角色')}</legend>
       <div className="segmented" aria-label={t('本机角色')}>{roles.map(([id, label]) => <button key={id} className={role === id ? 'selected' : ''} aria-pressed={role === id}
         disabled={!state.desktop || busy} onClick={() => void run(bridge => bridge.setSyncRole(id), () => t('同步设置保存失败，请重试'))}>{label}</button>)}</div>
-      <p className="appearance-hint">{role === 'host' ? t('主客户端在局域网内共享状态、额度、提醒和动态记录；只有输入配对码的设备可以连接。')
-        : role === 'client' ? t('子客户端停止读取本机助手，只显示主客户端同步的数据；外观、语言和布局保留本机设置，打开应用等操作需在主客户端完成。')
-          : t('独立运行，不与其他设备通信。')}</p>
+      {role === 'client' && <p className="appearance-hint">{t('子客户端停止读取本机助手，只显示主客户端同步的数据；外观、语言和布局保留本机设置，打开应用等操作需在主客户端完成。')}</p>}
       {role !== 'off' && <p className="sync-status" role="status" data-sync-state={sync?.state}>{syncStatusText(state, t)}</p>}
     </fieldset>
     {role === 'host' && sync && <fieldset><legend>{t('配对码')}</legend>
@@ -67,7 +65,6 @@ export function SyncSettings({ state, onState, notify }: Props) {
           void run(bridge => bridge.setSyncPort(value), () => t('同步设置保存失败，请重试'));
         }} /></label>
       <button className="dock-button" disabled={busy} onClick={() => void run(bridge => bridge.regenerateSync(), () => t('同步设置保存失败，请重试'))}>{t('重置配对码并断开所有设备')}</button>
-      <p className="appearance-hint">{t('只接受局域网地址，不共享登录凭据、密钥或本机文件路径。首次开启时系统可能询问是否允许 AI Watch 接受传入连接，请选择允许。')}</p>
     </fieldset>}
     {role === 'client' && sync && <fieldset><legend>{t('主客户端')}</legend>
       {!needsPairing ? <>

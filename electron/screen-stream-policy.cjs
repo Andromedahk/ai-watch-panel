@@ -5,7 +5,7 @@ const DEVICES = Object.freeze({
     maxWidth: 2240, maxHeight: 1080, maxPixels: 2240 * 1080, bitrateMbps: 6 }),
 });
 const DEFAULT_STREAM_CONFIG = Object.freeze({ enabled: false, device: 'zhanyu', width: 2240, height: 1080,
-  fps: 30, bitrateMbps: 8, pageSeconds: 12, showMascot: true, agentsPerPage: 4 });
+  fps: 30, bitrateMbps: 8, pageSeconds: 12, showMascot: true, agentsPerPage: 4, oledGuard: false });
 const CONFIG_KEYS = Object.keys(DEFAULT_STREAM_CONFIG).filter(key => key !== 'enabled');
 function validateStreamConfig(value, { partial = false } = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid stream configuration');
@@ -20,6 +20,7 @@ function validateStreamConfig(value, { partial = false } = {}) {
   if ((!partial || Object.hasOwn(value, 'device')) && (device.maxWidth && next.width > device.maxWidth || device.maxHeight && next.height > device.maxHeight)) throw new Error('ROG RYUO IV HEVC resolution must not exceed 2240 × 1080');
   if (next.fps < 1 || next.fps > 60 || next.bitrateMbps < 1 || next.bitrateMbps > 50 || next.pageSeconds < 4 || next.pageSeconds > 120) throw new Error('Stream parameters out of range');
   if (typeof next.showMascot !== 'boolean') throw new Error('Invalid mascot setting');
+  if (typeof next.oledGuard !== 'boolean') throw new Error('Invalid OLED guard setting');
   if (![2, 4, 6].includes(next.agentsPerPage)) throw new Error('Invalid Agent page size');
   return Object.fromEntries((partial ? Object.keys(value) : CONFIG_KEYS).map(key => [key, next[key]]));
 }

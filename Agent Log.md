@@ -20,6 +20,31 @@
 
 ---
 
+## 2026-10-30 · Claude（Anthropic / Claude Opus 5.5 / macOS 本地会话）· 合并设置精简与 OLED 防烧屏到 main
+
+- 用户授权：用户告知实机测试完成，要求合并到 `main`。
+- 基线：fetch 后 `origin/main` 仍为 `7ff51e9`，与功能分支基线一致；`--no-ff` 合并 `5101b73`，无冲突。
+- 范围：产品文件与功能分支一致，仅补充 README 和本日志的合并记录；沿用功能分支已记录的测试结果，本轮未重跑。
+
+## 2026-10-30 · Claude（Anthropic / Claude Opus 5.5 / macOS 本地会话）· 精简设置说明与 OLED 防烧屏
+
+- 分支：`claude/settings-trim-oled-guard`，基于 `main`（`7ff51e9`，先 `git pull`）。
+- 目的：按用户要求删去设置里不必要的小字，只保留快捷键和标题放不下的必要说明；小屏串流加入可勾选的 OLED 防烧屏。
+- 操作：
+  - `src/App.tsx`、`SyncSettings.tsx`、`CloudSettings.tsx`、`TestControls.tsx`、`StreamSettings.tsx`：删除冗余副标题与提示；保留 Escape / 长按排序、Claude 联网与钩子、辅助功能、千问钥匙串、上传完整内容、Kimi 来源、小组件添加方法、子客户端行为、连接前准备等说明。龙王亮度只在有上次设置时显示“上次设置：N%”。
+  - 31 条不再使用的文字从 `electron/locales/*.json` 删除（17 × 31 = 527 行）。
+  - `electron/screen-stream-policy.cjs`、`src/types.ts`：新增 `oledGuard` 布尔设置，默认 false。
+  - `src/ScreenSurface.tsx`、`src/screen.css`：开启后隐藏 AI WATCH 与时间，`main` 缩至 95%、黑底，480 秒沿四角漂移一圈；看板娘刷新时右侧侧栏交替播放淡出淡入动画。用 `!important` 保证动效关闭 / 减少动态效果时仍生效。
+  - `src/view/insights.tsx`：`Mascot` 新增 `onRefresh` 回调；`renderMascot` 改为接收回调的函数。
+  - 新增 `scripts/verify-screen-oled-guard.mjs`；`verify-ryuo-brightness.mjs` 的未设置断言改为不显示该行；`tests/screen-stream.test.cjs` 增加 oledGuard 校验。
+- 验证：`tsc --noEmit`、`npm run build` 通过；`npm test` 635 项全部通过；`verify-screen-oled-guard`、`verify-ryuo-brightness`（8 项）、`verify-screen-stream`、`test:skins`、`test:i18n` 通过，并目视检查龙王 / 展域的防烧屏截图（证据在忽略目录 `.local/qa/screen-oled-guard/`）。
+- 未完成 / 需要人类决定：
+  - `test:layouts` 在本机报 “Fullscreen transition timed out”，stash 改动后在 main 上同样失败，未修复。
+  - 未连接实体屏幕验收；漂移为亚像素级缓慢移动，文字在实体屏上是否有可见模糊需要上机确认。
+  - 未合并到 main、未推送。
+
+---
+
 ## 2026-10-30 · Codex（GPT-6.1 Sol / Windows 本地执行环境）· 合并龙王修复到 main
 
 - 用户授权：将当前功能分支合入 `main` 并推送。

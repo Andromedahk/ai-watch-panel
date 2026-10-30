@@ -13,7 +13,7 @@ type Props = {
 export function TestControls({ enabled, config, onToggle, onChange, onPreset, onView }: Props) {
   const { t } = useI18n();
   return <section className={`test-controls ${enabled ? 'enabled' : ''}`} aria-label={t("界面测试")}>
-    <label className="switch-row test-toggle"><span>{t("测试模式")}<small>{t("手动预览状态、额度与余额")}</small></span>
+    <label className="switch-row test-toggle"><span>{t("测试模式")}</span>
       <input type="checkbox" aria-label={t("测试模式")} checked={enabled} onChange={event => onToggle(event.target.checked)} />
     </label>
     {enabled && <>
