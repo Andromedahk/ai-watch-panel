@@ -16,7 +16,7 @@ test('Studio routes packaged and source RYUO video and brightness without replac
   const expected = { executable: env.RYUO_STUDIO_BRIDGE, args: ['--studio-v1'], cwd: path.dirname(env.RYUO_STUDIO_BRIDGE) };
   for (const packaged of [true, false]) {
     assert.deepEqual(bridgeCommand({ ...options, packaged }), expected);
-    assert.deepEqual(streamAvailability({ ...options, packaged }), { available: true, unavailableReason: null });
+    assert.deepEqual(streamAvailability({ ...options, packaged }), { available: true, unavailableReason: null, brightnessMinimum: 8 });
   }
   for (const key of Object.keys(env)) {
     const broken = { ...env, [key]: key === 'RYUO_STUDIO_BRIDGE' ? path.join(root, 'missing.exe') : '' };

@@ -12,22 +12,23 @@ export function StreamSettings({ state, onState }: { state: PanelState; onState:
   const s = useScreenText();
   const stream = state.stream || defaultScreenStream;
   const [draft, setDraft] = useState<ScreenStreamConfig>(stream);
+  const capability = stream.deviceAvailability?.[draft.device]
+    || (draft.device === stream.device ? stream : undefined);
+  const brightnessMinimum = capability?.brightnessMinimum ?? 1;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [brightness, setBrightness] = useState(state.ryuoBrightness ?? 85);
+  const [brightness, setBrightness] = useState(Math.max(brightnessMinimum, state.ryuoBrightness ?? 85));
   const [brightnessBusy, setBrightnessBusy] = useState(false);
   const [brightnessError, setBrightnessError] = useState('');
   const [brightnessApplied, setBrightnessApplied] = useState<number | null>(null);
   // Frame counters refresh every second; only a changed saved value can replace
   // an in-progress slider edit.
-  useEffect(() => setBrightness(state.ryuoBrightness ?? 85), [state.ryuoBrightness]);
+  useEffect(() => setBrightness(Math.max(brightnessMinimum, state.ryuoBrightness ?? 85)), [state.ryuoBrightness, brightnessMinimum]);
   const configKey = [stream.device, stream.width, stream.height, stream.fps, stream.bitrateMbps, stream.pageSeconds, stream.showMascot, stream.agentsPerPage, stream.oledGuard].join(':');
   useEffect(() => setDraft({ device: stream.device, width: stream.width, height: stream.height,
     fps: stream.fps, bitrateMbps: stream.bitrateMbps, pageSeconds: stream.pageSeconds, showMascot: stream.showMascot, agentsPerPage: stream.agentsPerPage || 4, oledGuard: Boolean(stream.oledGuard) }), [configKey]);
   const transitioning = busy || brightnessBusy || stream.status === 'starting' || stream.status === 'stopping';
   const ryuo = draft.device === 'ryuo4';
-  const capability = stream.deviceAvailability?.[draft.device]
-    || (draft.device === stream.device ? stream : undefined);
   // Preview is granted only by the main process' isolated test fixture; it never opens USB.
   const available = Boolean(window.panel?.startStream) && (['win32', 'darwin'].includes(state.platform) || stream.preview) && capability?.available !== false;
   const status = { stopped: s('未串流', 'Stopped'), starting: s('正在连接小屏幕', 'Connecting display'), running: s('正在串流', 'Streaming'), stopping: s('正在恢复屏幕', 'Restoring display'), error: s('串流未连接', 'Disconnected') }[stream.status];
@@ -74,7 +75,7 @@ export function StreamSettings({ state, onState }: { state: PanelState; onState:
     {ryuo && <p className="appearance-hint">{s('需要已刷入定制固件；屏幕提示 USB 调试授权时请允许。', 'Requires the custom firmware. Allow USB debugging if the display asks.')}</p>}
     {ryuo && <div className="stream-brightness">
       <label className="stream-field"><span className="stream-brightness-label">{s('屏幕亮度', 'Display brightness')}<output>{brightness}%</output></span>
-        <input aria-label={s('龙王屏幕亮度', 'RYUO display brightness')} type="range" min={1} max={100} step={1} value={brightness} disabled={transitioning} onChange={e => {
+        <input aria-label={s('龙王屏幕亮度', 'RYUO display brightness')} type="range" min={brightnessMinimum} max={100} step={1} value={brightness} disabled={transitioning} onChange={e => {
           setBrightness(Number(e.target.value)); setBrightnessError(''); setBrightnessApplied(null);
         }} />
       </label>

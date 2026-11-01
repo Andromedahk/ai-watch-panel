@@ -39,7 +39,7 @@ function streamAvailability({ packaged = false, resourcesPath = process.resource
   }
   if (platform === 'darwin' && !['arm64', 'x64'].includes(arch)) return { available: false, unavailableReason: 'Mac 串流组件支持 Apple Silicon 和 Intel 64 位处理器' };
   try {
-    if (studioBridgeCommand({ device, platform, env, fileExists })) return { available: true, unavailableReason: null };
+    if (studioBridgeCommand({ device, platform, env, fileExists })) return { available: true, unavailableReason: null, brightnessMinimum: 8 };
   } catch (error) { return { available: false, unavailableReason: error.message }; }
   const bridgeName = platform === 'win32' ? 'XANALI-Panel-Bridge.exe' : 'XANALI-Panel-Bridge';
   const encoderName = platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
@@ -252,7 +252,7 @@ class ScreenStream {
       child.streamResult = { ready: false, stopped: null, error: null };
       child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
       const timer = setTimeout(() => reject(new Error(config.device === 'ryuo4'
-        ? '龙王 IV 连接超时，请确认 USB ADB 已授权、播放器已预置并退出其他串流软件'
+        ? '龙王 IV 连接超时，请确认 USB 连接和 ADB 授权，并退出其他串流软件后重试'
         : '屏幕连接超时，请确认设备已连接并退出 KANALI')), 90000);
       this.cancelStart = () => { clearTimeout(timer); reject(new Error('串流启动已取消')); };
       const fail = message => { clearTimeout(timer); if (!ready) reject(new Error(message)); else this.fail(message, generation); };
