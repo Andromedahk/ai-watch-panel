@@ -121,6 +121,10 @@
     "win": {
       "extraResources": [
         {
+          "from": "electron/ryuo-studio-adapter.json",
+          "to": "ryuo-studio-adapter.json"
+        },
+        {
           "from": ".local/screen-bridge/XANALI-Panel-Bridge",
           "to": "screen-bridge",
           "filter": [

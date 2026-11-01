@@ -9,6 +9,24 @@ function isFile(file) {
   try { return fs.statSync(file).isFile(); } catch { return false; }
 }
 
+// Studio supplies the custom-firmware adapter for this one launch. Keep the
+// built-in transport available for standalone AI Watch and the other displays.
+function studioBridgeCommand({ device, platform, env, fileExists }) {
+  if (device !== 'ryuo4' || platform !== 'win32' || !env.RYUO_STUDIO_BRIDGE) return null;
+  for (const [key, label] of [['RYUO_STUDIO_BRIDGE', '适配桥'], ['RYUO_ADB', 'ADB'], ['RYUO_FFMPEG', 'FFmpeg']]) {
+    if (typeof env[key] !== 'string' || !path.isAbsolute(env[key]) || !fileExists(env[key])) {
+      throw new Error(`RYUO Studio 的${label}缺失，请使用完整软件包重新启动 AI Watch`);
+    }
+  }
+  if (typeof env.RYUO_AI_WATCH_SERIAL !== 'string' || !env.RYUO_AI_WATCH_SERIAL.trim()) {
+    throw new Error('RYUO Studio 未指定设备，请连接设备后重新启动 AI Watch');
+  }
+  let hasRoot = false;
+  try { hasRoot = path.isAbsolute(env.RYUO_AI_WATCH_APP_ROOT) && fs.statSync(env.RYUO_AI_WATCH_APP_ROOT).isDirectory(); } catch {}
+  if (!hasRoot) throw new Error('RYUO Studio 软件目录不可用，请从 Studio 重新启动 AI Watch');
+  return { executable: env.RYUO_STUDIO_BRIDGE, args: ['--studio-v1'], cwd: path.dirname(env.RYUO_STUDIO_BRIDGE) };
+}
+
 // Detect incomplete custom builds before changing desktop mode or touching USB;
 // the rest of AI Watch remains available when streaming resources are missing.
 function streamAvailability({ packaged = false, resourcesPath = process.resourcesPath, root = path.resolve(__dirname, '..'),
@@ -20,6 +38,9 @@ function streamAvailability({ packaged = false, resourcesPath = process.resource
     return { available: false, unavailableReason: 'Mac USB 串流需要 macOS 15 及以上' };
   }
   if (platform === 'darwin' && !['arm64', 'x64'].includes(arch)) return { available: false, unavailableReason: 'Mac 串流组件支持 Apple Silicon 和 Intel 64 位处理器' };
+  try {
+    if (studioBridgeCommand({ device, platform, env, fileExists })) return { available: true, unavailableReason: null };
+  } catch (error) { return { available: false, unavailableReason: error.message }; }
   const bridgeName = platform === 'win32' ? 'XANALI-Panel-Bridge.exe' : 'XANALI-Panel-Bridge';
   const encoderName = platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
   const bundle = packaged ? path.join(resourcesPath || '', 'screen-bridge')
@@ -65,7 +86,9 @@ function streamDeviceAvailability(options = {}) {
   return Object.fromEntries(Object.keys(DEVICES).map(device => [device, streamAvailability({ ...options, device })]));
 }
 
-function bridgeCommand({ packaged = false, resourcesPath = process.resourcesPath, root = path.resolve(__dirname, '..'), env = process.env, platform = process.platform, fileExists = isFile } = {}) {
+function bridgeCommand({ packaged = false, resourcesPath = process.resourcesPath, root = path.resolve(__dirname, '..'), env = process.env, platform = process.platform, device = 'zhanyu', fileExists = isFile } = {}) {
+  const studio = studioBridgeCommand({ device, platform, env, fileExists });
+  if (studio) return studio;
   const bridgeName = platform === 'win32' ? 'XANALI-Panel-Bridge.exe' : 'XANALI-Panel-Bridge';
   if (packaged) {
     const executable = path.join(resourcesPath, 'screen-bridge', bridgeName);
@@ -119,7 +142,7 @@ class ScreenStream {
     this.status = 'stopped'; this.error = null; this.window = null; this.child = null;
     this.operation = Promise.resolve(); this.generation = 0; this.pump = null;
     this.brightnessGeneration = 0;
-    this.brightness = new RyuoBrightness({ command: () => bridgeCommand({ packaged: this.app.isPackaged }),
+    this.brightness = new RyuoBrightness({ command: () => bridgeCommand({ packaged: this.app.isPackaged, device: 'ryuo4' }),
       spawnProcess: (...args) => this.spawnProcess(...args), preview, onChange });
   }
   availability() { return streamAvailability({ packaged: this.app.isPackaged, preview: this.preview, device: this.getConfig().device }); }
@@ -219,7 +242,7 @@ class ScreenStream {
     }
   }
   startBridge(config, generation) {
-    const command = bridgeCommand({ packaged: this.app.isPackaged });
+    const command = bridgeCommand({ packaged: this.app.isPackaged, device: config.device });
     const args = [...command.args, '--device', config.device, '--width', String(config.width), '--height', String(config.height),
       '--fps', String(config.fps), '--bitrate-mbps', String(config.bitrateMbps)];
     return new Promise((resolve, reject) => {

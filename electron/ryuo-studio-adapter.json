@@ -1,0 +1,6 @@
+{
+  "protocol": "dev.ryuo.aiwatch-studio.v1",
+  "bridge_argument": "--studio-v1",
+  "devices": ["ryuo4"],
+  "platforms": ["win32"]
+}
