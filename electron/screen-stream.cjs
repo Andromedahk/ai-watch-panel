@@ -208,10 +208,10 @@ class ScreenStream {
       contents.on('paint', (_event, _dirty, image) => {
         if (generation !== this.generation || image.isEmpty()) return;
         const size = image.getSize();
-        // Fractional Windows scaling can round the OSR surface up by one pixel.
+        // Fractional Windows scaling can round the OSR surface up by one or two pixels.
         // Crop only that extra right/bottom edge; never stretch a clamped frame.
-        if (size.width < config.width || size.width > config.width + 1
-            || size.height < config.height || size.height > config.height + 1) return;
+        if (size.width < config.width || size.width > config.width + 2
+            || size.height < config.height || size.height > config.height + 2) return;
         const frame = size.width === config.width && size.height === config.height ? image
           : image.crop({ x: 0, y: 0, width: config.width, height: config.height });
         const bitmap = frame.toBitmap();

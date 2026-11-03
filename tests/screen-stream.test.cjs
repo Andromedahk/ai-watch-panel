@@ -282,9 +282,9 @@ test('preview offscreen window is isolated, read-only, independent of desktop st
   } finally { await stream.stop(); }
 });
 
-test('offscreen startup crops only a one-pixel DPI overscan and preserves exact-size frames', async () => {
+test('offscreen startup crops only a two-pixel DPI overscan and preserves exact-size frames', async () => {
   const width = 2240, height = 1080;
-  for (const [extraWidth, extraHeight] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+  for (const [extraWidth, extraHeight] of [[0, 0], [1, 0], [0, 1], [1, 1], [2, 0], [0, 2], [2, 2]]) {
     const bitmap = Buffer.alloc(width * height * 4, 0x73);
     const crops = [];
     const image = {
@@ -313,8 +313,8 @@ test('offscreen startup crops only a one-pixel DPI overscan and preserves exact-
       const frames = stream.state().frames;
       for (const size of [
         { width: width - 1, height }, { width, height: height - 1 },
-        { width: width + 2, height }, { width, height: height + 2 },
-        { width: width + 1, height: height - 1 },
+        { width: width + 3, height }, { width, height: height + 3 },
+        { width: width + 2, height: height - 1 },
       ]) {
         windows[0].webContents.emit('paint', {}, {}, {
           isEmpty: () => false, getSize: () => size,
