@@ -208,10 +208,13 @@ class ScreenStream {
       contents.on('paint', (_event, _dirty, image) => {
         if (generation !== this.generation || image.isEmpty()) return;
         const size = image.getSize();
-        // Never stretch a monitor-clamped or transitional frame into the device's
-        // aspect ratio. Only the configured viewport is eligible for transmission.
-        if (size.width !== config.width || size.height !== config.height) return;
-        const bitmap = image.toBitmap();
+        // Fractional Windows scaling can round the OSR surface up by one pixel.
+        // Crop only that extra right/bottom edge; never stretch a clamped frame.
+        if (size.width < config.width || size.width > config.width + 1
+            || size.height < config.height || size.height > config.height + 1) return;
+        const frame = size.width === config.width && size.height === config.height ? image
+          : image.crop({ x: 0, y: 0, width: config.width, height: config.height });
+        const bitmap = frame.toBitmap();
         if (bitmap.length === config.width * config.height * 4) { this.pump?.update(bitmap); firstFrame?.(); }
       });
       if (this.devUrl) await this.window.loadURL(`${this.devUrl.replace(/\/$/, '')}/?surface=screen`);

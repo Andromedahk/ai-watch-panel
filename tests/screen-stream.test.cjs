@@ -213,7 +213,7 @@ test('write failures surface once and late callbacks after stop cannot restart w
   assert.deepEqual(errors, ['broken']);
 });
 
-function fixture() {
+function fixture({ paintImage } = {}) {
   const windows = [];
   class FakeWindow extends EventEmitter {
     constructor(options) {
@@ -224,7 +224,7 @@ function fixture() {
       contents.setFrameRate = value => { contents.rate = value; };
       contents.enableDeviceEmulation = options => { contents.emulation = options; };
       contents.startPainting = () => { contents.painting = true; };
-      contents.invalidate = () => queueMicrotask(() => contents.emit('paint', {}, {}, {
+      contents.invalidate = () => queueMicrotask(() => contents.emit('paint', {}, {}, paintImage ? paintImage(this.contentSize) : {
         isEmpty: () => false, getSize: () => this.contentSize,
         toBitmap: () => Buffer.alloc(this.contentSize.width * this.contentSize.height * 4),
       }));
@@ -280,6 +280,53 @@ test('preview offscreen window is isolated, read-only, independent of desktop st
     assert.equal(stream.status, 'stopped');
     assert.equal(stream.pump.latest, null);
   } finally { await stream.stop(); }
+});
+
+test('offscreen startup crops only a one-pixel DPI overscan and preserves exact-size frames', async () => {
+  const width = 2240, height = 1080;
+  for (const [extraWidth, extraHeight] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    const bitmap = Buffer.alloc(width * height * 4, 0x73);
+    const crops = [];
+    const image = {
+      isEmpty: () => false,
+      getSize: () => ({ width: width + extraWidth, height: height + extraHeight }),
+      resize: () => assert.fail('DPI overscan must be cropped without stretching'),
+      toBitmap: () => {
+        assert.equal(extraWidth + extraHeight, 0, 'overscan pixels must not reach the bridge');
+        return bitmap;
+      },
+      crop: rectangle => {
+        assert.ok(extraWidth || extraHeight, 'an exact-size frame must not be cropped');
+        assert.deepEqual(rectangle, { x: 0, y: 0, width, height });
+        crops.push(rectangle);
+        return { toBitmap: () => bitmap };
+      },
+    };
+    const { stream, windows, setConfig } = fixture({ paintImage: () => image });
+    setConfig({ ...DEFAULT_STREAM_CONFIG, enabled: true, device: 'ryuo4', width, height });
+    try {
+      await stream.start();
+      assert.equal(stream.status, 'running', `overscan ${extraWidth} × ${extraHeight}`);
+      assert.equal(stream.pump.latest, bitmap);
+      assert.equal(stream.pump.latest.length, 9676800, 'the bridge requires exactly 2240 × 1080 BGRA pixels');
+      assert.equal(crops.length > 0, Boolean(extraWidth || extraHeight));
+      const frames = stream.state().frames;
+      for (const size of [
+        { width: width - 1, height }, { width, height: height - 1 },
+        { width: width + 2, height }, { width, height: height + 2 },
+        { width: width + 1, height: height - 1 },
+      ]) {
+        windows[0].webContents.emit('paint', {}, {}, {
+          isEmpty: () => false, getSize: () => size,
+          crop: () => assert.fail('undersized and larger overscan frames must be ignored'),
+          resize: () => assert.fail('invalid frames must not be stretched'),
+          toBitmap: () => assert.fail('invalid frames must not be transmitted'),
+        });
+        assert.equal(stream.pump.latest, bitmap);
+        assert.equal(stream.state().frames, frames);
+      }
+    } finally { await stream.stop(); }
+  }
 });
 
 test('renderer failure restores stopped resources and retry creates a fresh output window', async () => {
